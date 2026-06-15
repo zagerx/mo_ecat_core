@@ -2,7 +2,7 @@
 #include <iostream>
 #include <thread>
 
-#include "ec_master/ec_controller.h"
+#include "ec_controller/ec_controller.h"
 
 int main(int argc, char *argv[])
 {

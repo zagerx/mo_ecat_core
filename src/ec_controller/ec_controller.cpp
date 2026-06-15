@@ -1,4 +1,4 @@
-#include "ec_master/ec_controller.h"
+#include "ec_controller/ec_controller.h"
 
 #include <iostream>
 #include <thread>

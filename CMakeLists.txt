@@ -16,7 +16,7 @@ include_directories(
 set(SOURCES
     src/main.cpp
     src/ec_master/ec_master.cpp
-    src/ec_master/ec_controller.cpp
+    src/ec_controller/ec_controller.cpp
 )
 
 add_executable(ecat_scan ${SOURCES})
