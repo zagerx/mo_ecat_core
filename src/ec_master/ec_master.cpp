@@ -1,8 +1,6 @@
 #include "ec_master/ec_master.h"
 #include <iostream>
 #include <cstring>
-#include <thread>
-#include <chrono>
 
 namespace mo_ecat
 {
@@ -32,7 +30,6 @@ bool EcMaster::Initialize(const EcMasterConfig &config)
 
 void EcMaster::Close()
 {
-	StopCyclicThread();
 	ecx_close(&ctx_);
 	std::cout << "SOEM closed.\n";
 }
@@ -88,60 +85,21 @@ bool EcMaster::RequestInitState()
 	return ctx_.slavelist[0].state == EC_STATE_INIT;
 }
 
-void EcMaster::CyclicTask()
+void EcMaster::RunOneCycle()
 {
-	using namespace std::chrono;
+	ecx_send_processdata(&ctx_);
+	int wkc = ecx_receive_processdata(&ctx_, EC_TIMEOUTRET);
 
-	auto next_time = steady_clock::now();
-	auto interval = microseconds(config_.cycle_time_us);
-
-	while (running_) {
-		ecx_send_processdata(&ctx_);
-		int wkc = ecx_receive_processdata(&ctx_, EC_TIMEOUTRET);
-
-		stats_.cycle_count++;
-		if (wkc != expected_wkc_) {
-			stats_.wkc_mismatch_count++;
-		}
-		stats_.last_dc_time = ctx_.DCtime;
-
-		next_time += interval;
-		std::this_thread::sleep_until(next_time);
+	stats_.cycle_count++;
+	if (wkc != expected_wkc_) {
+		stats_.wkc_mismatch_count++;
 	}
+	stats_.last_dc_time = ctx_.DCtime;
 }
 
-void EcMaster::StateMonitorTask()
+void EcMaster::CheckSlaveStates()
 {
-	while (running_) {
-		ecx_readstate(&ctx_);
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
-	}
-}
-
-bool EcMaster::StartCyclicThread()
-{
-	if (running_) {
-		return false;
-	}
-	running_ = true;
-	cyclic_thread_ = std::thread(&EcMaster::CyclicTask, this);
-	monitor_thread_ = std::thread(&EcMaster::StateMonitorTask, this);
-	return true;
-}
-
-bool EcMaster::StopCyclicThread()
-{
-	if (!running_) {
-		return true;
-	}
-	running_ = false;
-	if (cyclic_thread_.joinable()) {
-		cyclic_thread_.join();
-	}
-	if (monitor_thread_.joinable()) {
-		monitor_thread_.join();
-	}
-	return true;
+	ecx_readstate(&ctx_);
 }
 
 void EcMaster::WriteOutput(int slave, int offset, const uint8_t *data, int len)

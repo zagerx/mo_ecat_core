@@ -1,9 +1,6 @@
 #pragma once
 #include <cstdint>
 #include <string>
-#include <atomic>
-#include <thread>
-#include <functional>
 
 #include "soem/soem.h"
 
@@ -38,8 +35,11 @@ class EcMaster
 	bool RequestSafeOpState();
 	bool RequestInitState();
 
-	bool StartCyclicThread();
-	bool StopCyclicThread();
+	// 单步运行：执行一次 PDO 收发
+	void RunOneCycle();
+
+	// 单步运行：检查一次从站状态
+	void CheckSlaveStates();
 
 	// PDO 读写（按字节偏移）
 	void WriteOutput(int slave, int offset, const uint8_t *data, int len);
@@ -52,16 +52,10 @@ class EcMaster
 	const CyclicStats &GetStats() const;
 
       private:
-	void CyclicTask();
-	void StateMonitorTask();
-
 	ecx_contextt ctx_{};
 	uint8_t iomap_[4096] = {0};
 
 	EcMasterConfig config_;
-	std::atomic<bool> running_{false};
-	std::thread cyclic_thread_;
-	std::thread monitor_thread_;
 
 	int expected_wkc_ = 0;
 	CyclicStats stats_;
