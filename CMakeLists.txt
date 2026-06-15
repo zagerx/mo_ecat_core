@@ -13,23 +13,46 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/third_party/SOEM/soem
 )
 
-set(SOURCES
-    src/main.cpp
+# 公共源文件
+set(ECAT_SOURCES
     src/ec_master/ec_master.cpp
     src/ec_controller/ec_controller.cpp
+    src/cyclic/cyclic_runner.cpp
+    src/utils/signal_handler.cpp
 )
 
-add_executable(ecat_scan ${SOURCES})
-
+# ecat_scan: 主程序启动器
+add_executable(ecat_scan src/main.cpp ${ECAT_SOURCES})
 target_include_directories(ecat_scan PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
-
 target_link_libraries(ecat_scan
     soem
     pthread
 )
 
-install(TARGETS ecat_scan
+# pdo_test: PDO 测试示例程序
+add_executable(pdo_test src/examples/pdo_test.cpp ${ECAT_SOURCES})
+target_include_directories(pdo_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(pdo_test
+    soem
+    pthread
+)
+
+# 编译警告
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(ecat_scan PRIVATE
+        -Wall
+        -Wextra
+    )
+    target_compile_options(pdo_test PRIVATE
+        -Wall
+        -Wextra
+    )
+endif()
+
+install(TARGETS ecat_scan pdo_test
     RUNTIME DESTINATION bin
 )
