@@ -1,9 +1,8 @@
 #include <chrono>
-#include <cstring>
 #include <iostream>
 #include <thread>
 
-#include "ec_master/ec_master.h"
+#include "ec_master/ec_controller.h"
 
 int main(int argc, char *argv[])
 {
@@ -12,51 +11,34 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	mo_ecat::EcMaster master;
+	mo_ecat::EcatController controller;
 	mo_ecat::EcMasterConfig config;
 	config.ifname = argv[1];
 	config.cycle_time_us = 1000;
 	config.use_dc = true;
 
-	// 1. 初始化
-	if (!master.Initialize(config)) {
+	// 1. 初始化：绑定网卡 + 扫描从站 + PDO 映射 + DC 配置
+	if (!controller.Initialize(config)) {
 		return 1;
 	}
 
-	// 2. 扫描并配置
-	if (!master.ScanAndConfigure()) {
+	// 2. 启动：进入 SAFE_OP → 启动周期线程 → 进入 OPERATIONAL
+	if (!controller.Start()) {
 		return 1;
 	}
 
-	// 3. 进入 SAFE_OP（此时可以开始发过程数据）
-	if (!master.RequestSafeOpState()) {
-		std::cerr << "Failed to enter SAFE_OP\n";
-		return 1;
-	}
+	std::cout << "Running PDO test...\n";
 
-	// 4. 启动周期通信线程
-	master.StartCyclicThread();
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-	// 5. 进入 OPERATIONAL
-	if (!master.RequestOperationalState()) {
-		std::cerr << "Failed to enter OPERATIONAL\n";
-		return 1;
-	}
-
-	std::cout << "Entered OPERATIONAL, running PDO test...\n";
-
-	// 6. 每 500ms 向 OutputCounter (0x7000) 写一个递增的值
+	// 3. 每 500ms 向 OutputCounter (0x7000) 写一个递增的值
 	uint32_t output_counter = 0;
 	for (int i = 0; i < 20; ++i) {
 		output_counter++;
 
-		// 写入 SM2 outputs，偏移 0 字节
+		auto &master = controller.GetMaster();
 		master.WriteOutput(1, 0, reinterpret_cast<uint8_t *>(&output_counter), 4);
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-		// 读取 SM3 inputs，偏移 0 字节
 		uint32_t input_counter = 0;
 		master.ReadInput(1, 0, reinterpret_cast<uint8_t *>(&input_counter), 4);
 
@@ -66,10 +48,8 @@ int main(int argc, char *argv[])
 			  << ", WKC errors: " << master.GetStats().wkc_mismatch_count << "\n";
 	}
 
-	// 7. 停止
-	master.StopCyclicThread();
-	master.RequestSafeOpState();
-	master.RequestInitState();
+	// 4. 停止
+	controller.Stop();
 
 	return 0;
 }
