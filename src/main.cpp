@@ -1,97 +1,75 @@
-#include <iostream>
+#include <chrono>
 #include <cstring>
-#include <string>
+#include <iostream>
+#include <thread>
 
-#include "soem/soem.h"
+#include "ec_master/ec_master.h"
 
-// EtherCAT IO 映射缓冲区
-static uint8_t IOmap[4096];
-
-// 打印可用网卡
-void PrintAvailableAdapters()
+int main(int argc, char *argv[])
 {
-    ec_adaptert *adapter = nullptr;
-    ec_adaptert *head = nullptr;
+	if (argc < 2) {
+		std::cerr << "Usage: " << argv[0] << " <interface>\n";
+		return 1;
+	}
 
-    std::cout << "Available EtherCAT adapters:\n";
-    head = adapter = ec_find_adapters();
-    while (adapter != nullptr)
-    {
-        std::cout << "  - " << adapter->name
-                  << "  (" << adapter->desc << ")\n";
-        adapter = adapter->next;
-    }
-    ec_free_adapters(head);
-}
+	mo_ecat::EcMaster master;
+	mo_ecat::EcMasterConfig config;
+	config.ifname = argv[1];
+	config.cycle_time_us = 1000;
+	config.use_dc = true;
 
-// 扫描 EtherCAT 从站
-bool ScanSlaves(const std::string& ifname)
-{
-    ecx_contextt ctx;
-    std::memset(&ctx, 0, sizeof(ctx));
+	// 1. 初始化
+	if (!master.Initialize(config)) {
+		return 1;
+	}
 
-    std::cout << "Initializing SOEM on interface: " << ifname << "\n";
+	// 2. 扫描并配置
+	if (!master.ScanAndConfigure()) {
+		return 1;
+	}
 
-    // 1. 初始化网卡
-    if (!ecx_init(&ctx, ifname.c_str()))
-    {
-        std::cerr << "Failed to initialize SOEM on " << ifname
-                  << " (try running with sudo)\n";
-        return false;
-    }
+	// 3. 进入 SAFE_OP（此时可以开始发过程数据）
+	if (!master.RequestSafeOpState()) {
+		std::cerr << "Failed to enter SAFE_OP\n";
+		return 1;
+	}
 
-    // 2. 扫描并自动配置从站
-    int slave_count = ecx_config_init(&ctx);
-    if (slave_count <= 0)
-    {
-        std::cerr << "No EtherCAT slaves found on " << ifname << "\n";
-        ecx_close(&ctx);
-        return false;
-    }
+	// 4. 启动周期通信线程
+	master.StartCyclicThread();
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    std::cout << "Found " << slave_count << " slave(s)\n";
+	// 5. 进入 OPERATIONAL
+	if (!master.RequestOperationalState()) {
+		std::cerr << "Failed to enter OPERATIONAL\n";
+		return 1;
+	}
 
-    // 3. 执行 PDO 映射（扫描阶段也建议调用，用于填充 outputs/inputs 指针）
-    ecx_config_map_group(&ctx, IOmap, 0);
+	std::cout << "Entered OPERATIONAL, running PDO test...\n";
 
-    // 4. 打印每个从站的基本信息
-    for (int i = 1; i <= slave_count; ++i)
-    {
-        const ec_slavet& slave = ctx.slavelist[i];
-        std::cout << "\nSlave " << i << ":\n";
-        std::cout << "  Name:        " << slave.name << "\n";
-        std::cout << "  Vendor ID:   0x" << std::hex << slave.eep_man << std::dec << "\n";
-        std::cout << "  ProductCode: 0x" << std::hex << slave.eep_id << std::dec << "\n";
-        std::cout << "  Revision:    0x" << std::hex << slave.eep_rev << std::dec << "\n";
-        std::cout << "  Output bits: " << slave.Obits << "\n";
-        std::cout << "  Input bits:  " << slave.Ibits << "\n";
-        std::cout << "  State:       0x" << std::hex << slave.state << std::dec << "\n";
-        std::cout << "  Has DC:      " << (slave.hasdc ? "yes" : "no") << "\n";
-    }
+	// 6. 每 500ms 向 OutputCounter (0x7000) 写一个递增的值
+	uint32_t output_counter = 0;
+	for (int i = 0; i < 20; ++i) {
+		output_counter++;
 
-    // 5. 关闭 SOEM
-    ecx_close(&ctx);
-    std::cout << "\nScan complete.\n";
+		// 写入 SM2 outputs，偏移 0 字节
+		master.WriteOutput(1, 0, reinterpret_cast<uint8_t *>(&output_counter), 4);
 
-    return true;
-}
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-int main(int argc, char* argv[])
-{
-    std::cout << "MoDriverPC_EtherCAT - EtherCAT Slave Scanner\n";
+		// 读取 SM3 inputs，偏移 0 字节
+		uint32_t input_counter = 0;
+		master.ReadInput(1, 0, reinterpret_cast<uint8_t *>(&input_counter), 4);
 
-    if (argc < 2)
-    {
-        std::cout << "Usage: " << argv[0] << " <interface>\n";
-        std::cout << "Example: sudo " << argv[0] << " eth0\n\n";
-        PrintAvailableAdapters();
-        return 1;
-    }
+		std::cout << "Write OutputCounter: " << output_counter
+			  << ", Read InputCounter: " << input_counter
+			  << ", Cycles: " << master.GetStats().cycle_count
+			  << ", WKC errors: " << master.GetStats().wkc_mismatch_count << "\n";
+	}
 
-    if (!ScanSlaves(argv[1]))
-    {
-        return 1;
-    }
+	// 7. 停止
+	master.StopCyclicThread();
+	master.RequestSafeOpState();
+	master.RequestInitState();
 
-    return 0;
+	return 0;
 }
