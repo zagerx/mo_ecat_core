@@ -90,7 +90,7 @@ void EcatController::CheckSlaveStates()
 	master_.CheckSlaveStates();
 }
 
-ServoNodeManager &EcatController::GetServoNodeManager()
+SlaveNodeManager &EcatController::GetSlaveNodeManager()
 {
 	return node_manager_;
 }

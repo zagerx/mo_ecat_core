@@ -18,8 +18,8 @@ set(ECAT_SOURCES
     src/ec_controller/ec_controller.cpp
     src/cyclic/cyclic_runner.cpp
     src/servo_axis/servo_axis.cpp
-    src/servo_node/servo_node.cpp
-    src/servo_node/servo_node_manager.cpp
+    src/slave_node/slave_node.cpp
+    src/slave_node/slave_node_manager.cpp
     src/utils/logger.cpp
 )
 

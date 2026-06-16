@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ec_master/ec_master.h"
-#include "servo_node/servo_node_manager.h"
+#include "slave_node/slave_node_manager.h"
 
 namespace mo_ecat
 {
@@ -28,14 +28,14 @@ public:
 	void CheckSlaveStates();
 
 	// 获取节点管理器，供上层按名字/索引访问从站
-	ServoNodeManager &GetServoNodeManager();
+	SlaveNodeManager &GetSlaveNodeManager();
 
 	bool IsInitialized() const;
 	bool IsOperational() const;
 
 private:
 	EcMaster master_;
-	ServoNodeManager node_manager_;
+	SlaveNodeManager node_manager_;
 	bool initialized_ = false;
 	bool operational_ = false;
 };

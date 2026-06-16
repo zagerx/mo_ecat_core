@@ -38,10 +38,10 @@ public:
     bool IsEnabled() const;
     bool HasFault() const;
 
-    // ---------- 由 ServoNode 周期更新 ----------
+    // ---------- 由 SlaveNode 周期更新 ----------
     void UpdateCommandReadback(double position, double velocity, double torque, bool enabled, bool fault);
 
-    // ServoNode 读取目标值，编码成 PDO 原始值
+    // SlaveNode 读取目标值，编码成 PDO 原始值
     double GetTargetPosition() const;
     double GetTargetVelocity() const;
     double GetTargetTorque() const;
