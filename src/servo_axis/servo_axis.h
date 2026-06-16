@@ -42,27 +42,11 @@ public:
 
     // 按名字写输出 PDO 条目
     template <typename T>
-    bool WriteOutput(const std::string &name, const T &value) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const PdoEntry *entry = FindEntry(config_.output_entries, name);
-        if (entry == nullptr || entry->size != static_cast<int>(sizeof(T))) {
-            return false;
-        }
-        std::memcpy(output_buffer_.data() + entry->offset, &value, sizeof(T));
-        return true;
-    }
+    bool WriteOutput(const std::string &name, const T &value);
 
     // 按名字读输入 PDO 条目
     template <typename T>
-    bool ReadInput(const std::string &name, T &value) const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const PdoEntry *entry = FindEntry(config_.input_entries, name);
-        if (entry == nullptr || entry->size != static_cast<int>(sizeof(T))) {
-            return false;
-        }
-        std::memcpy(&value, input_buffer_.data() + entry->offset, sizeof(T));
-        return true;
-    }
+    bool ReadInput(const std::string &name, T &value) const;
 
     const AxisConfig &GetConfig() const;
 
@@ -78,5 +62,30 @@ private:
 
     mutable std::mutex mutex_;
 };
+
+// 模板成员函数定义（放在类外）
+template <typename T>
+bool ServoAxis::WriteOutput(const std::string &name, const T &value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    const PdoEntry *entry = FindEntry(config_.output_entries, name);
+    if (entry == nullptr || entry->size != static_cast<int>(sizeof(T))) {
+        return false;
+    }
+    std::memcpy(output_buffer_.data() + entry->offset, &value, sizeof(T));
+    return true;
+}
+
+template <typename T>
+bool ServoAxis::ReadInput(const std::string &name, T &value) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    const PdoEntry *entry = FindEntry(config_.input_entries, name);
+    if (entry == nullptr || entry->size != static_cast<int>(sizeof(T))) {
+        return false;
+    }
+    std::memcpy(&value, input_buffer_.data() + entry->offset, sizeof(T));
+    return true;
+}
 
 } // namespace mo_ecat
