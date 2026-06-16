@@ -1,12 +1,14 @@
 #pragma once
 
-#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <fstream>
-#include <iomanip>
 #include <mutex>
+#include <queue>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace mo_ecat {
 
@@ -18,7 +20,9 @@ enum class LogLevel {
     Fatal,
 };
 
-// 简单日志器：控制台 + 可选文件，线程安全。
+// 异步日志器。
+// 调用方仅把日志记录加入内存队列并立即返回，实际的格式化、控制台/文件输出
+// 由后台工作线程完成，从而避免文件 IO 阻塞业务线程（尤其是 EtherCAT 周期线程）。
 class Logger {
 public:
     static Logger &GetInstance();
@@ -27,27 +31,50 @@ public:
     void SetFileLevel(LogLevel level);
 
     // 设置日志文件路径，空字符串表示不输出到文件。
+    // 会自动创建父目录。
     void SetLogFile(const std::string &path);
 
-    void Log(LogLevel level, const char *file, int line, const std::string &message);
+    // message 按值传入，内部会 move 进队列，避免额外拷贝。
+    void Log(LogLevel level, const char *file, int line, std::string message);
 
 private:
-    Logger() = default;
+    Logger();
     ~Logger();
 
     Logger(const Logger &) = delete;
     Logger &operator=(const Logger &) = delete;
 
+    struct LogRecord {
+        LogLevel level;
+        const char *file;
+        int line;
+        std::string message;
+    };
+
+    void WorkerLoop();
+    void WriteToSinks(const LogRecord &record);
+    std::string FormatRecord(const LogRecord &record) const;
+
     static const char *LevelToString(LogLevel level);
     static std::string GetTimestamp();
 
-    std::mutex mutex_;
+    // 队列相关：调用方入队，工作线程出队
+    std::mutex queue_mutex_;
+    std::condition_variable queue_cv_;
+    std::vector<LogRecord> queue_;
+    bool shutdown_ = false;
+
+    // 输出目标相关
+    std::mutex sink_mutex_;
     std::ofstream file_stream_;
     LogLevel console_level_ = LogLevel::Info;
     LogLevel file_level_ = LogLevel::Debug;
+    bool has_file_ = false;
+
+    std::thread worker_thread_;
 };
 
-// 流式日志辅助类，在析构时把缓冲内容一次性写入 Logger。
+// 流式日志辅助类，在析构时把缓冲内容提交给 Logger。
 class LogStream {
 public:
     LogStream(LogLevel level, const char *file, int line);

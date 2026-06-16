@@ -1,7 +1,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <csignal>
-#include <iostream>
 #include <mutex>
 
 #include "cyclic/cyclic_runner.h"
@@ -38,12 +37,8 @@ void WaitForShutdown()
 int main(int argc, char *argv[])
 {
 	if (argc < 2) {
-		LOG_ERROR << "Usage: " << argv[0] << " <interface> [log_file]";
+		LOG_ERROR << "Usage: " << argv[0] << " <interface>";
 		return 1;
-	}
-
-	if (argc >= 3) {
-		mo_ecat::Logger::GetInstance().SetLogFile(argv[2]);
 	}
 
 	mo_ecat::EcMasterConfig config;
