@@ -32,9 +32,14 @@ class EcMaster
 	bool ScanAndConfigure();
 	int GetSlaveCount() const;
 
+	// 全局状态切换（广播到所有从站）
 	bool RequestOperationalState();
 	bool RequestSafeOpState();
 	bool RequestInitState();
+
+	// 单站状态切换
+	bool RequestState(int slave, uint16_t state);
+	uint16_t GetCurrentState(int slave) const;
 
 	// 单步运行：执行一次 PDO 收发
 	void RunOneCycle();
@@ -46,9 +51,9 @@ class EcMaster
 	void WriteOutput(int slave, int offset, const uint8_t *data, int len);
 	void ReadInput(int slave, int offset, uint8_t *data, int len);
 
-	// 直接读写 IOmap（更高效）
-	uint8_t *GetGroupOutputs();
-	uint8_t *GetGroupInputs();
+	// SDO 通信（当前为框架接口，功能可后续补齐）
+	bool SdoRead(uint16_t slave, uint16_t index, uint8_t subindex, void *data, int len, int timeout_us);
+	bool SdoWrite(uint16_t slave, uint16_t index, uint8_t subindex, const void *data, int len, int timeout_us);
 
 	const CyclicStats &GetStats() const;
 
@@ -62,7 +67,7 @@ class EcMaster
 	CyclicStats stats_;
 
 	// 保护 SOEM 上下文，防止多线程同时访问
-	std::mutex soem_mutex_;
+	mutable std::mutex soem_mutex_;
 };
 
 } // namespace mo_ecat

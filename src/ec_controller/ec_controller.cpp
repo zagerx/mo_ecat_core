@@ -35,8 +35,8 @@ bool EcatController::Initialize(const EcMasterConfig &config)
 	}
 
 	const int slave_count = master_.GetSlaveCount();
-	joint_manager_.Initialize(master_, slave_count);
-	LOG_INFO << "Created " << joint_manager_.GetAxisCount() << " servo axis(es)";
+	node_manager_.Initialize(master_, slave_count);
+	LOG_INFO << "Created " << node_manager_.GetNodeCount() << " servo node(s)";
 
 	initialized_ = true;
 	return true;
@@ -73,16 +73,16 @@ void EcatController::Stop()
 	master_.RequestSafeOpState();
 	master_.RequestInitState();
 
-	joint_manager_.Clear();
+	node_manager_.Clear();
 	operational_ = false;
 	initialized_ = false;
 }
 
 void EcatController::RunOneCycle()
 {
-	joint_manager_.UpdateAllOutputs();
+	node_manager_.UpdateAllOutputs();
 	master_.RunOneCycle();
-	joint_manager_.UpdateAllInputs();
+	node_manager_.UpdateAllInputs();
 }
 
 void EcatController::CheckSlaveStates()
@@ -90,9 +90,9 @@ void EcatController::CheckSlaveStates()
 	master_.CheckSlaveStates();
 }
 
-JointManager &EcatController::GetJointManager()
+ServoNodeManager &EcatController::GetServoNodeManager()
 {
-	return joint_manager_;
+	return node_manager_;
 }
 
 bool EcatController::IsInitialized() const

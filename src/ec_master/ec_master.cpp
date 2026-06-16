@@ -65,26 +65,32 @@ int EcMaster::GetSlaveCount() const
 
 bool EcMaster::RequestOperationalState()
 {
-	ctx_.slavelist[0].state = EC_STATE_OPERATIONAL;
-	ecx_writestate(&ctx_, 0);
-	ecx_statecheck(&ctx_, 0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE);
-	return ctx_.slavelist[0].state == EC_STATE_OPERATIONAL;
+	return RequestState(0, EC_STATE_OPERATIONAL);
 }
 
 bool EcMaster::RequestSafeOpState()
 {
-	ctx_.slavelist[0].state = EC_STATE_SAFE_OP;
-	ecx_writestate(&ctx_, 0);
-	ecx_statecheck(&ctx_, 0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE);
-	return ctx_.slavelist[0].state == EC_STATE_SAFE_OP;
+	return RequestState(0, EC_STATE_SAFE_OP);
 }
 
 bool EcMaster::RequestInitState()
 {
-	ctx_.slavelist[0].state = EC_STATE_INIT;
-	ecx_writestate(&ctx_, 0);
-	ecx_statecheck(&ctx_, 0, EC_STATE_INIT, EC_TIMEOUTSTATE);
-	return ctx_.slavelist[0].state == EC_STATE_INIT;
+	return RequestState(0, EC_STATE_INIT);
+}
+
+bool EcMaster::RequestState(int slave, uint16_t state)
+{
+	std::lock_guard<std::mutex> lock(soem_mutex_);
+	ctx_.slavelist[slave].state = state;
+	ecx_writestate(&ctx_, slave);
+	ecx_statecheck(&ctx_, slave, state, EC_TIMEOUTSTATE);
+	return ctx_.slavelist[slave].state == state;
+}
+
+uint16_t EcMaster::GetCurrentState(int slave) const
+{
+	std::lock_guard<std::mutex> lock(soem_mutex_);
+	return ctx_.slavelist[slave].state;
 }
 
 void EcMaster::RunOneCycle()
@@ -123,14 +129,19 @@ void EcMaster::ReadInput(int slave, int offset, uint8_t *data, int len)
 	std::memcpy(data, ctx_.slavelist[slave].inputs + offset, len);
 }
 
-uint8_t *EcMaster::GetGroupOutputs()
+bool EcMaster::SdoRead(uint16_t slave, uint16_t index, uint8_t subindex, void *data, int len, int timeout_us)
 {
-	return ctx_.grouplist[0].outputs;
+    std::lock_guard<std::mutex> lock(soem_mutex_);
+    int size = len;
+    int wkc = ecx_SDOread(&ctx_, slave, index, subindex, FALSE, &size, data, timeout_us);
+    return wkc > 0;
 }
 
-uint8_t *EcMaster::GetGroupInputs()
+bool EcMaster::SdoWrite(uint16_t slave, uint16_t index, uint8_t subindex, const void *data, int len, int timeout_us)
 {
-	return ctx_.grouplist[0].inputs;
+    std::lock_guard<std::mutex> lock(soem_mutex_);
+    int wkc = ecx_SDOwrite(&ctx_, slave, index, subindex, FALSE, len, data, timeout_us);
+    return wkc > 0;
 }
 
 const CyclicStats &EcMaster::GetStats() const
