@@ -100,6 +100,19 @@ SlaveInfo EcMaster::GetSlaveInfo(int slave_id) const
 	info.serial_id = slave.eep_ser;
 	info.name = slave.name;
 	info.supports_dc = slave.hasdc != 0;
+
+	info.mbx_l = slave.mbx_l;
+	info.mbx_wo = slave.mbx_wo;
+	info.mbx_ro = slave.mbx_ro;
+	info.mbx_proto = slave.mbx_proto;
+	info.mbx_cnt = slave.mbx_cnt;
+
+	info.state = slave.state;
+	info.al_status_code = slave.ALstatuscode;
+	info.coe_details = slave.CoEdetails;
+	info.output_bytes = slave.Obytes;
+	info.input_bytes = slave.Ibytes;
+
 	return info;
 }
 
