@@ -1,5 +1,7 @@
 #include "ec_controller/ec_controller.h"
 
+#include <iomanip>
+
 #include "utils/logger.h"
 
 namespace mo_ecat
@@ -28,6 +30,18 @@ bool EcatController::Initialize(const EcMasterConfig &config)
 	auto slave_infos = master_.ScanSlaves();
 	if (slave_infos.empty()) {
 		return false;
+	}
+
+	for (const auto &info : slave_infos) {
+		LOG_INFO << "Slave[" << info.slave_id << "] info:"
+			 << " name=\"" << info.name << "\""
+			 << " vendor=0x" << std::hex << info.vendor_id
+			 << " product=0x" << info.product_id
+			 << " revision=0x" << info.revision_id
+			 << " serial=0x" << info.serial_id << std::dec
+			 << " config_addr=0x" << std::hex << info.config_address
+			 << " alias_addr=0x" << info.alias_address << std::dec
+			 << " dc=" << (info.supports_dc ? "yes" : "no");
 	}
 
 	node_manager_.Initialize(master_, slave_infos);

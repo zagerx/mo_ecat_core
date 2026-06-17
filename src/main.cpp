@@ -5,6 +5,7 @@
 
 #include "cyclic/cyclic_runner.h"
 #include "ec_controller/ec_controller.h"
+#include "ec_master/ec_master.h"
 #include "utils/logger.h"
 
 namespace
