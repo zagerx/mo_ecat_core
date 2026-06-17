@@ -22,9 +22,9 @@ std::string ToLower(std::string s)
 
 SlaveTypeDetector::SlaveTypeDetector()
 {
-	// 可在此扩展常见设备识别表。
-	// 示例规则（占位，后续根据实际硬件填充真实 vendor/product）：
-	// RegisterRule(0x00000002, 0x00000001, SlaveType::Servo);
+	// 精确匹配 vendor_id + product_id
+	// Renesas RA8 EtherCAT 伺服从站
+	RegisterRule(0x00000766, 0x00002000, SlaveType::Servo);
 }
 
 void SlaveTypeDetector::RegisterRule(uint32_t vendor_id, uint32_t product_id, SlaveType type)
