@@ -30,22 +30,8 @@ bool EcatController::Initialize(const EcMasterConfig &config)
 		return false;
 	}
 
-	// 后续 PDO 映射可能通过 SDO 按从站配置，当前先使用默认映射
-	if (!master_.ConfigureProcessData()) {
-		return false;
-	}
-
-	if (!master_.ConfigureDc()) {
-		return false;
-	}
-
-	if (!master_.RequestSafeOpState()) {
-		LOG_ERROR << "Failed to enter SAFE_OP";
-		return false;
-	}
-
 	node_manager_.Initialize(master_, slave_infos);
-	LOG_INFO << "Created " << node_manager_.GetNodeCount() << " servo node(s)";
+	LOG_INFO << "Created " << node_manager_.GetNodeCount() << " slave node(s)";
 
 	initialized_ = true;
 	return true;

@@ -1,20 +1,32 @@
 #include "slave_node/slave_node_manager.h"
 
+#include <iomanip>
+
+#include "slave_node/slave_config_factory.h"
+#include "slave_node/slave_type_detector.h"
+#include "utils/logger.h"
+
 namespace mo_ecat
 {
 
 bool SlaveNodeManager::Initialize(EcMaster &master, const std::vector<SlaveInfo> &slave_infos)
 {
 	Clear();
+
+	SlaveTypeDetector detector;
+	SlaveConfigFactory config_factory;
+
 	for (const auto &info : slave_infos) {
-		SlaveConfig config = MakeDefaultSlaveConfig(info.slave_id);
-		// 用扫描到的从站名称覆盖默认配置名
-		if (!info.name.empty()) {
-			config.name = info.name;
-			config.axis_config.name = info.name;
-		}
+		const SlaveType type = detector.Detect(info);
+		SlaveConfig config = config_factory.CreateConfig(info, type);
+
+		LOG_INFO << "Slave " << info.slave_id << " [" << info.name << "] detected as "
+			 << static_cast<int>(type) << " (vendor=0x" << std::hex << info.vendor_id
+			 << ", product=0x" << info.product_id << std::dec << ")";
+
 		nodes_.emplace_back(std::make_unique<SlaveNode>(master, config, info));
 	}
+
 	return true;
 }
 
@@ -39,7 +51,7 @@ SlaveNode *SlaveNodeManager::GetNode(size_t index)
 SlaveNode *SlaveNodeManager::GetNode(const std::string &name)
 {
 	for (const auto &node : nodes_) {
-		if (node->GetConfig().name == name) {
+		if (node->GetInfo().name == name) {
 			return node.get();
 		}
 	}

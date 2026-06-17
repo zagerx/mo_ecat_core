@@ -18,8 +18,11 @@ set(ECAT_SOURCES
     src/ec_controller/ec_controller.cpp
     src/cyclic/cyclic_runner.cpp
     src/servo_axis/servo_axis.cpp
+    src/slave_node/device_profile.cpp
+    src/slave_node/slave_config_factory.cpp
     src/slave_node/slave_node.cpp
     src/slave_node/slave_node_manager.cpp
+    src/slave_node/slave_type_detector.cpp
     src/utils/logger.cpp
 )
 

@@ -2,42 +2,19 @@
 
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "device_profile.h"
 #include "ec_master/ec_master.h"
-#include "servo_axis/servo_axis.h"
+#include "slave_node_types.h"
 
 namespace mo_ecat
 {
 
-// PDO 条目描述
-struct PdoEntry {
-	std::string name;
-	int offset = 0;
-	int size = 0;
-};
-
-// PDO 映射：输出 + 输入
-struct PdoMapping {
-	std::vector<PdoEntry> outputs;
-	std::vector<PdoEntry> inputs;
-};
-
-// 从站配置
-struct SlaveConfig {
-	int slave_id = 1;
-	std::string name;
-	PdoMapping pdo_mapping;
-	ServoAxis::Config axis_config;
-};
-
-// 从站信息由 EcMaster 扫描后提供，SlaveNode 创建时缓存一份
-
-// 生成一组默认 PDO 映射（不含 CiA402 控制字/状态字，仅位置/速度/力矩数据）
-SlaveConfig MakeDefaultSlaveConfig(int slave_id);
-
-// 单个从站节点：负责 EtherCAT 通信状态、PDO 映射、SDO、以及对应的 ServoAxis
+// 单个从站节点：负责 EtherCAT 通信状态、PDO 映射、SDO，
+// 并挂载对应的 DeviceProfile 处理具体设备语义。
 class SlaveNode
 {
       public:
@@ -57,38 +34,21 @@ class SlaveNode
 	bool ConfigurePdoMapping();
 	void SetPdoMapping(const PdoMapping &mapping);
 
-	// ---------- 周期调用：PDO 数据 <=> ServoAxis 语义 ----------
+	// ---------- 周期调用：PDO 数据 <=> DeviceProfile 语义 ----------
 	void UpdatePdoOutput();
 	void UpdatePdoInput();
 
-	ServoAxis &GetAxis();
+	// ---------- 访问接口 ----------
+	SlaveType GetType() const;
+	DeviceProfile *GetProfile() const;
+	ServoAxis *GetServoAxis() const;
+
 	const SlaveConfig &GetConfig() const;
 	const SlaveInfo &GetInfo() const;
 
       private:
-	static const PdoEntry *FindEntry(const std::vector<PdoEntry> &entries,
-					 const std::string &name);
-	static size_t ComputeBufferSize(const std::vector<PdoEntry> &entries);
-
-	template <typename T> bool WriteOutputRaw(const std::string &name, const T &value)
-	{
-		const PdoEntry *entry = FindEntry(config_.pdo_mapping.outputs, name);
-		if (entry == nullptr || entry->size != static_cast<int>(sizeof(T))) {
-			return false;
-		}
-		std::memcpy(output_buffer_.data() + entry->offset, &value, sizeof(T));
-		return true;
-	}
-
-	template <typename T> bool ReadInputRaw(const std::string &name, T &value) const
-	{
-		const PdoEntry *entry = FindEntry(config_.pdo_mapping.inputs, name);
-		if (entry == nullptr || entry->size != static_cast<int>(sizeof(T))) {
-			return false;
-		}
-		std::memcpy(&value, input_buffer_.data() + entry->offset, sizeof(T));
-		return true;
-	}
+	static size_t ComputeOutputSize(const PdoMapping &mapping);
+	static size_t ComputeInputSize(const PdoMapping &mapping);
 
 	EcMaster &master_;
 	SlaveConfig config_;
@@ -97,7 +57,7 @@ class SlaveNode
 	std::vector<uint8_t> output_buffer_;
 	std::vector<uint8_t> input_buffer_;
 
-	ServoAxis axis_;
+	std::unique_ptr<DeviceProfile> profile_;
 	uint16_t current_state_ = 0; // EC_STATE_INIT
 };
 
