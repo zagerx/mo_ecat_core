@@ -1,5 +1,6 @@
 #include "ec_controller/ec_controller.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -120,6 +121,29 @@ std::string FormatSlaveInfo(const mo_ecat::SlaveInfo &info)
 namespace mo_ecat
 {
 
+const std::map<ControllerState, std::vector<ControllerState>> EcatController::kAllowedTransitions =
+	{
+		{ControllerState::kUninitialized, {ControllerState::kInitDone}},
+		{ControllerState::kInitDone,
+		 {ControllerState::kScanned, ControllerState::kUninitialized}},
+		{ControllerState::kScanned,
+		 {ControllerState::kPreOp, ControllerState::kUninitialized}},
+		{ControllerState::kPreOp,
+		 {ControllerState::kPdoConfigured, ControllerState::kUninitialized}},
+		{ControllerState::kPdoConfigured,
+		 {ControllerState::kSafeOp, ControllerState::kPreOp,
+		  ControllerState::kUninitialized}},
+		{ControllerState::kSafeOp,
+		 {ControllerState::kDcConfigured, ControllerState::kPreOp,
+		  ControllerState::kUninitialized}},
+		{ControllerState::kDcConfigured,
+		 {ControllerState::kOperational, ControllerState::kSafeOp,
+		  ControllerState::kUninitialized}},
+		{ControllerState::kOperational,
+		 {ControllerState::kSafeOp, ControllerState::kUninitialized}},
+		{ControllerState::kError, {ControllerState::kUninitialized}},
+};
+
 EcatController::EcatController()
 {
 }
@@ -127,6 +151,31 @@ EcatController::EcatController()
 EcatController::~EcatController()
 {
 	Stop();
+}
+
+const char *EcatController::StateToString(ControllerState state)
+{
+	switch (state) {
+	case ControllerState::kUninitialized:
+		return "Uninitialized";
+	case ControllerState::kInitDone:
+		return "InitDone";
+	case ControllerState::kScanned:
+		return "Scanned";
+	case ControllerState::kPreOp:
+		return "PreOp";
+	case ControllerState::kPdoConfigured:
+		return "PdoConfigured";
+	case ControllerState::kSafeOp:
+		return "SafeOp";
+	case ControllerState::kDcConfigured:
+		return "DcConfigured";
+	case ControllerState::kOperational:
+		return "Operational";
+	case ControllerState::kError:
+		return "Error";
+	}
+	return "Unknown";
 }
 
 std::vector<SlaveInfo> EcatController::RefreshSlaveInfos() const
@@ -140,115 +189,295 @@ std::vector<SlaveInfo> EcatController::RefreshSlaveInfos() const
 	return slave_infos;
 }
 
-void EcatController::Shutdown(bool request_states)
+bool EcatController::TransitionTo(ControllerState target)
 {
-	if (request_states) {
-		if (operational_) {
-			if (!master_.RequestSafeOpState()) {
-				LOG_WARN << "Failed to request SAFE_OP during shutdown";
+	if (state_ == target) {
+		return true;
+	}
+
+	// 错误状态只能 Stop（回到 Uninitialized）
+	if (state_ == ControllerState::kError) {
+		if (target != ControllerState::kUninitialized) {
+			LOG_ERROR << "In error state, only Stop() is allowed (target="
+				  << StateToString(target) << ")";
+			return false;
+		}
+		return DoStepTo(target);
+	}
+
+	// 目标状态在当前状态之后：按顺序逐步前进
+	if (static_cast<int>(target) > static_cast<int>(state_)) {
+		while (state_ != target) {
+			ControllerState next =
+				static_cast<ControllerState>(static_cast<int>(state_) + 1);
+			if (!DoStepTo(next)) {
+				return false;
 			}
 		}
+		return true;
+	}
 
-		if (initialized_ || master_.GetSlaveCount() > 0) {
-			if (!master_.RequestInitState()) {
-				LOG_WARN << "Failed to request INIT during shutdown";
-			}
+	// 目标状态在当前状态之前或同级：查转换表
+	auto it = kAllowedTransitions.find(state_);
+	if (it == kAllowedTransitions.end()) {
+		LOG_ERROR << "No transition rules for state " << StateToString(state_);
+		EnterErrorState("Missing transition rules");
+		return false;
+	}
+	const auto &allowed = it->second;
+	if (std::find(allowed.begin(), allowed.end(), target) == allowed.end()) {
+		LOG_ERROR << "Invalid transition: " << StateToString(state_) << " -> "
+			  << StateToString(target);
+		return false;
+	}
+
+	return DoStepTo(target);
+}
+
+bool EcatController::DoStepTo(ControllerState next)
+{
+	switch (next) {
+	case ControllerState::kInitDone:
+		return DoInit();
+	case ControllerState::kScanned:
+		return DoScan();
+	case ControllerState::kPreOp:
+		return DoPreOp();
+	case ControllerState::kPdoConfigured:
+		return DoPdoConfigure();
+	case ControllerState::kSafeOp:
+		return DoSafeOp();
+	case ControllerState::kDcConfigured:
+		return DoDcConfigure();
+	case ControllerState::kOperational:
+		return DoOperational();
+	case ControllerState::kUninitialized:
+		return DoShutdown();
+	default:
+		LOG_ERROR << "Unknown target state " << StateToString(next);
+		return false;
+	}
+}
+
+bool EcatController::DoInit()
+{
+	if (state_ != ControllerState::kUninitialized) {
+		LOG_ERROR << "DoInit called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	if (!master_.Initialize(config_)) {
+		return false;
+	}
+	state_ = ControllerState::kInitDone;
+	LOG_INFO << "EcatController -> InitDone";
+	return true;
+}
+
+bool EcatController::DoScan()
+{
+	if (state_ != ControllerState::kInitDone) {
+		LOG_ERROR << "DoScan called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	slave_infos_ = master_.ScanSlaves();
+	if (slave_infos_.empty()) {
+		LOG_ERROR << "No slaves found";
+		DoShutdown();
+		return false;
+	}
+
+	for (const auto &info : slave_infos_) {
+		LOG_INFO << FormatSlaveInfo(info);
+	}
+
+	state_ = ControllerState::kScanned;
+	LOG_INFO << "EcatController -> Scanned, " << slave_infos_.size() << " slave(s)";
+	return true;
+}
+
+bool EcatController::DoPreOp()
+{
+	if (state_ != ControllerState::kScanned) {
+		LOG_ERROR << "DoPreOp called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	if (!master_.RequestPreOpState()) {
+		LOG_ERROR << "Failed to request PREOP";
+		DoShutdown();
+		return false;
+	}
+	if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
+		LOG_ERROR << "Not all slaves reached PREOP";
+		DoShutdown();
+		return false;
+	}
+
+	state_ = ControllerState::kPreOp;
+
+	// 刷新从站信息，获取 PREOP 后的 mailbox 等状态
+	slave_infos_ = RefreshSlaveInfos();
+
+	// 创建占位 SlaveNode，当前不涉及 PDO 配置
+	if (!node_manager_.Initialize(master_, slave_infos_)) {
+		DoShutdown();
+		return false;
+	}
+
+	LOG_INFO << "EcatController -> PreOp, " << node_manager_.GetNodeCount()
+		 << " slave node(s) placeholder created";
+	return true;
+}
+
+bool EcatController::DoPdoConfigure()
+{
+	if (state_ != ControllerState::kPreOp) {
+		LOG_ERROR << "DoPdoConfigure called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	if (!node_manager_.ConfigureAll()) {
+		EnterErrorState("Failed to configure slave nodes");
+		return false;
+	}
+
+	state_ = ControllerState::kPdoConfigured;
+	LOG_INFO << "EcatController -> PdoConfigured";
+	return true;
+}
+
+bool EcatController::DoSafeOp()
+{
+	if (state_ != ControllerState::kPdoConfigured) {
+		LOG_ERROR << "DoSafeOp called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	if (!master_.ConfigureProcessData()) {
+		EnterErrorState("Failed to configure process data");
+		return false;
+	}
+
+	if (!master_.RequestSafeOpState() || !master_.CheckAllSlavesInState(EC_STATE_SAFE_OP)) {
+		EnterErrorState("Failed to enter SAFEOP");
+		return false;
+	}
+
+	state_ = ControllerState::kSafeOp;
+	LOG_INFO << "EcatController -> SafeOp";
+	return true;
+}
+
+bool EcatController::DoDcConfigure()
+{
+	if (state_ != ControllerState::kSafeOp) {
+		LOG_ERROR << "DoDcConfigure called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	if (!master_.ConfigureDc()) {
+		EnterErrorState("Failed to configure DC");
+		return false;
+	}
+
+	state_ = ControllerState::kDcConfigured;
+	LOG_INFO << "EcatController -> DcConfigured";
+	return true;
+}
+
+bool EcatController::DoOperational()
+{
+	if (state_ != ControllerState::kDcConfigured) {
+		LOG_ERROR << "DoOperational called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	if (!master_.RequestOperationalState() ||
+	    !master_.CheckAllSlavesInState(EC_STATE_OPERATIONAL)) {
+		EnterErrorState("Failed to enter OPERATIONAL");
+		return false;
+	}
+
+	state_ = ControllerState::kOperational;
+	LOG_INFO << "EcatController -> Operational";
+	return true;
+}
+
+bool EcatController::DoShutdown()
+{
+	LOG_INFO << "EcatController shutting down from state " << StateToString(state_);
+
+	if (state_ == ControllerState::kOperational || state_ == ControllerState::kDcConfigured) {
+		if (!master_.RequestSafeOpState()) {
+			LOG_WARN << "Failed to request SAFE_OP during shutdown";
+		}
+	}
+
+	if (state_ == ControllerState::kSafeOp || state_ == ControllerState::kOperational ||
+	    state_ == ControllerState::kDcConfigured) {
+		if (!master_.RequestPreOpState()) {
+			LOG_WARN << "Failed to request PRE_OP during shutdown";
+		}
+	}
+
+	if (state_ != ControllerState::kUninitialized && state_ != ControllerState::kInitDone &&
+	    state_ != ControllerState::kScanned) {
+		if (!master_.RequestInitState()) {
+			LOG_WARN << "Failed to request INIT during shutdown";
 		}
 	}
 
 	node_manager_.Clear();
 	master_.Close();
-	operational_ = false;
-	initialized_ = false;
+	state_ = ControllerState::kUninitialized;
+	return true;
 }
+
+void EcatController::EnterErrorState(const std::string &reason)
+{
+	LOG_ERROR << "Entering error state: " << reason;
+	state_ = ControllerState::kError;
+}
+
 bool EcatController::Initialize(const EcMasterConfig &config)
 {
-	if (initialized_) {
-		LOG_WARN << "Already initialized";
+	if (state_ != ControllerState::kUninitialized) {
+		LOG_WARN << "Already initialized, state=" << StateToString(state_);
 		return false;
 	}
 
-	if (!master_.Initialize(config)) {
-		return false;
-	}
-	state_ = ControllerState::kInitDone;
-
-	auto slave_infos = master_.ScanSlaves();
-	if (slave_infos.empty()) {
-		Shutdown(false);
-		return false;
-	}
-	state_ = ControllerState::kScanned;
-
-	for (const auto &info : slave_infos) {
-		LOG_INFO << FormatSlaveInfo(info);
-	}
-
-	if (!master_.RequestPreOpState()) {
-		LOG_ERROR << "Failed to enter PREOP";
-		Shutdown(true);
-		return false;
-	}
-	if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
-		LOG_ERROR << "Not all slaves reached PREOP";
-		Shutdown(true);
-		return false;
-	}
-	state_ = ControllerState::kPreOp;
-
-	// 刷新从站信息，获取 PREOP 后的 mailbox 等状态
-	slave_infos = RefreshSlaveInfos();
-	for (const auto &info : slave_infos) {
-		LOG_INFO << FormatSlaveInfo(info);
-	}
-
-	// 创建 SlaveNode，仅用于管理从站静态信息，当前不涉及 PDO 配置
-	if (!node_manager_.Initialize(master_, slave_infos)) {
-		Shutdown(true);
-		return false;
-	}
-
-	// 当前阶段：初始化到 PREOP 即完成，SDO 可用
-	// PDO 配置（ConfigureProcessData / ConfigureDc / StartOperation）放到后续阶段
-	initialized_ = true;
-	LOG_INFO << "EcatController initialized to PREOP, " << node_manager_.GetNodeCount()
-		 << " slave node(s) created";
-	return true;
+	config_ = config;
+	return TransitionTo(ControllerState::kPreOp);
 }
 
 bool EcatController::StartOperation()
 {
-	if (!initialized_) {
-		LOG_WARN << "EcatController not initialized, call Initialize() first";
+	if (state_ != ControllerState::kPreOp) {
+		LOG_WARN << "StartOperation called in invalid state " << StateToString(state_);
 		return false;
 	}
 
-	if (operational_) {
-		LOG_WARN << "EcatController already operational";
-		return false;
-	}
-
-	if (!master_.RequestOperationalState()) {
-		LOG_ERROR << "Failed to enter OPERATIONAL";
-		return false;
-	}
-
-	operational_ = true;
-	LOG_INFO << "EcatController operational";
-	return true;
+	return TransitionTo(ControllerState::kOperational);
 }
 
 void EcatController::Stop()
 {
-	if (!initialized_) {
+	if (state_ == ControllerState::kUninitialized) {
 		return;
 	}
 
-	Shutdown(true);
+	TransitionTo(ControllerState::kUninitialized);
 }
 
 void EcatController::RunOneCycle()
 {
+	if (state_ != ControllerState::kOperational) {
+		LOG_WARN << "RunOneCycle ignored: not operational";
+		return;
+	}
+
 	node_manager_.UpdateAllOutputs();
 	master_.RunOneCycle();
 	node_manager_.UpdateAllInputs();
@@ -257,6 +486,12 @@ void EcatController::RunOneCycle()
 void EcatController::CheckSlaveStates()
 {
 	master_.CheckSlaveStates();
+
+	if (state_ == ControllerState::kOperational) {
+		if (!master_.CheckAllSlavesInState(EC_STATE_OPERATIONAL)) {
+			EnterErrorState("Slave dropped out of OPERATIONAL");
+		}
+	}
 }
 
 SlaveNodeManager &EcatController::GetSlaveNodeManager()
@@ -266,12 +501,12 @@ SlaveNodeManager &EcatController::GetSlaveNodeManager()
 
 bool EcatController::IsInitialized() const
 {
-	return initialized_;
+	return state_ != ControllerState::kUninitialized;
 }
 
 bool EcatController::IsOperational() const
 {
-	return operational_;
+	return state_ == ControllerState::kOperational;
 }
 
 } // namespace mo_ecat
