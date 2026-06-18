@@ -94,7 +94,7 @@ class EcMaster
 	void WriteOutput(int slave, int offset, const uint8_t *data, int len);
 	void ReadInput(int slave, int offset, uint8_t *data, int len);
 
-	// SDO 通信（当前为框架接口，功能可后续补齐）
+	// SDO 通信（基于 SOEM ecx_SDOread / ecx_SDOwrite）
 	bool SdoRead(uint16_t slave, uint16_t index, uint8_t subindex, void *data, int len,
 		     int timeout_us);
 	bool SdoWrite(uint16_t slave, uint16_t index, uint8_t subindex, const void *data, int len,

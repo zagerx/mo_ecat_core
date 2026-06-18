@@ -13,21 +13,42 @@ bool SlaveNodeManager::Initialize(EcMaster &master, const std::vector<SlaveInfo>
 {
 	Clear();
 
-	SlaveTypeDetector detector;
-	SlaveConfigFactory config_factory;
-
 	for (const auto &info : slave_infos) {
-		const SlaveType type = detector.Detect(info);
-		SlaveConfig config = config_factory.CreateConfig(info, type);
-
-		LOG_INFO << "Slave " << info.slave_id << " [" << info.name << "] detected as "
-			 << static_cast<int>(type) << " (vendor=0x" << std::hex << info.vendor_id
-			 << ", product=0x" << info.product_id << std::dec << ")";
-
-		nodes_.emplace_back(std::make_unique<SlaveNode>(master, config, info));
+		LOG_INFO << "Slave " << info.slave_id << " [" << info.name << "] placeholder created"
+			 << " (vendor=0x" << std::hex << info.vendor_id << ", product=0x"
+			 << info.product_id << std::dec << ")";
+		nodes_.emplace_back(std::make_unique<SlaveNode>(master, info));
 	}
 
 	return true;
+}
+
+bool SlaveNodeManager::ConfigureAll()
+{
+	SlaveTypeDetector detector;
+	SlaveConfigFactory config_factory;
+
+	bool all_ok = true;
+	for (const auto &node : nodes_) {
+		if (node->IsConfigured()) {
+			continue;
+		}
+
+		const SlaveInfo &info = node->GetInfo();
+		const SlaveType type = detector.Detect(info);
+		SlaveConfig config = config_factory.CreateConfig(info, type);
+
+		LOG_INFO << "Slave " << info.slave_id << " [" << info.name << "] configuring as type "
+			 << static_cast<int>(type) << " ...";
+
+		if (!node->Configure(config)) {
+			LOG_ERROR << "Slave " << info.slave_id << " [" << info.name
+				  << "] configuration failed";
+			all_ok = false;
+		}
+	}
+
+	return all_ok;
 }
 
 void SlaveNodeManager::Clear()
@@ -61,14 +82,18 @@ SlaveNode *SlaveNodeManager::GetNode(const std::string &name)
 void SlaveNodeManager::UpdateAllOutputs()
 {
 	for (const auto &node : nodes_) {
-		node->UpdatePdoOutput();
+		if (node->IsConfigured()) {
+			node->UpdatePdoOutput();
+		}
 	}
 }
 
 void SlaveNodeManager::UpdateAllInputs()
 {
 	for (const auto &node : nodes_) {
-		node->UpdatePdoInput();
+		if (node->IsConfigured()) {
+			node->UpdatePdoInput();
+		}
 	}
 }
 

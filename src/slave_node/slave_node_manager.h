@@ -14,7 +14,12 @@ namespace mo_ecat
 class SlaveNodeManager
 {
       public:
+	// 创建占位 SlaveNode（PREOP 阶段）。此时只保存 SlaveInfo，不分配 PDO buffer。
 	bool Initialize(EcMaster &master, const std::vector<SlaveInfo> &slave_infos);
+
+	// 对所有从站调用 Configure()，进入 PDO 阶段后使用。
+	// 如果节点已经配置过，则跳过。
+	bool ConfigureAll();
 
 	size_t GetNodeCount() const;
 	SlaveNode *GetNode(size_t index);

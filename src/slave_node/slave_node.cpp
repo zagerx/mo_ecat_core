@@ -7,18 +7,43 @@
 namespace mo_ecat
 {
 
-SlaveNode::SlaveNode(EcMaster &master, const SlaveConfig &config, const SlaveInfo &info)
-	: master_(master), config_(config), info_(info)
+SlaveNode::SlaveNode(EcMaster &master, const SlaveInfo &info)
+	: master_(master), info_(info)
 {
-	output_buffer_.resize(ComputeOutputSize(config_.mapping), 0);
-	input_buffer_.resize(ComputeInputSize(config_.mapping), 0);
+	// 占位阶段：不分配 PDO buffer，不创建 DeviceProfile。
+	// 这些资源在 Configure() 被调用后再分配。
+}
 
-	profile_ = CreateDeviceProfile(config_.type, config_.axis_config);
+bool SlaveNode::Configure(const SlaveConfig &config)
+{
+	if (configured_) {
+		LOG_WARN << "SlaveNode " << info_.name << " already configured";
+		return false;
+	}
+
+	config_ = std::make_unique<SlaveConfig>(config);
+	output_buffer_.resize(ComputeOutputSize(config_->mapping), 0);
+	input_buffer_.resize(ComputeInputSize(config_->mapping), 0);
+	profile_ = CreateDeviceProfile(config_->type, config_->axis_config);
+
+	configured_ = true;
+	LOG_INFO << "SlaveNode " << info_.name << " configured: type="
+		 << static_cast<int>(config_->type);
+	return true;
+}
+
+bool SlaveNode::IsConfigured() const
+{
+	return configured_;
 }
 
 const SlaveConfig &SlaveNode::GetConfig() const
 {
-	return config_;
+	static const SlaveConfig kEmptyConfig;
+	if (!config_) {
+		return kEmptyConfig;
+	}
+	return *config_;
 }
 
 const SlaveInfo &SlaveNode::GetInfo() const
@@ -28,7 +53,10 @@ const SlaveInfo &SlaveNode::GetInfo() const
 
 SlaveType SlaveNode::GetType() const
 {
-	return config_.type;
+	if (!config_) {
+		return SlaveType::Unknown;
+	}
+	return config_->type;
 }
 
 DeviceProfile *SlaveNode::GetProfile() const
@@ -38,7 +66,7 @@ DeviceProfile *SlaveNode::GetProfile() const
 
 ServoAxis *SlaveNode::GetServoAxis() const
 {
-	if (config_.type != SlaveType::Servo) {
+	if (!config_ || config_->type != SlaveType::Servo) {
 		return nullptr;
 	}
 	auto *servo_profile = dynamic_cast<ServoProfile *>(profile_.get());
@@ -109,15 +137,25 @@ bool SlaveNode::ConfigurePdoMapping()
 
 void SlaveNode::SetPdoMapping(const PdoMapping &mapping)
 {
-	config_.mapping = mapping;
-	output_buffer_.resize(ComputeOutputSize(config_.mapping), 0);
-	input_buffer_.resize(ComputeInputSize(config_.mapping), 0);
+	if (!config_) {
+		LOG_WARN << "SlaveNode " << info_.name << " not configured, cannot set PDO mapping";
+		return;
+	}
+
+	config_->mapping = mapping;
+	output_buffer_.resize(ComputeOutputSize(config_->mapping), 0);
+	input_buffer_.resize(ComputeInputSize(config_->mapping), 0);
 }
 
 void SlaveNode::UpdatePdoOutput()
 {
+	if (!configured_) {
+		LOG_WARN << "SlaveNode " << info_.name << " not configured, skip UpdatePdoOutput";
+		return;
+	}
+
 	if (profile_ != nullptr) {
-		profile_->EncodePdoOutput(config_.mapping, output_buffer_);
+		profile_->EncodePdoOutput(config_->mapping, output_buffer_);
 	}
 
 	if (!output_buffer_.empty()) {
@@ -128,13 +166,18 @@ void SlaveNode::UpdatePdoOutput()
 
 void SlaveNode::UpdatePdoInput()
 {
+	if (!configured_) {
+		LOG_WARN << "SlaveNode " << info_.name << " not configured, skip UpdatePdoInput";
+		return;
+	}
+
 	if (!input_buffer_.empty()) {
 		master_.ReadInput(info_.slave_id, 0, input_buffer_.data(),
 				  static_cast<int>(input_buffer_.size()));
 	}
 
 	if (profile_ != nullptr) {
-		profile_->DecodePdoInput(config_.mapping, input_buffer_);
+		profile_->DecodePdoInput(config_->mapping, input_buffer_);
 	}
 }
 

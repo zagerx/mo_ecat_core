@@ -13,24 +13,32 @@
 namespace mo_ecat
 {
 
-// 单个从站节点：负责 EtherCAT 通信状态、PDO 映射、SDO，
-// 并挂载对应的 DeviceProfile 处理具体设备语义。
+// 单个从站节点。
+// 生命周期分为两阶段：
+//   1. 占位阶段：扫描后创建，只保存 SlaveInfo，支持 SDO 和状态查询。
+//   2. 配置阶段：PDO 阶段调用 Configure()，填充 SlaveConfig、分配 buffer、创建 DeviceProfile。
 class SlaveNode
 {
       public:
-	SlaveNode(EcMaster &master, const SlaveConfig &config, const SlaveInfo &info);
+	SlaveNode(EcMaster &master, const SlaveInfo &info);
+
+	// ---------- 配置阶段 ----------
+	// 填充 SlaveConfig、分配 PDO buffer、创建 DeviceProfile。
+	// 当前阶段（PREOP + SDO）不调用；PDO 阶段再调用。
+	bool Configure(const SlaveConfig &config);
+	bool IsConfigured() const;
 
 	// ---------- EtherCAT 通信状态 ----------
 	bool RequestState(uint16_t state);
 	uint16_t GetCurrentState() const;
 
-	// ---------- SDO 通信（当前为框架，功能后续实现） ----------
+	// ---------- SDO 通信 ----------
 	bool SdoRead(uint16_t index, uint8_t subindex, void *data, size_t len,
 		     int timeout_us = 10000);
 	bool SdoWrite(uint16_t index, uint8_t subindex, const void *data, size_t len,
 		      int timeout_us = 10000);
 
-	// ---------- PDO 映射配置 ----------
+	// ---------- PDO 映射配置（PDO 阶段使用）----------
 	bool ConfigurePdoMapping();
 	void SetPdoMapping(const PdoMapping &mapping);
 
@@ -51,13 +59,14 @@ class SlaveNode
 	static size_t ComputeInputSize(const PdoMapping &mapping);
 
 	EcMaster &master_;
-	SlaveConfig config_;
 	SlaveInfo info_;
 
+	std::unique_ptr<SlaveConfig> config_;
+	std::unique_ptr<DeviceProfile> profile_;
 	std::vector<uint8_t> output_buffer_;
 	std::vector<uint8_t> input_buffer_;
 
-	std::unique_ptr<DeviceProfile> profile_;
+	bool configured_ = false;
 	uint16_t current_state_ = 0; // EC_STATE_INIT
 };
 
