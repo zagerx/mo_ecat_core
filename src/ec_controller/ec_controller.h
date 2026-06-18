@@ -5,10 +5,21 @@
 
 namespace mo_ecat
 {
+enum class ControllerState {
+	kUninitialized,
+	kInitDone,
+	kScanned,
+	kPreOp,
+	kPdoConfigured,
+	kSafeOp,
+	kDcConfigured,
+	kOperational,
+	kError
+};
 
 class EcatController
 {
-public:
+      public:
 	EcatController();
 	~EcatController();
 
@@ -33,7 +44,10 @@ public:
 	bool IsInitialized() const;
 	bool IsOperational() const;
 
-private:
+      private:
+	void Shutdown(bool request_states);
+	std::vector<SlaveInfo> RefreshSlaveInfos() const;
+	ControllerState state_ = ControllerState::kUninitialized;
 	EcMaster master_;
 	SlaveNodeManager node_manager_;
 	bool initialized_ = false;

@@ -36,11 +36,11 @@ struct SlaveInfo {
 	bool supports_dc = false;
 
 	// Mailbox 基本信息（从 SII/EEPROM 读取）
-	uint16_t mbx_l = 0;      // 邮箱长度（字节），0 表示无邮箱
-	uint16_t mbx_wo = 0;     // 邮箱写偏移
-	uint16_t mbx_ro = 0;     // 邮箱读偏移
-	uint16_t mbx_proto = 0;  // 支持的邮箱协议位掩码
-	uint8_t mbx_cnt = 0;     // 邮箱链路层计数器
+	uint16_t mbx_l = 0;     // 邮箱长度（字节），0 表示无邮箱
+	uint16_t mbx_wo = 0;    // 邮箱写偏移
+	uint16_t mbx_ro = 0;    // 邮箱读偏移
+	uint16_t mbx_proto = 0; // 支持的邮箱协议位掩码
+	uint8_t mbx_cnt = 0;    // 邮箱链路层计数器
 
 	// 运行状态与能力（扫描时或 PDO/DC 配置后可用）
 	uint16_t state = 0;          // 当前 EtherCAT 状态
@@ -75,6 +75,10 @@ class EcMaster
 	bool RequestOperationalState();
 	bool RequestSafeOpState();
 	bool RequestInitState();
+	bool RequestPreOpState();
+	bool RequestStateWithRetry(int slave, uint16_t state, int max_retries = 3);
+	bool CheckAllSlavesInState(uint16_t state);
+	uint16_t ReadActualState(int slave);
 
 	// 单站状态切换
 	bool RequestState(int slave, uint16_t state);
@@ -91,8 +95,10 @@ class EcMaster
 	void ReadInput(int slave, int offset, uint8_t *data, int len);
 
 	// SDO 通信（当前为框架接口，功能可后续补齐）
-	bool SdoRead(uint16_t slave, uint16_t index, uint8_t subindex, void *data, int len, int timeout_us);
-	bool SdoWrite(uint16_t slave, uint16_t index, uint8_t subindex, const void *data, int len, int timeout_us);
+	bool SdoRead(uint16_t slave, uint16_t index, uint8_t subindex, void *data, int len,
+		     int timeout_us);
+	bool SdoWrite(uint16_t slave, uint16_t index, uint8_t subindex, const void *data, int len,
+		      int timeout_us);
 
 	const CyclicStats &GetStats() const;
 
