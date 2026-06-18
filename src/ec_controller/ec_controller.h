@@ -1,9 +1,12 @@
 #pragma once
 
+#include <atomic>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "activity/activity.h"
 #include "ec_master/ec_master.h"
 #include "slave_node/slave_node_manager.h"
 
@@ -47,6 +50,12 @@ class EcatController
 	// 获取节点管理器，供上层按名字/索引访问从站
 	SlaveNodeManager &GetSlaveNodeManager();
 
+	// 执行同步维护活动（第一阶段采用同步模型，后续可扩展异步）
+	bool ExecuteActivity(std::unique_ptr<EcatActivity> activity);
+
+	// 查询是否有活动正在执行
+	bool IsActivityRunning() const;
+
 	bool IsInitialized() const;
 	bool IsOperational() const;
 
@@ -82,6 +91,8 @@ class EcatController
 
 	EcMasterConfig config_;
 	std::vector<SlaveInfo> slave_infos_;
+
+	std::atomic<bool> activity_running_{false};
 };
 
 } // namespace mo_ecat

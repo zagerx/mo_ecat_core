@@ -205,11 +205,27 @@ bool EcatController::TransitionTo(ControllerState target)
 		return DoStepTo(target);
 	}
 
+	// 辅助函数：查转换表
+	auto is_allowed = [this](ControllerState from, ControllerState to) -> bool {
+		auto it = kAllowedTransitions.find(from);
+		if (it == kAllowedTransitions.end()) {
+			return false;
+		}
+		const auto &allowed = it->second;
+		return std::find(allowed.begin(), allowed.end(), to) != allowed.end();
+	};
+
 	// 目标状态在当前状态之后：按顺序逐步前进
 	if (static_cast<int>(target) > static_cast<int>(state_)) {
 		while (state_ != target) {
 			ControllerState next =
 				static_cast<ControllerState>(static_cast<int>(state_) + 1);
+			if (!is_allowed(state_, next)) {
+				LOG_ERROR << "Invalid forward transition: " << StateToString(state_)
+					  << " -> " << StateToString(next);
+				EnterErrorState("Invalid forward transition");
+				return false;
+			}
 			if (!DoStepTo(next)) {
 				return false;
 			}
@@ -218,20 +234,63 @@ bool EcatController::TransitionTo(ControllerState target)
 	}
 
 	// 目标状态在当前状态之前或同级：查转换表
-	auto it = kAllowedTransitions.find(state_);
-	if (it == kAllowedTransitions.end()) {
-		LOG_ERROR << "No transition rules for state " << StateToString(state_);
-		EnterErrorState("Missing transition rules");
-		return false;
-	}
-	const auto &allowed = it->second;
-	if (std::find(allowed.begin(), allowed.end(), target) == allowed.end()) {
+	if (!is_allowed(state_, target)) {
 		LOG_ERROR << "Invalid transition: " << StateToString(state_) << " -> "
 			  << StateToString(target);
 		return false;
 	}
 
 	return DoStepTo(target);
+}
+
+bool EcatController::ExecuteActivity(std::unique_ptr<EcatActivity> activity)
+{
+	if (!activity) {
+		LOG_ERROR << "Null activity";
+		return false;
+	}
+
+	if (activity_running_.load()) {
+		LOG_ERROR << "Activity already running";
+		return false;
+	}
+
+	if (!activity->CanStart(state_)) {
+		LOG_ERROR << "Activity " << activity->GetName()
+			  << " cannot start in state " << StateToString(state_);
+		return false;
+	}
+
+	activity_running_.store(true);
+	LOG_INFO << "Activity started: " << activity->GetName();
+
+	const bool ok = activity->Execute();
+
+	LOG_INFO << "Activity finished: " << activity->GetName()
+		 << ", result=" << (ok ? "ok" : "failed");
+	activity_running_.store(false);
+
+	if (!ok) {
+		switch (activity->GetFailurePolicy()) {
+		case ActivityFailurePolicy::kEnterError:
+			EnterErrorState(std::string("Activity failed: ") + activity->GetName());
+			break;
+		case ActivityFailurePolicy::kShutdown:
+			Stop();
+			break;
+		case ActivityFailurePolicy::kKeepControllerState:
+		default:
+			LOG_WARN << "Activity failed but keeping controller state";
+			break;
+		}
+	}
+
+	return ok;
+}
+
+bool EcatController::IsActivityRunning() const
+{
+	return activity_running_.load();
 }
 
 bool EcatController::DoStepTo(ControllerState next)
