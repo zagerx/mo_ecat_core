@@ -6,10 +6,12 @@
 namespace mo_ecat
 {
 
+// 构造 ActivityScheduler，通过 controller 查询状态并处理失败策略。
 ActivityScheduler::ActivityScheduler(EcatController &controller) : controller_(controller)
 {
 }
 
+// 同步执行一个 Activity：检查当前状态、保证互斥、根据失败策略处理结果。
 bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity)
 {
 	if (!activity) {
@@ -57,6 +59,7 @@ bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity)
 	return ok;
 }
 
+// 是否有 Activity 正在执行。
 bool ActivityScheduler::IsRunning() const
 {
 	return running_.load();

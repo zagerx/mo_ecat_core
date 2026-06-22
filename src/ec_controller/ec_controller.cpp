@@ -143,6 +143,7 @@ EcatController::~EcatController()
 	Stop();
 }
 
+// 将 ControllerState 转换为可读字符串。
 const char *EcatController::StateToString(ControllerState state)
 {
 	switch (state) {
@@ -162,6 +163,7 @@ const char *EcatController::StateToString(ControllerState state)
 	return "Unknown";
 }
 
+// 从 EcMaster 刷新所有从站信息。
 std::vector<SlaveInfo> EcatController::RefreshSlaveInfos() const
 {
 	std::vector<SlaveInfo> slave_infos;
@@ -220,6 +222,7 @@ bool EcatController::TransitionTo(ControllerState target)
 	return DoStepTo(target);
 }
 
+// 执行单个公开状态转换步骤。
 bool EcatController::DoStepTo(ControllerState next)
 {
 	switch (next) {
@@ -268,6 +271,7 @@ bool EcatController::DoStartOperation()
 	return true;
 }
 
+// 初始化网卡/SOEM：Uninitialized -> AdapterReady。
 bool EcatController::DoInit()
 {
 	if (state_ != ControllerState::kUninitialized) {
@@ -283,6 +287,7 @@ bool EcatController::DoInit()
 	return true;
 }
 
+// 扫描从站：AdapterReady -> Scanned。
 bool EcatController::DoScan()
 {
 	if (state_ != ControllerState::kAdapterReady) {
@@ -306,6 +311,7 @@ bool EcatController::DoScan()
 	return true;
 }
 
+// 请求所有从站进入 PREOP，并创建占位 SlaveNode：Scanned -> Maintenance。
 bool EcatController::DoEnterMaintenance()
 {
 	if (state_ != ControllerState::kScanned) {
@@ -341,6 +347,7 @@ bool EcatController::DoEnterMaintenance()
 	return true;
 }
 
+// 配置所有从站 PDO 映射（StartOperation 内部子步骤）。
 bool EcatController::DoPdoConfigure()
 {
 	if (state_ != ControllerState::kMaintenance) {
@@ -357,6 +364,7 @@ bool EcatController::DoPdoConfigure()
 	return true;
 }
 
+// 配置过程数据并请求 SAFEOP（StartOperation 内部子步骤）。
 bool EcatController::DoSafeOp()
 {
 	if (state_ != ControllerState::kMaintenance) {
@@ -378,6 +386,7 @@ bool EcatController::DoSafeOp()
 	return true;
 }
 
+// 配置分布式时钟（StartOperation 内部子步骤）。
 bool EcatController::DoDcConfigure()
 {
 	if (state_ != ControllerState::kMaintenance) {
@@ -394,6 +403,7 @@ bool EcatController::DoDcConfigure()
 	return true;
 }
 
+// 请求所有从站进入 OPERATIONAL 并更新状态（StartOperation 最后子步骤）。
 bool EcatController::DoOperational()
 {
 	if (state_ != ControllerState::kMaintenance) {
@@ -445,6 +455,7 @@ bool EcatController::DoShutdown()
 	return true;
 }
 
+// 请求进入错误状态，记录原因。供 ActivityScheduler / ProcessDataEngine 调用。
 void EcatController::RequestErrorState(const std::string &reason)
 {
 	LOG_ERROR << "Entering error state: " << reason;
@@ -523,6 +534,7 @@ void EcatController::Stop()
 	TransitionTo(ControllerState::kUninitialized);
 }
 
+// 安全遍历所有 SlaveNode，不对外暴露 SlaveNodeManager。
 void EcatController::ForEachSlaveNode(const std::function<void(SlaveNode &)> &callback)
 {
 	for (size_t i = 0; i < node_manager_.GetNodeCount(); ++i) {
@@ -533,31 +545,37 @@ void EcatController::ForEachSlaveNode(const std::function<void(SlaveNode &)> &ca
 	}
 }
 
+// 获取 SlaveNodeManager（仅供 ProcessDataEngine 等底层周期模块使用）。
 SlaveNodeManager &EcatController::GetSlaveNodeManager()
 {
 	return node_manager_;
 }
 
+// 获取 EcMaster（仅供 ProcessDataEngine 等底层周期模块使用）。
 EcMaster &EcatController::GetEcMaster()
 {
 	return master_;
 }
 
+// 获取扫描到的从站数量。
 size_t EcatController::GetSlaveCount() const
 {
 	return slave_infos_.size();
 }
 
+// 获取当前 ControllerState。
 ControllerState EcatController::GetState() const
 {
 	return state_;
 }
 
+// 是否已完成初始化（state_ != kUninitialized）。
 bool EcatController::IsInitialized() const
 {
 	return state_ != ControllerState::kUninitialized;
 }
 
+// 是否处于 OPERATIONAL 状态。
 bool EcatController::IsOperational() const
 {
 	return state_ == ControllerState::kOperational;
