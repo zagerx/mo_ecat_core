@@ -123,24 +123,14 @@ namespace mo_ecat
 
 const std::map<ControllerState, std::vector<ControllerState>> EcatController::kAllowedTransitions =
 	{
-		{ControllerState::kUninitialized, {ControllerState::kInitDone}},
-		{ControllerState::kInitDone,
+		{ControllerState::kUninitialized, {ControllerState::kAdapterReady}},
+		{ControllerState::kAdapterReady,
 		 {ControllerState::kScanned, ControllerState::kUninitialized}},
 		{ControllerState::kScanned,
-		 {ControllerState::kPreOp, ControllerState::kUninitialized}},
-		{ControllerState::kPreOp,
-		 {ControllerState::kPdoConfigured, ControllerState::kUninitialized}},
-		{ControllerState::kPdoConfigured,
-		 {ControllerState::kSafeOp, ControllerState::kPreOp,
-		  ControllerState::kUninitialized}},
-		{ControllerState::kSafeOp,
-		 {ControllerState::kDcConfigured, ControllerState::kPreOp,
-		  ControllerState::kUninitialized}},
-		{ControllerState::kDcConfigured,
-		 {ControllerState::kOperational, ControllerState::kSafeOp,
-		  ControllerState::kUninitialized}},
-		{ControllerState::kOperational,
-		 {ControllerState::kSafeOp, ControllerState::kUninitialized}},
+		 {ControllerState::kMaintenance, ControllerState::kUninitialized}},
+		{ControllerState::kMaintenance,
+		 {ControllerState::kOperational, ControllerState::kUninitialized}},
+		{ControllerState::kOperational, {ControllerState::kUninitialized}},
 		{ControllerState::kError, {ControllerState::kUninitialized}},
 };
 
@@ -158,18 +148,12 @@ const char *EcatController::StateToString(ControllerState state)
 	switch (state) {
 	case ControllerState::kUninitialized:
 		return "Uninitialized";
-	case ControllerState::kInitDone:
-		return "InitDone";
+	case ControllerState::kAdapterReady:
+		return "AdapterReady";
 	case ControllerState::kScanned:
 		return "Scanned";
-	case ControllerState::kPreOp:
-		return "PreOp";
-	case ControllerState::kPdoConfigured:
-		return "PdoConfigured";
-	case ControllerState::kSafeOp:
-		return "SafeOp";
-	case ControllerState::kDcConfigured:
-		return "DcConfigured";
+	case ControllerState::kMaintenance:
+		return "Maintenance";
 	case ControllerState::kOperational:
 		return "Operational";
 	case ControllerState::kError:
@@ -215,29 +199,17 @@ bool EcatController::TransitionTo(ControllerState target)
 		return std::find(allowed.begin(), allowed.end(), to) != allowed.end();
 	};
 
-	// 目标状态在当前状态之后：按顺序逐步前进
-	if (static_cast<int>(target) > static_cast<int>(state_)) {
-		while (state_ != target) {
-			ControllerState next =
-				static_cast<ControllerState>(static_cast<int>(state_) + 1);
-			if (!is_allowed(state_, next)) {
-				LOG_ERROR << "Invalid forward transition: " << StateToString(state_)
-					  << " -> " << StateToString(next);
-				EnterErrorState("Invalid forward transition");
-				return false;
-			}
-			if (!DoStepTo(next)) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	// 目标状态在当前状态之前或同级：查转换表
+	// 目标状态必须被允许
 	if (!is_allowed(state_, target)) {
 		LOG_ERROR << "Invalid transition: " << StateToString(state_) << " -> "
 			  << StateToString(target);
 		return false;
+	}
+
+	// Maintenance -> Operational 是复合转换，内部顺序执行 PDO/SafeOp/DC/Op
+	if (state_ == ControllerState::kMaintenance &&
+	    target == ControllerState::kOperational) {
+		return DoStartOperation();
 	}
 
 	return DoStepTo(target);
@@ -296,26 +268,46 @@ bool EcatController::IsActivityRunning() const
 bool EcatController::DoStepTo(ControllerState next)
 {
 	switch (next) {
-	case ControllerState::kInitDone:
+	case ControllerState::kAdapterReady:
 		return DoInit();
 	case ControllerState::kScanned:
 		return DoScan();
-	case ControllerState::kPreOp:
-		return DoPreOp();
-	case ControllerState::kPdoConfigured:
-		return DoPdoConfigure();
-	case ControllerState::kSafeOp:
-		return DoSafeOp();
-	case ControllerState::kDcConfigured:
-		return DoDcConfigure();
+	case ControllerState::kMaintenance:
+		return DoEnterMaintenance();
 	case ControllerState::kOperational:
-		return DoOperational();
+		return DoStartOperation();
 	case ControllerState::kUninitialized:
 		return DoShutdown();
 	default:
 		LOG_ERROR << "Unknown target state " << StateToString(next);
 		return false;
 	}
+}
+
+bool EcatController::DoStartOperation()
+{
+	if (state_ != ControllerState::kMaintenance) {
+		LOG_ERROR << "DoStartOperation called in invalid state "
+			  << StateToString(state_);
+		return false;
+	}
+
+	LOG_INFO << "Starting operation from Maintenance...";
+
+	if (!DoPdoConfigure()) {
+		return false;
+	}
+	if (!DoSafeOp()) {
+		return false;
+	}
+	if (!DoDcConfigure()) {
+		return false;
+	}
+	if (!DoOperational()) {
+		return false;
+	}
+
+	return true;
 }
 
 bool EcatController::DoInit()
@@ -328,14 +320,14 @@ bool EcatController::DoInit()
 	if (!master_.Initialize(config_)) {
 		return false;
 	}
-	state_ = ControllerState::kInitDone;
-	LOG_INFO << "EcatController -> InitDone";
+	state_ = ControllerState::kAdapterReady;
+	LOG_INFO << "EcatController -> AdapterReady";
 	return true;
 }
 
 bool EcatController::DoScan()
 {
-	if (state_ != ControllerState::kInitDone) {
+	if (state_ != ControllerState::kAdapterReady) {
 		LOG_ERROR << "DoScan called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -356,10 +348,11 @@ bool EcatController::DoScan()
 	return true;
 }
 
-bool EcatController::DoPreOp()
+bool EcatController::DoEnterMaintenance()
 {
 	if (state_ != ControllerState::kScanned) {
-		LOG_ERROR << "DoPreOp called in invalid state " << StateToString(state_);
+		LOG_ERROR << "DoEnterMaintenance called in invalid state "
+			  << StateToString(state_);
 		return false;
 	}
 
@@ -374,7 +367,7 @@ bool EcatController::DoPreOp()
 		return false;
 	}
 
-	state_ = ControllerState::kPreOp;
+	state_ = ControllerState::kMaintenance;
 
 	// 刷新从站信息，获取 PREOP 后的 mailbox 等状态
 	slave_infos_ = RefreshSlaveInfos();
@@ -385,14 +378,14 @@ bool EcatController::DoPreOp()
 		return false;
 	}
 
-	LOG_INFO << "EcatController -> PreOp, " << node_manager_.GetNodeCount()
+	LOG_INFO << "EcatController -> Maintenance, " << node_manager_.GetNodeCount()
 		 << " slave node(s) placeholder created";
 	return true;
 }
 
 bool EcatController::DoPdoConfigure()
 {
-	if (state_ != ControllerState::kPreOp) {
+	if (state_ != ControllerState::kMaintenance) {
 		LOG_ERROR << "DoPdoConfigure called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -402,14 +395,13 @@ bool EcatController::DoPdoConfigure()
 		return false;
 	}
 
-	state_ = ControllerState::kPdoConfigured;
-	LOG_INFO << "EcatController -> PdoConfigured";
+	LOG_INFO << "PDO configured";
 	return true;
 }
 
 bool EcatController::DoSafeOp()
 {
-	if (state_ != ControllerState::kPdoConfigured) {
+	if (state_ != ControllerState::kMaintenance) {
 		LOG_ERROR << "DoSafeOp called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -424,14 +416,13 @@ bool EcatController::DoSafeOp()
 		return false;
 	}
 
-	state_ = ControllerState::kSafeOp;
-	LOG_INFO << "EcatController -> SafeOp";
+	LOG_INFO << "SAFEOP reached";
 	return true;
 }
 
 bool EcatController::DoDcConfigure()
 {
-	if (state_ != ControllerState::kSafeOp) {
+	if (state_ != ControllerState::kMaintenance) {
 		LOG_ERROR << "DoDcConfigure called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -441,14 +432,13 @@ bool EcatController::DoDcConfigure()
 		return false;
 	}
 
-	state_ = ControllerState::kDcConfigured;
-	LOG_INFO << "EcatController -> DcConfigured";
+	LOG_INFO << "DC configured";
 	return true;
 }
 
 bool EcatController::DoOperational()
 {
-	if (state_ != ControllerState::kDcConfigured) {
+	if (state_ != ControllerState::kMaintenance) {
 		LOG_ERROR << "DoOperational called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -468,21 +458,21 @@ bool EcatController::DoShutdown()
 {
 	LOG_INFO << "EcatController shutting down from state " << StateToString(state_);
 
-	if (state_ == ControllerState::kOperational || state_ == ControllerState::kDcConfigured) {
+	if (state_ == ControllerState::kOperational) {
 		if (!master_.RequestSafeOpState()) {
 			LOG_WARN << "Failed to request SAFE_OP during shutdown";
 		}
 	}
 
-	if (state_ == ControllerState::kSafeOp || state_ == ControllerState::kOperational ||
-	    state_ == ControllerState::kDcConfigured) {
+	if (state_ == ControllerState::kOperational ||
+	    state_ == ControllerState::kMaintenance) {
 		if (!master_.RequestPreOpState()) {
 			LOG_WARN << "Failed to request PRE_OP during shutdown";
 		}
 	}
 
-	if (state_ != ControllerState::kUninitialized && state_ != ControllerState::kInitDone &&
-	    state_ != ControllerState::kScanned) {
+	if (state_ != ControllerState::kUninitialized &&
+	    state_ != ControllerState::kAdapterReady && state_ != ControllerState::kScanned) {
 		if (!master_.RequestInitState()) {
 			LOG_WARN << "Failed to request INIT during shutdown";
 		}
@@ -513,7 +503,7 @@ bool EcatController::Initialize(const EcMasterConfig &config)
 	if (!Scan()) {
 		return false;
 	}
-	return EnterPreOp();
+	return EnterMaintenance();
 }
 
 bool EcatController::InitializeAdapter(const EcMasterConfig &config)
@@ -524,12 +514,12 @@ bool EcatController::InitializeAdapter(const EcMasterConfig &config)
 	}
 
 	config_ = config;
-	return TransitionTo(ControllerState::kInitDone);
+	return TransitionTo(ControllerState::kAdapterReady);
 }
 
 bool EcatController::Scan()
 {
-	if (state_ != ControllerState::kInitDone) {
+	if (state_ != ControllerState::kAdapterReady) {
 		LOG_WARN << "Scan called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -537,19 +527,19 @@ bool EcatController::Scan()
 	return TransitionTo(ControllerState::kScanned);
 }
 
-bool EcatController::EnterPreOp()
+bool EcatController::EnterMaintenance()
 {
 	if (state_ != ControllerState::kScanned) {
-		LOG_WARN << "EnterPreOp called in invalid state " << StateToString(state_);
+		LOG_WARN << "EnterMaintenance called in invalid state " << StateToString(state_);
 		return false;
 	}
 
-	return TransitionTo(ControllerState::kPreOp);
+	return TransitionTo(ControllerState::kMaintenance);
 }
 
 bool EcatController::StartOperation()
 {
-	if (state_ != ControllerState::kPreOp) {
+	if (state_ != ControllerState::kMaintenance) {
 		LOG_WARN << "StartOperation called in invalid state " << StateToString(state_);
 		return false;
 	}
@@ -583,14 +573,9 @@ void EcatController::CheckSlaveStates()
 	master_.CheckSlaveStates();
 
 	switch (state_) {
-	case ControllerState::kPreOp:
+	case ControllerState::kMaintenance:
 		if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
 			EnterErrorState("Slave dropped out of PREOP");
-		}
-		break;
-	case ControllerState::kSafeOp:
-		if (!master_.CheckAllSlavesInState(EC_STATE_SAFE_OP)) {
-			EnterErrorState("Slave dropped out of SAFEOP");
 		}
 		break;
 	case ControllerState::kOperational:

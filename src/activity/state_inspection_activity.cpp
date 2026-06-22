@@ -44,11 +44,8 @@ const char *StateInspectionActivity::GetName() const
 
 bool StateInspectionActivity::CanStart(ControllerState state) const
 {
-	// 只要有从站连接的状态都可以巡检
-	return state == ControllerState::kPreOp ||
-	       state == ControllerState::kPdoConfigured ||
-	       state == ControllerState::kSafeOp ||
-	       state == ControllerState::kDcConfigured ||
+	// Maintenance(PREOP) 和 Operational 阶段都可以巡检
+	return state == ControllerState::kMaintenance ||
 	       state == ControllerState::kOperational;
 }
 

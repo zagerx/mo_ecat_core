@@ -13,16 +13,16 @@
 namespace mo_ecat
 {
 
+// EtherCAT 主站生命周期状态。
+// 只表示稳定工况；PDO 配置 / SafeOp / DC 同步等过渡步骤作为
+// StartOperation() 的内部子步骤，不暴露为 ControllerState。
 enum class ControllerState {
-	kUninitialized,
-	kInitDone,
-	kScanned,
-	kPreOp,
-	kPdoConfigured,
-	kSafeOp,
-	kDcConfigured,
-	kOperational,
-	kError
+	kUninitialized,   // 初始状态：未绑定网卡、未扫描从站
+	kAdapterReady,    // SOEM 初始化完成，网卡已绑定
+	kScanned,         // 从站扫描完成，已获取 SlaveInfo
+	kMaintenance,     // 所有从站进入 PREOP，可执行 SDO 维护活动
+	kOperational,     // 所有从站进入 OPERATIONAL，PDO 周期可运行
+	kError            // 异常状态：只能 Stop() 回到 Uninitialized
 };
 
 class EcatController
@@ -31,18 +31,18 @@ class EcatController
 	EcatController();
 	~EcatController();
 
-	// 初始化 EtherCAT 主站：绑定网卡 + 扫描从站 + 进入 PREOP
-	// 这是便捷接口，内部调用 InitializeAdapter -> Scan -> EnterPreOp。
+	// 初始化 EtherCAT 主站：绑定网卡 + 扫描从站 + 进入 Maintenance
+	// 这是便捷接口，内部调用 InitializeAdapter -> Scan -> EnterMaintenance。
 	bool Initialize(const EcMasterConfig &config);
 
-	// 仅初始化网卡/SOEM，生命周期状态到达 InitDone
+	// 仅初始化网卡/SOEM，生命周期状态到达 AdapterReady
 	bool InitializeAdapter(const EcMasterConfig &config);
 
-	// 从 InitDone 扫描从站，到达 Scanned
+	// 从 AdapterReady 扫描从站，到达 Scanned
 	bool Scan();
 
-	// 从 Scanned 请求进入 PREOP，到达 PreOp
-	bool EnterPreOp();
+	// 从 Scanned 请求进入 Maintenance（PREOP）
+	bool EnterMaintenance();
 
 	// 请求进入 OPERATIONAL 状态（PDO 阶段使用；当前 main 不调用）
 	bool StartOperation();
@@ -53,13 +53,13 @@ class EcatController
 	// 周期任务：执行一次 PDO 收发（PDO 阶段由周期线程调用）
 	void RunOneCycle();
 
-	// 状态监控：读取一次从站状态，运行中掉线时进入 kError
+	// 状态监控：Maintenance/Operational 阶段检测到掉线则进入 kError
 	void CheckSlaveStates();
 
 	// 获取节点管理器，供上层按名字/索引访问从站
 	SlaveNodeManager &GetSlaveNodeManager();
 
-	// 获取扫描到的从站数量（Scanned/PreOp 等状态有效）
+	// 获取扫描到的从站数量（Scanned/Maintenance 等状态有效）
 	size_t GetSlaveCount() const;
 
 	// 执行同步维护活动（第一阶段采用同步模型，后续可扩展异步）
@@ -79,20 +79,26 @@ class EcatController
 	// 统一状态转换入口
 	bool TransitionTo(ControllerState target);
 
-	// 状态转换表：当前状态 -> 允许的目标状态（用于后退/特殊转换）
+	// 状态转换表：当前状态 -> 允许的目标状态
 	static const std::map<ControllerState, std::vector<ControllerState>> kAllowedTransitions;
 
-	// 执行单个状态转换步骤
+	// 执行单个状态转换步骤（只处理公开状态之间的单步转换）
 	bool DoStepTo(ControllerState next);
+
+	// Maintenance -> Operational 的复合转换
+	bool DoStartOperation();
 
 	// 各状态对应的具体实现
 	bool DoInit();
 	bool DoScan();
-	bool DoPreOp();
+	bool DoEnterMaintenance();
+
+	// 以下四个为 StartOperation() 的内部子步骤，不单独更新 ControllerState
 	bool DoPdoConfigure();
 	bool DoSafeOp();
 	bool DoDcConfigure();
 	bool DoOperational();
+
 	bool DoShutdown();
 
 	// 进入错误状态

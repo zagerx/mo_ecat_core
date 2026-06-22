@@ -93,14 +93,14 @@ void EcatApplication::Run()
 		}
 
 		switch (controller_.GetState()) {
-		case ControllerState::kInitDone:
-			HandleInitDoneState(has_command ? &command : nullptr);
+		case ControllerState::kAdapterReady:
+			HandleAdapterReadyState(has_command ? &command : nullptr);
 			break;
 		case ControllerState::kScanned:
 			HandleScannedState(has_command ? &command : nullptr);
 			break;
-		case ControllerState::kPreOp:
-			HandlePreOpState(has_command ? &command : nullptr);
+		case ControllerState::kMaintenance:
+			HandleMaintenanceState(has_command ? &command : nullptr);
 			break;
 		case ControllerState::kOperational:
 			HandleOperationalState(has_command ? &command : nullptr);
@@ -116,7 +116,7 @@ void EcatApplication::Run()
 	LOG_INFO << "Main state machine stopped.";
 }
 
-void EcatApplication::HandleInitDoneState(const std::string *command)
+void EcatApplication::HandleAdapterReadyState(const std::string *command)
 {
 	if (command == nullptr) {
 		return;
@@ -134,7 +134,7 @@ void EcatApplication::HandleInitDoneState(const std::string *command)
 		OnHelp();
 	} else {
 		LOG_ERROR << "Command '" << *command
-			  << "' not allowed in InitDone state";
+			  << "' not allowed in AdapterReady state";
 	}
 }
 
@@ -146,8 +146,8 @@ void EcatApplication::HandleScannedState(const std::string *command)
 
 	if (*command == "config") {
 		LOG_INFO << "Command: config";
-		if (!controller_.EnterPreOp()) {
-			LOG_ERROR << "Failed to enter PREOP";
+		if (!controller_.EnterMaintenance()) {
+			LOG_ERROR << "Failed to enter Maintenance";
 		}
 	} else if (*command == "stop") {
 		LOG_INFO << "Command: stop";
@@ -160,7 +160,7 @@ void EcatApplication::HandleScannedState(const std::string *command)
 	}
 }
 
-void EcatApplication::HandlePreOpState(const std::string *command)
+void EcatApplication::HandleMaintenanceState(const std::string *command)
 {
 	// 周期性任务：检查从站状态
 	controller_.CheckSlaveStates();
@@ -264,14 +264,14 @@ void EcatApplication::OnInspect()
 void EcatApplication::OnHelp()
 {
 	LOG_INFO << "Available commands by state:\n"
-		 << "  [InitDone]   scan                   - Scan slaves on the bus\n"
-		 << "  [Scanned]    config                 - Enter PREOP\n"
-		 << "  [PreOp]      diagnose               - Run SDO diagnostics\n"
-		 << "  [PreOp]      param <idx> <sub> <val> - Write a parameter\n"
-		 << "  [PreOp]      inspect                - Inspect slave states\n"
-		 << "  [PreOp]      start                  - Enter OPERATIONAL\n"
-		 << "  [Any]        stop                   - Stop controller\n"
-		 << "  [Any]        exit / quit            - Quit program";
+		 << "  [AdapterReady] scan                   - Scan slaves on the bus\n"
+		 << "  [Scanned]      config                 - Enter Maintenance\n"
+		 << "  [Maintenance]  diagnose               - Run SDO diagnostics\n"
+		 << "  [Maintenance]  param <idx> <sub> <val> - Write a parameter\n"
+		 << "  [Maintenance]  inspect                - Inspect slave states\n"
+		 << "  [Maintenance]  start                  - Enter OPERATIONAL\n"
+		 << "  [Any]          stop                   - Stop controller\n"
+		 << "  [Any]          exit / quit            - Quit program";
 }
 
 void EcatApplication::ExecuteActivityForAllNodes(

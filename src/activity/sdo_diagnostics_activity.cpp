@@ -21,11 +21,8 @@ const char *SdoDiagnosticsActivity::GetName() const
 
 bool SdoDiagnosticsActivity::CanStart(ControllerState state) const
 {
-	// PREOP 阶段 SDO 可用，SAFEOP/OP 也支持 SDO 诊断
-	return state == ControllerState::kPreOp ||
-	       state == ControllerState::kPdoConfigured ||
-	       state == ControllerState::kSafeOp ||
-	       state == ControllerState::kDcConfigured ||
+	// Maintenance(PREOP) 和 Operational 阶段 SDO 都可用
+	return state == ControllerState::kMaintenance ||
 	       state == ControllerState::kOperational;
 }
 

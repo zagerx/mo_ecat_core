@@ -19,7 +19,7 @@ public:
 	EcatApplication();
 	~EcatApplication();
 
-	// 初始化网卡/SOEM，到达 InitDone
+	// 初始化网卡/SOEM，到达 AdapterReady
 	bool Initialize(const EcMasterConfig &config);
 
 	// 安全停止并清理资源
@@ -35,9 +35,9 @@ private:
 	// 从 stdin 读取一条命令，超时返回 false
 	bool ReadCommand(std::string &command, int timeout_ms);
 
-	void HandleInitDoneState(const std::string *command);
+	void HandleAdapterReadyState(const std::string *command);
 	void HandleScannedState(const std::string *command);
-	void HandlePreOpState(const std::string *command);
+	void HandleMaintenanceState(const std::string *command);
 	void HandleOperationalState(const std::string *command);
 	void HandleErrorState(const std::string *command);
 
