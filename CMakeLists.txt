@@ -15,6 +15,9 @@ include_directories(
 
 set(ECAT_SOURCES
     src/activity/sdo_diagnostics_activity.cpp
+    src/activity/sdo_parameter_activity.cpp
+    src/activity/state_inspection_activity.cpp
+    src/app/ecat_application.cpp
     src/ec_master/ec_master.cpp
     src/ec_controller/ec_controller.cpp
     src/cyclic/cyclic_runner.cpp

@@ -507,7 +507,43 @@ bool EcatController::Initialize(const EcMasterConfig &config)
 		return false;
 	}
 
+	if (!InitializeAdapter(config)) {
+		return false;
+	}
+	if (!Scan()) {
+		return false;
+	}
+	return EnterPreOp();
+}
+
+bool EcatController::InitializeAdapter(const EcMasterConfig &config)
+{
+	if (state_ != ControllerState::kUninitialized) {
+		LOG_WARN << "Already initialized, state=" << StateToString(state_);
+		return false;
+	}
+
 	config_ = config;
+	return TransitionTo(ControllerState::kInitDone);
+}
+
+bool EcatController::Scan()
+{
+	if (state_ != ControllerState::kInitDone) {
+		LOG_WARN << "Scan called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	return TransitionTo(ControllerState::kScanned);
+}
+
+bool EcatController::EnterPreOp()
+{
+	if (state_ != ControllerState::kScanned) {
+		LOG_WARN << "EnterPreOp called in invalid state " << StateToString(state_);
+		return false;
+	}
+
 	return TransitionTo(ControllerState::kPreOp);
 }
 
@@ -546,16 +582,40 @@ void EcatController::CheckSlaveStates()
 {
 	master_.CheckSlaveStates();
 
-	if (state_ == ControllerState::kOperational) {
+	switch (state_) {
+	case ControllerState::kPreOp:
+		if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
+			EnterErrorState("Slave dropped out of PREOP");
+		}
+		break;
+	case ControllerState::kSafeOp:
+		if (!master_.CheckAllSlavesInState(EC_STATE_SAFE_OP)) {
+			EnterErrorState("Slave dropped out of SAFEOP");
+		}
+		break;
+	case ControllerState::kOperational:
 		if (!master_.CheckAllSlavesInState(EC_STATE_OPERATIONAL)) {
 			EnterErrorState("Slave dropped out of OPERATIONAL");
 		}
+		break;
+	default:
+		break;
 	}
 }
 
 SlaveNodeManager &EcatController::GetSlaveNodeManager()
 {
 	return node_manager_;
+}
+
+size_t EcatController::GetSlaveCount() const
+{
+	return slave_infos_.size();
+}
+
+ControllerState EcatController::GetState() const
+{
+	return state_;
 }
 
 bool EcatController::IsInitialized() const
