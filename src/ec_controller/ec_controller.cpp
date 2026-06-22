@@ -173,6 +173,11 @@ std::vector<SlaveInfo> EcatController::RefreshSlaveInfos() const
 	return slave_infos;
 }
 
+// 统一状态转换入口。
+// 1. 相同状态直接返回 true
+// 2. kError 状态只允许回到 kUninitialized
+// 3. 目标状态必须被 kAllowedTransitions 允许
+// 4. Maintenance -> Operational 使用复合转换 DoStartOperation()
 bool EcatController::TransitionTo(ControllerState target)
 {
 	if (state_ == target) {
@@ -206,7 +211,7 @@ bool EcatController::TransitionTo(ControllerState target)
 		return false;
 	}
 
-	// Maintenance -> Operational 是复合转换，内部顺序执行 PDO/SafeOp/DC/Op
+	// Maintenance -> Operational 是复合转换，不经过公开中间状态。
 	if (state_ == ControllerState::kMaintenance &&
 	    target == ControllerState::kOperational) {
 		return DoStartOperation();
@@ -284,6 +289,9 @@ bool EcatController::DoStepTo(ControllerState next)
 	}
 }
 
+// Maintenance -> Operational 复合转换。
+// 依次执行 PDO 配置、SafeOp、DC 配置、Operational。
+// 任一失败进入 kError，state_ 仍保持 kMaintenance（由 EnterErrorState 改为 kError）。
 bool EcatController::DoStartOperation()
 {
 	if (state_ != ControllerState::kMaintenance) {
@@ -454,6 +462,9 @@ bool EcatController::DoOperational()
 	return true;
 }
 
+// 安全停止：根据当前状态逐级回滚，最终回到 kUninitialized。
+// Operational -> SafeOp -> PreOp -> Init -> Close。
+// Maintenance -> PreOp -> Init -> Close。
 bool EcatController::DoShutdown()
 {
 	LOG_INFO << "EcatController shutting down from state " << StateToString(state_);
@@ -490,6 +501,7 @@ void EcatController::EnterErrorState(const std::string &reason)
 	state_ = ControllerState::kError;
 }
 
+// 便捷接口：Uninitialized -> AdapterReady -> Scanned -> Maintenance。
 bool EcatController::Initialize(const EcMasterConfig &config)
 {
 	if (state_ != ControllerState::kUninitialized) {
@@ -506,6 +518,7 @@ bool EcatController::Initialize(const EcMasterConfig &config)
 	return EnterMaintenance();
 }
 
+// 仅初始化网卡/SOEM：Uninitialized -> AdapterReady。
 bool EcatController::InitializeAdapter(const EcMasterConfig &config)
 {
 	if (state_ != ControllerState::kUninitialized) {
@@ -517,6 +530,7 @@ bool EcatController::InitializeAdapter(const EcMasterConfig &config)
 	return TransitionTo(ControllerState::kAdapterReady);
 }
 
+// 扫描从站：AdapterReady -> Scanned。
 bool EcatController::Scan()
 {
 	if (state_ != ControllerState::kAdapterReady) {
@@ -527,6 +541,7 @@ bool EcatController::Scan()
 	return TransitionTo(ControllerState::kScanned);
 }
 
+// 请求进入 PREOP：Scanned -> Maintenance。
 bool EcatController::EnterMaintenance()
 {
 	if (state_ != ControllerState::kScanned) {
@@ -537,6 +552,7 @@ bool EcatController::EnterMaintenance()
 	return TransitionTo(ControllerState::kMaintenance);
 }
 
+// 请求进入 OPERATIONAL：Maintenance -> Operational（复合转换）。
 bool EcatController::StartOperation()
 {
 	if (state_ != ControllerState::kMaintenance) {
@@ -547,6 +563,7 @@ bool EcatController::StartOperation()
 	return TransitionTo(ControllerState::kOperational);
 }
 
+// 安全停止：根据当前状态回滚，最终回到 kUninitialized。
 void EcatController::Stop()
 {
 	if (state_ == ControllerState::kUninitialized) {
@@ -556,6 +573,8 @@ void EcatController::Stop()
 	TransitionTo(ControllerState::kUninitialized);
 }
 
+// PDO 周期任务：更新输出 -> 收发 PDO -> 更新输入。
+// 仅在 kOperational 状态下执行。
 void EcatController::RunOneCycle()
 {
 	if (state_ != ControllerState::kOperational) {
@@ -568,6 +587,9 @@ void EcatController::RunOneCycle()
 	node_manager_.UpdateAllInputs();
 }
 
+// 状态监控：检测从站实际状态是否低于期望状态。
+// 仅在 kMaintenance（期望 PREOP）和 kOperational（期望 OP）下检查。
+// 发现异常时进入 kError。
 void EcatController::CheckSlaveStates()
 {
 	master_.CheckSlaveStates();

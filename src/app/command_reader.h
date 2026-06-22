@@ -9,7 +9,7 @@ namespace mo_ecat
 enum class ReadResult {
 	kOk,       // 成功读取到一条命令
 	kTimeout,  // 超时，没有命令
-	kEof,      // 输入流结束（如 Ctrl+D）
+	kEof,      // 输入流结束（如 Ctrl+D），调用方应考虑退出
 	kError,    // 读取错误
 };
 

@@ -76,34 +76,39 @@ class EcatController
 	static const char *StateToString(ControllerState state);
 
       private:
-	// 统一状态转换入口
+	// 统一状态转换入口。负责查表校验、执行单步或复合转换、失败处理。
 	bool TransitionTo(ControllerState target);
 
-	// 状态转换表：当前状态 -> 允许的目标状态
+	// 状态转换表：当前状态 -> 允许的目标状态集合。
+	// 只记录公开状态之间的相邻或回退转换。
 	static const std::map<ControllerState, std::vector<ControllerState>> kAllowedTransitions;
 
-	// 执行单个状态转换步骤（只处理公开状态之间的单步转换）
+	// 执行单个公开状态转换步骤（Init/Scan/Maintenance/Operational/Shutdown）。
 	bool DoStepTo(ControllerState next);
 
-	// Maintenance -> Operational 的复合转换
+	// Maintenance -> Operational 的复合转换。
+	// 内部顺序执行 PDO 配置 -> SafeOp -> DC 配置 -> Op，任一失败进入 kError。
 	bool DoStartOperation();
 
-	// 各状态对应的具体实现
+	// 各公开状态对应的具体实现
 	bool DoInit();
 	bool DoScan();
 	bool DoEnterMaintenance();
 
-	// 以下四个为 StartOperation() 的内部子步骤，不单独更新 ControllerState
+	// 以下四个为 StartOperation() 的内部子步骤，不单独更新 ControllerState。
+	// 只有 DoOperational() 成功时才会把状态置为 kOperational。
 	bool DoPdoConfigure();
 	bool DoSafeOp();
 	bool DoDcConfigure();
 	bool DoOperational();
 
+	// 安全停止：根据当前状态逐级回滚，最终关闭 SOEM 并清理资源。
 	bool DoShutdown();
 
-	// 进入错误状态
+	// 进入 kError 并记录原因。
 	void EnterErrorState(const std::string &reason);
 
+	// 从 EcMaster 刷新所有从站信息。
 	std::vector<SlaveInfo> RefreshSlaveInfos() const;
 
 	ControllerState state_ = ControllerState::kUninitialized;

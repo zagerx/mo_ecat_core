@@ -41,6 +41,9 @@ void EcatApplication::Shutdown()
 	controller_.Stop();
 }
 
+// 单步执行一次状态机迭代。
+// 非阻塞读取命令（timeout=0），根据当前 ControllerState 执行对应逻辑和周期任务。
+// 返回 false 表示收到 exit/quit/EOF，上层应退出循环。
 bool EcatApplication::Run()
 {
 	std::string command;
@@ -81,6 +84,7 @@ bool EcatApplication::Run()
 	return true;
 }
 
+// AdapterReady 状态：允许 scan / stop / help。
 void EcatApplication::HandleAdapterReadyState(const std::string *command)
 {
 	if (command == nullptr) {
@@ -103,6 +107,7 @@ void EcatApplication::HandleAdapterReadyState(const std::string *command)
 	}
 }
 
+// Scanned 状态：允许 config / stop / help。
 void EcatApplication::HandleScannedState(const std::string *command)
 {
 	if (command == nullptr) {
@@ -125,6 +130,7 @@ void EcatApplication::HandleScannedState(const std::string *command)
 	}
 }
 
+// Maintenance 状态：周期性检查从站状态，允许 SDO 维护活动和 start/stop。
 void EcatApplication::HandleMaintenanceState(const std::string *command)
 {
 	// 周期性任务：检查从站状态
@@ -163,6 +169,7 @@ void EcatApplication::HandleMaintenanceState(const std::string *command)
 	}
 }
 
+// Operational 状态：周期性 PDO 收发 + 状态检查，只允许 stop。
 void EcatApplication::HandleOperationalState(const std::string *command)
 {
 	// 周期性 PDO 周期 + 状态检查
@@ -175,6 +182,7 @@ void EcatApplication::HandleOperationalState(const std::string *command)
 	}
 }
 
+// Error 状态：只能 stop，其他命令拒绝。
 void EcatApplication::HandleErrorState(const std::string *command)
 {
 	if (command != nullptr && *command == "stop") {
@@ -185,6 +193,7 @@ void EcatApplication::HandleErrorState(const std::string *command)
 	}
 }
 
+// 对所有从站执行 SDO 诊断 Activity。
 void EcatApplication::OnDiagnose()
 {
 	LOG_INFO << "Running SDO diagnostics...";
@@ -193,6 +202,7 @@ void EcatApplication::OnDiagnose()
 	});
 }
 
+// 对所有从站执行 SDO 参数写入 Activity。
 void EcatApplication::OnParam(const std::vector<std::string> &args)
 {
 	if (args.size() != 4) {
@@ -218,6 +228,7 @@ void EcatApplication::OnParam(const std::vector<std::string> &args)
 	}
 }
 
+// 对所有从站执行状态巡检 Activity。
 void EcatApplication::OnInspect()
 {
 	LOG_INFO << "Running state inspection...";
@@ -239,6 +250,7 @@ void EcatApplication::OnHelp()
 		 << "  [Any]          exit / quit            - Quit program";
 }
 
+// 遍历所有 SlaveNode，为每个节点创建并执行 Activity。
 void EcatApplication::ExecuteActivityForAllNodes(
 	const std::function<std::unique_ptr<EcatActivity>(SlaveNode &)> &factory)
 {

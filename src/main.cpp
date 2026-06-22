@@ -14,6 +14,7 @@
 namespace
 {
 
+// 全局运行标志。SIGINT/SIGTERM 会将其置为 false，通知主循环退出。
 std::atomic<bool> g_running{true};
 
 void OnSignal(int /*signal*/)
@@ -52,6 +53,8 @@ int main(int argc, char *argv[])
 
 	LOG_INFO << "Application running. Type 'help' for commands, 'exit' to quit.";
 
+	// 周期调用 EcatApplication::Run()，默认 1ms 周期。
+	// Run() 返回 false 表示收到 exit/quit/EOF，也应退出循环。
 	while (g_running.load()) {
 		if (!app->Run()) {
 			break;

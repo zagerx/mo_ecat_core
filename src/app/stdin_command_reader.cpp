@@ -12,6 +12,9 @@
 namespace mo_ecat
 {
 
+// 使用 poll() 检查 stdin 是否有数据可读。
+// timeout_ms = 0 时非阻塞；> 0 时阻塞等待至多 timeout_ms 毫秒。
+// 返回 kOk / kTimeout / kEof / kError。
 ReadResult StdinCommandReader::Read(std::string &command, int timeout_ms)
 {
 	struct pollfd pfd {};
