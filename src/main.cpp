@@ -1,3 +1,4 @@
+#include <csignal>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -5,6 +6,27 @@
 #include "app/ecat_application.h"
 #include "ec_master/ec_master.h"
 #include "utils/logger.h"
+
+namespace
+{
+
+// 全局指针用于信号处理函数访问应用实例
+mo_ecat::EcatApplication *g_app = nullptr;
+
+void OnSignal(int /*signal*/)
+{
+	if (g_app != nullptr) {
+		g_app->RequestShutdown();
+	}
+}
+
+void RegisterShutdownSignals()
+{
+	std::signal(SIGINT, OnSignal);
+	std::signal(SIGTERM, OnSignal);
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -24,29 +46,14 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	LOG_INFO << "Ecat application running. Type 'help' for commands, 'exit' to quit.";
+	g_app = app.get();
+	RegisterShutdownSignals();
 
-	// 最简单模式：从 stdin 读取命令
-	std::string command;
-	while (true) {
-		std::cout << "> " << std::flush;
-		if (!std::getline(std::cin, command)) {
-			break;  // Ctrl+D 或 EOF
-		}
-
-		if (command.empty()) {
-			continue;
-		}
-
-		if (command == "exit" || command == "quit") {
-			break;
-		}
-
-		app->HandleCommand(command);
-	}
+	app->Run();
 
 	LOG_INFO << "Shutting down...";
 	app->Shutdown();
 
+	g_app = nullptr;
 	return 0;
 }

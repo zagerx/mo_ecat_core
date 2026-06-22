@@ -1,7 +1,13 @@
 #include "app/ecat_application.h"
 
+#include <poll.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
 #include <functional>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 #include "activity/sdo_diagnostics_activity.h"
@@ -40,97 +46,182 @@ void EcatApplication::Shutdown()
 	controller_.Stop();
 }
 
-void EcatApplication::HandleCommand(const std::string &command)
+void EcatApplication::RequestShutdown()
 {
-	std::istringstream iss(command);
-	std::string token;
-	std::vector<std::string> args;
+	shutdown_requested_.store(true);
+}
 
-	while (iss >> token) {
-		args.push_back(token);
+bool EcatApplication::ReadCommand(std::string &command, int timeout_ms)
+{
+	struct pollfd pfd {};
+	pfd.fd = STDIN_FILENO;
+	pfd.events = POLLIN;
+
+	int ret = poll(&pfd, 1, timeout_ms);
+	if (ret < 0) {
+		if (errno == EINTR) {
+			return false;
+		}
+		LOG_ERROR << "poll stdin failed: " << std::strerror(errno);
+		return false;
 	}
 
-	if (args.empty()) {
+	if (ret == 0) {
+		return false;
+	}
+
+	if (!std::getline(std::cin, command)) {
+		// EOF / Ctrl+D
+		RequestShutdown();
+		return false;
+	}
+
+	return true;
+}
+
+void EcatApplication::Run()
+{
+	LOG_INFO << "Main state machine started. Type 'help' for commands, 'exit' to quit.";
+
+	while (!shutdown_requested_.load()) {
+		std::string command;
+		const bool has_command = ReadCommand(command, 100);
+
+		if (has_command && (command == "exit" || command == "quit")) {
+			RequestShutdown();
+			break;
+		}
+
+		switch (controller_.GetState()) {
+		case ControllerState::kInitDone:
+			HandleInitDoneState(has_command ? &command : nullptr);
+			break;
+		case ControllerState::kScanned:
+			HandleScannedState(has_command ? &command : nullptr);
+			break;
+		case ControllerState::kPreOp:
+			HandlePreOpState(has_command ? &command : nullptr);
+			break;
+		case ControllerState::kOperational:
+			HandleOperationalState(has_command ? &command : nullptr);
+			break;
+		case ControllerState::kError:
+			HandleErrorState(has_command ? &command : nullptr);
+			break;
+		default:
+			break;
+		}
+	}
+
+	LOG_INFO << "Main state machine stopped.";
+}
+
+void EcatApplication::HandleInitDoneState(const std::string *command)
+{
+	if (command == nullptr) {
 		return;
 	}
 
-	const std::string &cmd = args[0];
-	LOG_INFO << "Handling command: " << cmd;
-
-	if (cmd == "scan") {
-		OnScan();
-	} else if (cmd == "config") {
-		OnConfig();
-	} else if (cmd == "stop") {
-		OnStop();
-	} else if (cmd == "diagnose") {
-		OnDiagnose();
-	} else if (cmd == "param") {
-		OnParam(args);
-	} else if (cmd == "inspect") {
-		OnInspect();
-	} else if (cmd == "help") {
+	if (*command == "scan") {
+		LOG_INFO << "Command: scan";
+		if (!controller_.Scan()) {
+			LOG_ERROR << "Scan failed";
+		}
+	} else if (*command == "stop") {
+		LOG_INFO << "Command: stop";
+		controller_.Stop();
+	} else if (*command == "help") {
 		OnHelp();
 	} else {
-		LOG_ERROR << "Unknown command: " << cmd << ", type 'help' for usage";
+		LOG_ERROR << "Command '" << *command
+			  << "' not allowed in InitDone state";
 	}
 }
 
-void EcatApplication::OnScan()
+void EcatApplication::HandleScannedState(const std::string *command)
 {
-	if (controller_.GetState() != ControllerState::kInitDone) {
-		LOG_ERROR << "scan requires InitDone state, current="
-			  << EcatController::StateToString(controller_.GetState());
+	if (command == nullptr) {
 		return;
 	}
 
-	LOG_INFO << "Scanning slaves...";
-	if (!controller_.Scan()) {
-		LOG_ERROR << "Scan failed";
-		return;
+	if (*command == "config") {
+		LOG_INFO << "Command: config";
+		if (!controller_.EnterPreOp()) {
+			LOG_ERROR << "Failed to enter PREOP";
+		}
+	} else if (*command == "stop") {
+		LOG_INFO << "Command: stop";
+		controller_.Stop();
+	} else if (*command == "help") {
+		OnHelp();
+	} else {
+		LOG_ERROR << "Command '" << *command
+			  << "' not allowed in Scanned state";
 	}
-
-	LOG_INFO << "Scan completed, " << controller_.GetSlaveCount()
-		 << " slave(s) found";
 }
 
-void EcatApplication::OnConfig()
+void EcatApplication::HandlePreOpState(const std::string *command)
 {
-	if (controller_.GetState() != ControllerState::kScanned) {
-		LOG_ERROR << "config requires Scanned state, current="
-			  << EcatController::StateToString(controller_.GetState());
+	// 周期性任务：检查从站状态
+	controller_.CheckSlaveStates();
+
+	if (command == nullptr) {
 		return;
 	}
 
-	LOG_INFO << "Configuring slaves into PREOP...";
-	if (!controller_.EnterPreOp()) {
-		LOG_ERROR << "Failed to enter PREOP";
-		return;
+	if (*command == "diagnose") {
+		LOG_INFO << "Command: diagnose";
+		OnDiagnose();
+	} else if (command->rfind("param", 0) == 0) {
+		std::istringstream iss(*command);
+		std::string token;
+		std::vector<std::string> args;
+		while (iss >> token) {
+			args.push_back(token);
+		}
+		OnParam(args);
+	} else if (*command == "inspect") {
+		LOG_INFO << "Command: inspect";
+		OnInspect();
+	} else if (*command == "start") {
+		LOG_INFO << "Command: start";
+		if (!controller_.StartOperation()) {
+			LOG_ERROR << "Failed to start operation";
+		}
+	} else if (*command == "stop") {
+		LOG_INFO << "Command: stop";
+		controller_.Stop();
+	} else if (*command == "help") {
+		OnHelp();
+	} else {
+		LOG_ERROR << "Unknown command: " << *command;
 	}
-
-	LOG_INFO << "Slaves in PREOP, ready for maintenance activities";
 }
 
-void EcatApplication::OnStop()
+void EcatApplication::HandleOperationalState(const std::string *command)
 {
-	if (controller_.GetState() == ControllerState::kUninitialized) {
-		LOG_WARN << "Already stopped";
-		return;
-	}
+	// 周期性 PDO 周期 + 状态检查
+	controller_.RunOneCycle();
+	controller_.CheckSlaveStates();
 
-	LOG_INFO << "Stopping EtherCAT controller...";
-	controller_.Stop();
-	LOG_INFO << "Controller stopped";
+	if (command != nullptr && *command == "stop") {
+		LOG_INFO << "Command: stop";
+		controller_.Stop();
+	}
+}
+
+void EcatApplication::HandleErrorState(const std::string *command)
+{
+	if (command != nullptr && *command == "stop") {
+		LOG_INFO << "Command: stop";
+		controller_.Stop();
+	} else if (command != nullptr) {
+		LOG_ERROR << "In Error state, only 'stop' is allowed";
+	}
 }
 
 void EcatApplication::OnDiagnose()
 {
-	if (controller_.GetState() != ControllerState::kPreOp) {
-		LOG_ERROR << "diagnose requires PreOp state, current="
-			  << EcatController::StateToString(controller_.GetState());
-		return;
-	}
-
 	LOG_INFO << "Running SDO diagnostics...";
 	ExecuteActivityForAllNodes([](SlaveNode &node) {
 		return std::make_unique<SdoDiagnosticsActivity>(node);
@@ -139,12 +230,6 @@ void EcatApplication::OnDiagnose()
 
 void EcatApplication::OnParam(const std::vector<std::string> &args)
 {
-	if (controller_.GetState() != ControllerState::kPreOp) {
-		LOG_ERROR << "param requires PreOp state, current="
-			  << EcatController::StateToString(controller_.GetState());
-		return;
-	}
-
 	if (args.size() != 4) {
 		LOG_ERROR << "Usage: param <index> <subindex> <value>";
 		return;
@@ -170,12 +255,6 @@ void EcatApplication::OnParam(const std::vector<std::string> &args)
 
 void EcatApplication::OnInspect()
 {
-	if (controller_.GetState() != ControllerState::kPreOp) {
-		LOG_ERROR << "inspect requires PreOp state, current="
-			  << EcatController::StateToString(controller_.GetState());
-		return;
-	}
-
 	LOG_INFO << "Running state inspection...";
 	ExecuteActivityForAllNodes([](SlaveNode &node) {
 		return std::make_unique<StateInspectionActivity>(node);
@@ -184,14 +263,15 @@ void EcatApplication::OnInspect()
 
 void EcatApplication::OnHelp()
 {
-	LOG_INFO << "Available commands:\n"
-		 << "  scan                    - Scan slaves on the bus\n"
-		 << "  config                  - Enter PREOP and create slave nodes\n"
-		 << "  diagnose                - Run SDO diagnostics on all slaves\n"
-		 << "  param <idx> <sub> <val> - Write a parameter to all slaves\n"
-		 << "  inspect                 - Inspect slave states\n"
-		 << "  stop                    - Stop the controller\n"
-		 << "  help                    - Show this help";
+	LOG_INFO << "Available commands by state:\n"
+		 << "  [InitDone]   scan                   - Scan slaves on the bus\n"
+		 << "  [Scanned]    config                 - Enter PREOP\n"
+		 << "  [PreOp]      diagnose               - Run SDO diagnostics\n"
+		 << "  [PreOp]      param <idx> <sub> <val> - Write a parameter\n"
+		 << "  [PreOp]      inspect                - Inspect slave states\n"
+		 << "  [PreOp]      start                  - Enter OPERATIONAL\n"
+		 << "  [Any]        stop                   - Stop controller\n"
+		 << "  [Any]        exit / quit            - Quit program";
 }
 
 void EcatApplication::ExecuteActivityForAllNodes(

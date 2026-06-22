@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -10,7 +11,7 @@
 namespace mo_ecat
 {
 
-// 命令到状态迁移 / Activity 的映射器。
+// 应用层命令分发器 + 状态机主循环。
 // 不维护独立应用状态，直接基于 ControllerState 判断命令合法性。
 class EcatApplication
 {
@@ -24,13 +25,22 @@ public:
 	// 安全停止并清理资源
 	void Shutdown();
 
-	// 处理一条命令（由 main 线程调用）
-	void HandleCommand(const std::string &command);
+	// 主循环入口：根据当前 ControllerState 执行对应逻辑
+	void Run();
+
+	// 请求退出主循环
+	void RequestShutdown();
 
 private:
-	void OnScan();
-	void OnConfig();
-	void OnStop();
+	// 从 stdin 读取一条命令，超时返回 false
+	bool ReadCommand(std::string &command, int timeout_ms);
+
+	void HandleInitDoneState(const std::string *command);
+	void HandleScannedState(const std::string *command);
+	void HandlePreOpState(const std::string *command);
+	void HandleOperationalState(const std::string *command);
+	void HandleErrorState(const std::string *command);
+
 	void OnDiagnose();
 	void OnParam(const std::vector<std::string> &args);
 	void OnInspect();
@@ -40,6 +50,7 @@ private:
 		const std::function<std::unique_ptr<EcatActivity>(SlaveNode &)> &factory);
 
 	EcatController controller_;
+	std::atomic<bool> shutdown_requested_{false};
 };
 
 } // namespace mo_ecat
