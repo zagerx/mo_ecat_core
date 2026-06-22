@@ -41,53 +41,44 @@ void EcatApplication::Shutdown()
 	controller_.Stop();
 }
 
-void EcatApplication::RequestShutdown()
+bool EcatApplication::Run()
 {
-	shutdown_requested_.store(true);
-}
+	std::string command;
+	const auto result = command_reader_->Read(command, 0);
 
-void EcatApplication::Run()
-{
-	LOG_INFO << "Main state machine started. Type 'help' for commands, 'exit' to quit.";
-
-	while (!shutdown_requested_.load()) {
-		std::string command;
-		const ReadResult result = command_reader_->Read(command, 100);
-
-		if (result == ReadResult::kEof) {
-			RequestShutdown();
-			break;
-		}
-
-		const bool has_command = (result == ReadResult::kOk);
-
-		if (has_command && (command == "exit" || command == "quit")) {
-			RequestShutdown();
-			break;
-		}
-
-		switch (controller_.GetState()) {
-		case ControllerState::kAdapterReady:
-			HandleAdapterReadyState(has_command ? &command : nullptr);
-			break;
-		case ControllerState::kScanned:
-			HandleScannedState(has_command ? &command : nullptr);
-			break;
-		case ControllerState::kMaintenance:
-			HandleMaintenanceState(has_command ? &command : nullptr);
-			break;
-		case ControllerState::kOperational:
-			HandleOperationalState(has_command ? &command : nullptr);
-			break;
-		case ControllerState::kError:
-			HandleErrorState(has_command ? &command : nullptr);
-			break;
-		default:
-			break;
-		}
+	if (result == ReadResult::kEof) {
+		LOG_INFO << "EOF detected, requesting shutdown";
+		return false;
 	}
 
-	LOG_INFO << "Main state machine stopped.";
+	const bool has_command = (result == ReadResult::kOk);
+
+	if (has_command && (command == "exit" || command == "quit")) {
+		LOG_INFO << "Exit requested";
+		return false;
+	}
+
+	switch (controller_.GetState()) {
+	case ControllerState::kAdapterReady:
+		HandleAdapterReadyState(has_command ? &command : nullptr);
+		break;
+	case ControllerState::kScanned:
+		HandleScannedState(has_command ? &command : nullptr);
+		break;
+	case ControllerState::kMaintenance:
+		HandleMaintenanceState(has_command ? &command : nullptr);
+		break;
+	case ControllerState::kOperational:
+		HandleOperationalState(has_command ? &command : nullptr);
+		break;
+	case ControllerState::kError:
+		HandleErrorState(has_command ? &command : nullptr);
+		break;
+	default:
+		break;
+	}
+
+	return true;
 }
 
 void EcatApplication::HandleAdapterReadyState(const std::string *command)

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -12,8 +11,9 @@
 namespace mo_ecat
 {
 
-// 应用层命令分发器 + 状态机主循环。
+// 应用层状态机单步执行器。
 // 不维护独立应用状态，直接基于 ControllerState 判断命令合法性。
+// 不拥有自己的线程，由上层按周期调用 Run()。
 class EcatApplication
 {
 public:
@@ -26,11 +26,9 @@ public:
 	// 安全停止并清理资源
 	void Shutdown();
 
-	// 主循环入口：根据当前 ControllerState 执行对应逻辑
-	void Run();
-
-	// 请求退出主循环
-	void RequestShutdown();
+	// 单步执行一次状态机迭代。
+	// 返回 true：继续运行；返回 false：收到退出请求（exit/quit/EOF）。
+	bool Run();
 
 private:
 	void HandleAdapterReadyState(const std::string *command);
@@ -49,7 +47,6 @@ private:
 
 	EcatController controller_;
 	std::unique_ptr<CommandReader> command_reader_;
-	std::atomic<bool> shutdown_requested_{false};
 };
 
 } // namespace mo_ecat

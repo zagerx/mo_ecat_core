@@ -1,7 +1,10 @@
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "app/ecat_application.h"
 #include "app/stdin_command_reader.h"
@@ -11,14 +14,11 @@
 namespace
 {
 
-// 全局指针用于信号处理函数访问应用实例
-mo_ecat::EcatApplication *g_app = nullptr;
+std::atomic<bool> g_running{true};
 
 void OnSignal(int /*signal*/)
 {
-	if (g_app != nullptr) {
-		g_app->RequestShutdown();
-	}
+	g_running.store(false);
 }
 
 void RegisterShutdownSignals()
@@ -48,14 +48,19 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	g_app = app.get();
 	RegisterShutdownSignals();
 
-	app->Run();
+	LOG_INFO << "Application running. Type 'help' for commands, 'exit' to quit.";
+
+	while (g_running.load()) {
+		if (!app->Run()) {
+			break;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
 
 	LOG_INFO << "Shutting down...";
 	app->Shutdown();
 
-	g_app = nullptr;
 	return 0;
 }
