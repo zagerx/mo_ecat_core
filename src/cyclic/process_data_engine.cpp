@@ -26,10 +26,15 @@ void ProcessDataEngine::RunOnce()
 }
 
 // 检查从站状态：Maintenance/Operational 阶段检测到掉线则请求 kError。
+// 按 kStateCheckInterval 节流，避免每周期频繁读取总线。
 void ProcessDataEngine::CheckSlaveStates()
 {
-	// 由 CheckAllSlavesInState() 内部统一调用 ecx_readstate() 并判断，
-	// 避免与 master_.CheckSlaveStates() 重复读取。
+	const auto now = std::chrono::steady_clock::now();
+	if (now - last_state_check_time_ < kStateCheckInterval) {
+		return;
+	}
+	last_state_check_time_ = now;
+
 	switch (controller_.GetState()) {
 	case ControllerState::kMaintenance:
 		if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {

@@ -150,9 +150,9 @@ void EcatApplication::HandleScannedState(const std::string *command)
 }
 
 // Maintenance 状态：周期性检查从站状态，允许 SDO 维护活动和 start/stop。
+// 状态检查频率由 ProcessDataEngine 内部控制。
 void EcatApplication::HandleMaintenanceState(const std::string *command)
 {
-	// 周期性任务：检查从站状态
 	engine_.CheckSlaveStates();
 
 	if (command == nullptr) {
@@ -189,9 +189,9 @@ void EcatApplication::HandleMaintenanceState(const std::string *command)
 }
 
 // Operational 状态：周期性 PDO 收发 + 状态检查，只允许 stop。
+// 状态检查频率由 ProcessDataEngine 内部控制。
 void EcatApplication::HandleOperationalState(const std::string *command)
 {
-	// 周期性 PDO 周期 + 状态检查
 	engine_.RunOnce();
 	engine_.CheckSlaveStates();
 

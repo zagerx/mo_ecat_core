@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include "ec_controller/ec_controller.h"
 #include "ec_master/ec_master.h"
 #include "slave_node/slave_node_manager.h"
@@ -26,6 +28,10 @@ private:
 	EcatController &controller_;
 	EcMaster &master_;
 	SlaveNodeManager &node_manager_;
+
+	// 从站状态检查节流间隔。
+	static constexpr std::chrono::milliseconds kStateCheckInterval{500};
+	std::chrono::steady_clock::time_point last_state_check_time_;
 };
 
 } // namespace mo_ecat
