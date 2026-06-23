@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -9,15 +10,33 @@
 namespace mo_ecat
 {
 
+// 从站身份配置，用于扫描后拓扑校验。
+struct SlaveIdentity {
+	uint32_t vendor_id = 0;
+	uint32_t product_id = 0;
+	uint32_t revision_id = 0;
+	std::string name;
+};
+
 struct EcMasterConfig {
 	std::string ifname = "eth0";
 	int cycle_time_us = 1000;
 	bool use_dc = true;
+
+	// 预期从站数量；0 表示不校验数量。
+	int expected_slave_count = 0;
+
+	// 预期从站身份列表（按扫描位置顺序）。为空表示不校验身份。
+	std::vector<SlaveIdentity> expected_identities;
 };
 
 struct CyclicStats {
 	uint32_t cycle_count = 0;
 	uint32_t wkc_mismatch_count = 0;
+	uint32_t consecutive_wkc_mismatch = 0; // 连续 WKC 不匹配次数
+	uint32_t min_cycle_us = 0;             // 最小周期时间（微秒）
+	uint32_t max_cycle_us = 0;             // 最大周期时间（微秒）
+	uint32_t avg_cycle_us = 0;             // 平均周期时间（微秒）
 	int64_t last_dc_time = 0;
 };
 
@@ -85,6 +104,9 @@ class EcMaster
 	bool RequestBootstrapState(int slave);
 	uint16_t GetCurrentState(int slave) const;
 
+	// 实时读取单个从站的 AL status code。
+	uint16_t ReadAlStatusCode(int slave);
+
 	// 单步运行：执行一次 PDO 收发
 	void RunOneCycle();
 
@@ -115,8 +137,11 @@ class EcMaster
 	// 保护 SOEM 上下文，防止多线程同时访问
 	mutable std::mutex soem_mutex_;
 
-	// 防止 Close() 被重复调用导致 double free
+	// true 表示 SOEM 上下文未打开；Initialize() 成功后置为 false，Close() 后恢复为 true。
+	// 用于防止对象构造后、Initialize() 成功前调用 Close() 导致未定义行为。
 	bool closed_ = true;
+
+	std::chrono::steady_clock::time_point last_cycle_time_;
 };
 
 } // namespace mo_ecat

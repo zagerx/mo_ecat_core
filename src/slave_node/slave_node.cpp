@@ -102,7 +102,8 @@ size_t SlaveNode::ComputeInputSize(const PdoMapping &mapping)
 
 bool SlaveNode::RequestState(uint16_t state)
 {
-	if (!master_.RequestState(info_.slave_id, state)) {
+	// 使用带重试的状态切换，提高从站状态转换的可靠性。
+	if (!master_.RequestStateWithRetry(info_.slave_id, state)) {
 		LOG_WARN << "SlaveNode " << info_.name << " failed to request state " << state;
 		return false;
 	}
@@ -119,6 +120,11 @@ uint16_t SlaveNode::RefreshActualState()
 {
 	current_state_ = master_.ReadActualState(info_.slave_id);
 	return current_state_;
+}
+
+uint16_t SlaveNode::ReadAlStatusCode()
+{
+	return master_.ReadAlStatusCode(info_.slave_id);
 }
 
 bool SlaveNode::SdoRead(uint16_t index, uint8_t subindex, void *data, size_t len, int timeout_us)

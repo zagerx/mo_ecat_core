@@ -3,6 +3,7 @@
 #include <functional>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 #include "activity/sdo_diagnostics_activity.h"
 #include "activity/sdo_parameter_activity.h"
@@ -65,6 +66,18 @@ bool EcatApplication::Run()
 	if (has_command && (command == "exit" || command == "quit")) {
 		LOG_INFO << "Exit requested";
 		return false;
+	}
+
+	// loglevel 是全局命令，不依赖于具体 ControllerState。
+	if (has_command && command.rfind("loglevel", 0) == 0) {
+		std::istringstream iss(command);
+		std::string token;
+		std::vector<std::string> args;
+		while (iss >> token) {
+			args.push_back(token);
+		}
+		OnLogLevel(args);
+		return true;
 	}
 
 	switch (controller_.GetState()) {
@@ -216,9 +229,39 @@ void EcatApplication::OnParam(const std::vector<std::string> &args)
 		return;
 	}
 
-	const uint16_t index = static_cast<uint16_t>(std::stoul(args[1], nullptr, 0));
-	const uint8_t subindex = static_cast<uint8_t>(std::stoul(args[2], nullptr, 0));
-	const uint32_t value = static_cast<uint32_t>(std::stoul(args[3], nullptr, 0));
+	uint16_t index = 0;
+	uint8_t subindex = 0;
+	uint32_t value = 0;
+
+	try {
+		const unsigned long raw_index = std::stoul(args[1], nullptr, 0);
+		const unsigned long raw_subindex = std::stoul(args[2], nullptr, 0);
+		const unsigned long raw_value = std::stoul(args[3], nullptr, 0);
+
+		if (raw_index > 0xFFFF) {
+			LOG_ERROR << "Index out of range: " << args[1]
+				  << " (must be <= 0xFFFF)";
+			return;
+		}
+		if (raw_subindex > 0xFF) {
+			LOG_ERROR << "Subindex out of range: " << args[2]
+				  << " (must be <= 0xFF)";
+			return;
+		}
+		if (raw_value > 0xFFFFFFFFULL) {
+			LOG_ERROR << "Value out of range: " << args[3]
+				  << " (must be <= 0xFFFFFFFF)";
+			return;
+		}
+
+		index = static_cast<uint16_t>(raw_index);
+		subindex = static_cast<uint8_t>(raw_subindex);
+		value = static_cast<uint32_t>(raw_value);
+	} catch (const std::exception &e) {
+		LOG_ERROR << "Invalid param argument: " << e.what()
+			  << "\nUsage: param <index> <subindex> <value>";
+		return;
+	}
 
 	LOG_INFO << "Writing parameter 0x" << std::hex << index << ":"
 		 << static_cast<int>(subindex) << " = 0x" << value << std::dec;
@@ -238,6 +281,32 @@ void EcatApplication::OnInspect()
 	});
 }
 
+void EcatApplication::OnLogLevel(const std::vector<std::string> &args)
+{
+	if (args.size() != 2) {
+		LOG_ERROR << "Usage: loglevel debug|info|warn|error";
+		return;
+	}
+
+	LogLevel level;
+	if (args[1] == "debug") {
+		level = LogLevel::Debug;
+	} else if (args[1] == "info") {
+		level = LogLevel::Info;
+	} else if (args[1] == "warn") {
+		level = LogLevel::Warn;
+	} else if (args[1] == "error") {
+		level = LogLevel::Error;
+	} else {
+		LOG_ERROR << "Unknown log level: " << args[1]
+			  << "\nUsage: loglevel debug|info|warn|error";
+		return;
+	}
+
+	Logger::GetInstance().SetLogLevel(level);
+	LOG_INFO << "Log level set to " << args[1];
+}
+
 void EcatApplication::OnHelp()
 {
 	LOG_INFO << "Available commands by state:\n"
@@ -247,6 +316,7 @@ void EcatApplication::OnHelp()
 		 << "  [Maintenance]  param <idx> <sub> <val> - Write a parameter\n"
 		 << "  [Maintenance]  inspect                - Inspect slave states\n"
 		 << "  [Maintenance]  start                  - Enter OPERATIONAL\n"
+		 << "  [Any]          loglevel <level>       - Set log level (debug/info/warn/error)\n"
 		 << "  [Any]          stop                   - Stop controller\n"
 		 << "  [Any]          exit / quit            - Quit program";
 }

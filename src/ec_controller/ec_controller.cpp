@@ -302,6 +302,34 @@ bool EcatController::DoScan()
 		return false;
 	}
 
+	// 扫描后拓扑/身份校验：防止在错误拓扑上继续配置。
+	if (config_.expected_slave_count > 0 &&
+	    slave_infos_.size() != static_cast<size_t>(config_.expected_slave_count)) {
+		LOG_ERROR << "Slave count mismatch: expected " << config_.expected_slave_count
+			  << ", found " << slave_infos_.size();
+		DoShutdown();
+		return false;
+	}
+
+	for (size_t i = 0; i < slave_infos_.size() && i < config_.expected_identities.size(); ++i) {
+		const auto &expected = config_.expected_identities[i];
+		const auto &actual = slave_infos_[i];
+		if (expected.vendor_id != 0 && actual.vendor_id != expected.vendor_id) {
+			LOG_ERROR << "Slave[" << (i + 1) << "] vendor_id mismatch: expected 0x"
+				  << std::hex << expected.vendor_id << ", got 0x" << actual.vendor_id
+				  << std::dec;
+			DoShutdown();
+			return false;
+		}
+		if (expected.product_id != 0 && actual.product_id != expected.product_id) {
+			LOG_ERROR << "Slave[" << (i + 1) << "] product_id mismatch: expected 0x"
+				  << std::hex << expected.product_id << ", got 0x" << actual.product_id
+				  << std::dec;
+			DoShutdown();
+			return false;
+		}
+	}
+
 	for (const auto &info : slave_infos_) {
 		LOG_INFO << FormatSlaveInfo(info);
 	}
@@ -455,10 +483,28 @@ bool EcatController::DoShutdown()
 	return true;
 }
 
+// 进入错误状态时打印所有从站的实时状态和 AL status code，便于现场定位。
+void EcatController::LogSlaveSnapshot()
+{
+	const int slave_count = static_cast<int>(master_.GetSlaveCount());
+	if (slave_count <= 0) {
+		return;
+	}
+
+	LOG_ERROR << "Slave snapshot:";
+	for (int i = 1; i <= slave_count; ++i) {
+		const uint16_t state = master_.ReadActualState(i);
+		const uint16_t al = master_.ReadAlStatusCode(i);
+		LOG_ERROR << "  Slave[" << i << "] state=0x" << std::hex << state
+			  << ", al_status_code=0x" << al << std::dec;
+	}
+}
+
 // 请求进入错误状态，记录原因。供 ActivityScheduler / ProcessDataEngine 调用。
 void EcatController::RequestErrorState(const std::string &reason)
 {
 	LOG_ERROR << "Entering error state: " << reason;
+	LogSlaveSnapshot();
 	state_ = ControllerState::kError;
 }
 

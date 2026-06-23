@@ -52,6 +52,13 @@ void Logger::SetFileLevel(LogLevel level)
     file_level_ = level;
 }
 
+void Logger::SetLogLevel(LogLevel level)
+{
+    std::lock_guard<std::mutex> lock(sink_mutex_);
+    console_level_ = level;
+    file_level_ = level;
+}
+
 void Logger::SetLogFile(const std::string &path)
 {
     if (path.empty()) {

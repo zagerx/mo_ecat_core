@@ -30,6 +30,9 @@ public:
     void SetConsoleLevel(LogLevel level);
     void SetFileLevel(LogLevel level);
 
+    // 同时设置控制台和文件日志级别。
+    void SetLogLevel(LogLevel level);
+
     // 设置日志文件路径，空字符串表示不输出到文件。
     // 会自动创建父目录。
     void SetLogFile(const std::string &path);

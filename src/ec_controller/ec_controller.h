@@ -105,6 +105,9 @@ class EcatController
 	// 安全停止：根据当前状态逐级回滚，最终关闭 SOEM 并清理资源。
 	bool DoShutdown();
 
+	// 进入错误状态时打印所有从站快照，用于现场定位问题。
+	void LogSlaveSnapshot();
+
 	// 从 EcMaster 刷新所有从站信息。
 	std::vector<SlaveInfo> RefreshSlaveInfos() const;
 

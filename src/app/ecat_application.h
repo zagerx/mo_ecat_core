@@ -48,6 +48,7 @@ private:
 	void OnDiagnose();
 	void OnParam(const std::vector<std::string> &args);
 	void OnInspect();
+	void OnLogLevel(const std::vector<std::string> &args);
 	void OnHelp();
 
 	// 为每个 SlaveNode 创建并执行一个 Activity。

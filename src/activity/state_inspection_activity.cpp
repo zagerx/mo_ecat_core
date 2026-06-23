@@ -59,9 +59,9 @@ bool StateInspectionActivity::Execute()
 {
 	const auto &info = node_.GetInfo();
 
-	// 从总线刷新一次真实状态
+	// 从总线刷新一次真实状态和 AL status code（避免使用扫描时的缓存值）
 	const uint16_t actual_state = node_.RefreshActualState();
-	const uint16_t al_status_code = info.al_status_code;
+	const uint16_t al_status_code = node_.ReadAlStatusCode();
 
 	LOG_INFO << "StateInspection for slave " << info.slave_id << " [" << info.name
 		 << "]: state=0x" << std::hex << actual_state << " ("

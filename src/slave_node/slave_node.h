@@ -35,6 +35,9 @@ class SlaveNode
 	// 从主站刷新并返回该从站的真实状态
 	uint16_t RefreshActualState();
 
+	// 实时读取该从站的 AL status code
+	uint16_t ReadAlStatusCode();
+
 	// ---------- SDO 通信 ----------
 	bool SdoRead(uint16_t index, uint8_t subindex, void *data, size_t len,
 		     int timeout_us = 10000);

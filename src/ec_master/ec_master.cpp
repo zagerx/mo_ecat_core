@@ -11,7 +11,8 @@ EcMaster::EcMaster()
 {
 	std::memset(&ctx_, 0, sizeof(ctx_));
 	std::memset(iomap_, 0, sizeof(iomap_));
-	closed_ = false;
+	// 初始状态为“未打开”，防止析构时 Close() 误调用 ecx_close。
+	closed_ = true;
 }
 
 EcMaster::~EcMaster()
@@ -27,6 +28,7 @@ bool EcMaster::Initialize(const EcMasterConfig &config)
 		LOG_ERROR << "ecx_init failed on " << config_.ifname << " (try sudo)";
 		return false;
 	}
+	closed_ = false;
 	LOG_INFO << "SOEM initialized on " << config_.ifname;
 	return true;
 }
@@ -223,6 +225,13 @@ uint16_t EcMaster::GetCurrentState(int slave) const
 	return ctx_.slavelist[slave].state;
 }
 
+uint16_t EcMaster::ReadAlStatusCode(int slave)
+{
+	std::lock_guard<std::mutex> lock(soem_mutex_);
+	ecx_readstate(&ctx_);
+	return ctx_.slavelist[slave].ALstatuscode;
+}
+
 void EcMaster::RunOneCycle()
 {
 	std::lock_guard<std::mutex> lock(soem_mutex_);
@@ -230,9 +239,30 @@ void EcMaster::RunOneCycle()
 	ecx_send_processdata(&ctx_);
 	int wkc = ecx_receive_processdata(&ctx_, EC_TIMEOUTRET);
 
+	// 统计周期时间（微秒）。
+	const auto now = std::chrono::steady_clock::now();
+	if (last_cycle_time_.time_since_epoch().count() != 0) {
+		const auto elapsed_us =
+			static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+					      now - last_cycle_time_)
+					      .count());
+		if (stats_.min_cycle_us == 0 || elapsed_us < stats_.min_cycle_us) {
+			stats_.min_cycle_us = elapsed_us;
+		}
+		if (elapsed_us > stats_.max_cycle_us) {
+			stats_.max_cycle_us = elapsed_us;
+		}
+		stats_.avg_cycle_us = (stats_.avg_cycle_us * stats_.cycle_count + elapsed_us) /
+				      (stats_.cycle_count + 1);
+	}
+	last_cycle_time_ = now;
+
 	stats_.cycle_count++;
 	if (wkc != expected_wkc_) {
 		stats_.wkc_mismatch_count++;
+		stats_.consecutive_wkc_mismatch++;
+	} else {
+		stats_.consecutive_wkc_mismatch = 0;
 	}
 	stats_.last_dc_time = ctx_.DCtime;
 }

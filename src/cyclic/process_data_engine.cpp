@@ -28,8 +28,8 @@ void ProcessDataEngine::RunOnce()
 // 检查从站状态：Maintenance/Operational 阶段检测到掉线则请求 kError。
 void ProcessDataEngine::CheckSlaveStates()
 {
-	master_.CheckSlaveStates();
-
+	// 由 CheckAllSlavesInState() 内部统一调用 ecx_readstate() 并判断，
+	// 避免与 master_.CheckSlaveStates() 重复读取。
 	switch (controller_.GetState()) {
 	case ControllerState::kMaintenance:
 		if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {

@@ -19,7 +19,8 @@ bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity)
 		return false;
 	}
 
-	if (running_.load()) {
+	// 原子地抢占执行权，防止多线程/重入下并发执行 Activity。
+	if (running_.exchange(true)) {
 		LOG_ERROR << "Activity already running";
 		return false;
 	}
@@ -28,10 +29,10 @@ bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity)
 	if (!activity->CanStart(state)) {
 		LOG_ERROR << "Activity " << activity->GetName()
 			  << " cannot start in state " << EcatController::StateToString(state);
+		running_.store(false);
 		return false;
 	}
 
-	running_.store(true);
 	LOG_INFO << "Activity started: " << activity->GetName();
 
 	const bool ok = activity->Execute();
