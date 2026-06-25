@@ -1,6 +1,6 @@
 #pragma once
 
-#include "app/command_reader.h"
+#include "command_reader.h"
 
 namespace mo_ecat
 {

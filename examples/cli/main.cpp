@@ -7,8 +7,8 @@
 #include <thread>
 
 #include "activity/activity_scheduler.h"
-#include "app/ecat_application.h"
-#include "app/stdin_command_reader.h"
+#include "ecat_application.h"
+#include "stdin_command_reader.h"
 #include "cyclic/process_data_engine.h"
 #include "ec_master/ec_master.h"
 #include "utils/logger.h"

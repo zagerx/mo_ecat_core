@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "activity/activity_scheduler.h"
-#include "app/command_reader.h"
+#include "command_reader.h"
 #include "cyclic/process_data_engine.h"
 #include "ec_controller/ec_controller.h"
 

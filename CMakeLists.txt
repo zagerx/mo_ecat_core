@@ -8,19 +8,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(third_party/SOEM)
 
-include_directories(
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/third_party/SOEM/soem
-)
+option(MO_ECAT_BUILD_CLI "Build transitional CLI example" ON)
+option(MO_ECAT_BUILD_TESTS "Build tests" OFF)
 
-set(ECAT_SOURCES
+set(MO_ECAT_CORE_SOURCES
     src/activity/activity_scheduler.cpp
     src/activity/pdo_mapping_activity.cpp
     src/activity/sdo_diagnostics_activity.cpp
     src/activity/sdo_parameter_activity.cpp
     src/activity/state_inspection_activity.cpp
-    src/app/ecat_application.cpp
-    src/app/stdin_command_reader.cpp
     src/ec_master/ec_master.cpp
     src/ec_controller/ec_controller.cpp
     src/cyclic/cyclic_runner.cpp
@@ -34,24 +30,49 @@ set(ECAT_SOURCES
     src/utils/logger.cpp
 )
 
-add_executable(ecat_scan src/main.cpp ${ECAT_SOURCES})
+add_library(mo_ecat_core STATIC ${MO_ECAT_CORE_SOURCES})
 
-target_include_directories(ecat_scan PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
+target_include_directories(mo_ecat_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(ecat_scan
-    soem
-    pthread
+target_link_libraries(mo_ecat_core
+    PUBLIC soem
+    PRIVATE pthread
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(ecat_scan PRIVATE
+    target_compile_options(mo_ecat_core PRIVATE
         -Wall
         -Wextra
     )
 endif()
 
-install(TARGETS ecat_scan
-    RUNTIME DESTINATION bin
-)
+if(MO_ECAT_BUILD_CLI)
+    add_executable(ecat_cli
+        examples/cli/main.cpp
+        examples/cli/ecat_application.cpp
+        examples/cli/stdin_command_reader.cpp
+    )
+
+    target_include_directories(ecat_cli PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+
+    target_link_libraries(ecat_cli PRIVATE mo_ecat_core)
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ecat_cli PRIVATE
+            -Wall
+            -Wextra
+        )
+    endif()
+endif()
+
+if(MO_ECAT_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

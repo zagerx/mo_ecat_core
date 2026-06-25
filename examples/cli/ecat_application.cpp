@@ -1,4 +1,4 @@
-#include "app/ecat_application.h"
+#include "ecat_application.h"
 
 #include <functional>
 #include <iomanip>

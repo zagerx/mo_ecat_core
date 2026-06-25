@@ -1,4 +1,4 @@
-#include "app/stdin_command_reader.h"
+#include "stdin_command_reader.h"
 
 #include <poll.h>
 #include <unistd.h>
