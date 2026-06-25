@@ -129,8 +129,7 @@ const std::map<ControllerState, std::vector<ControllerState>> EcatController::kA
 		{ControllerState::kScanned,
 		 {ControllerState::kMaintenance, ControllerState::kUninitialized}},
 		{ControllerState::kMaintenance,
-		 {ControllerState::kReadyToRun, ControllerState::kOperational,
-		  ControllerState::kUninitialized}},
+		 {ControllerState::kReadyToRun, ControllerState::kUninitialized}},
 		{ControllerState::kReadyToRun,
 		 {ControllerState::kOperational, ControllerState::kMaintenance,
 		  ControllerState::kUninitialized}},
@@ -148,8 +147,7 @@ const std::map<ControllerState, std::vector<MasterAction>> EcatController::kAllo
 		{ControllerState::kScanned,
 		 {MasterAction::kEnterMaintenance, MasterAction::kStop}},
 		{ControllerState::kMaintenance,
-		 {MasterAction::kPrepareRun, MasterAction::kStartOperation,
-		  MasterAction::kStop}},
+		 {MasterAction::kPrepareRun, MasterAction::kStop}},
 		{ControllerState::kReadyToRun,
 		 {MasterAction::kStartOperation, MasterAction::kBackToMaintenance,
 		  MasterAction::kStop}},
@@ -368,12 +366,10 @@ bool EcatController::DoPrepareRun()
 	return true;
 }
 
-// Maintenance/ReadyToRun -> Operational 复合转换。
-// 从 Maintenance 调用时兼容旧行为：先 PrepareRun，再进入 OP。
+// ReadyToRun -> Operational。
 bool EcatController::DoStartOperation()
 {
-	if (state_ != ControllerState::kMaintenance &&
-	    state_ != ControllerState::kReadyToRun) {
+	if (state_ != ControllerState::kReadyToRun) {
 		LOG_ERROR << "DoStartOperation called in invalid state "
 			  << StateToString(state_);
 		return false;
@@ -381,9 +377,6 @@ bool EcatController::DoStartOperation()
 
 	LOG_INFO << "Starting operation from " << StateToString(state_) << "...";
 
-	if (state_ == ControllerState::kMaintenance && !DoPrepareRun()) {
-		return false;
-	}
 	if (!DoOperational()) {
 		return false;
 	}
@@ -703,13 +696,10 @@ bool EcatController::EnterMaintenance()
 	return TransitionTo(ControllerState::kMaintenance);
 }
 
-// 请求进入 OPERATIONAL：
-// - Maintenance -> ReadyToRun -> Operational（兼容旧 start 一键启动）
-// - ReadyToRun -> Operational
+// 请求进入 OPERATIONAL：ReadyToRun -> Operational。
 bool EcatController::StartOperation()
 {
-	if (state_ != ControllerState::kMaintenance &&
-	    state_ != ControllerState::kReadyToRun) {
+	if (state_ != ControllerState::kReadyToRun) {
 		LOG_WARN << "StartOperation called in invalid state " << StateToString(state_);
 		return false;
 	}

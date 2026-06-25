@@ -156,7 +156,7 @@ void EcatApplication::HandleScannedState(const std::string *command)
 	}
 }
 
-// Maintenance 状态：周期性检查从站状态，允许 SDO 维护活动和 start/stop。
+// Maintenance 状态：周期性检查从站状态，允许 SDO 维护活动和 prepare/stop。
 // 状态检查频率由 ProcessDataEngine 内部控制。
 void EcatApplication::HandleMaintenanceState(const std::string *command)
 {
@@ -193,11 +193,6 @@ void EcatApplication::HandleMaintenanceState(const std::string *command)
 		LOG_INFO << "Command: prepare";
 		if (!controller_.PrepareRun()) {
 			LOG_ERROR << "Failed to prepare operation";
-		}
-	} else if (*command == "start") {
-		LOG_INFO << "Command: start";
-		if (!controller_.StartOperation()) {
-			LOG_ERROR << "Failed to start operation";
 		}
 	} else if (*command == "stop") {
 		LOG_INFO << "Command: stop";
@@ -250,14 +245,14 @@ void EcatApplication::HandleOperationalState(const std::string *command)
 	}
 }
 
-// Error 状态：只能 stop，其他命令拒绝。
+// Fault / EmergencyStop 状态：只能 stop，其他命令拒绝。
 void EcatApplication::HandleErrorState(const std::string *command)
 {
 	if (command != nullptr && *command == "stop") {
 		LOG_INFO << "Command: stop";
 		controller_.Stop();
 	} else if (command != nullptr) {
-		LOG_ERROR << "In Error state, only 'stop' is allowed";
+		LOG_ERROR << "In Fault/EmergencyStop state, only 'stop' is allowed";
 	}
 }
 
@@ -404,7 +399,6 @@ void EcatApplication::OnHelp()
 		 << "  [Maintenance]  inspect                - Inspect slave states\n"
 		 << "  [Maintenance]  pdo [slave_id]         - Show PDO mapping (all or single slave)\n"
 		 << "  [Maintenance]  prepare                - Prepare PDO/DC/SafeOp and enter ReadyToRun\n"
-		 << "  [Maintenance]  start                  - Prepare and enter OPERATIONAL\n"
 		 << "  [ReadyToRun]   start                  - Enter OPERATIONAL\n"
 		 << "  [ReadyToRun]   back                   - Return to Maintenance\n"
 		 << "  [Any]          loglevel <level>       - Set log level (debug/info/warn/error)\n"
