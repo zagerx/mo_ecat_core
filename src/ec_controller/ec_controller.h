@@ -15,14 +15,29 @@ namespace mo_ecat
 
 // EtherCAT 主站生命周期状态。
 // 只表示稳定工况；PDO 配置 / SafeOp / DC 同步等过渡步骤作为
-// StartOperation() 的内部子步骤，不暴露为 ControllerState。
+// PrepareRun() 的内部子步骤，不暴露为 ControllerState。
 enum class ControllerState {
 	kUninitialized,   // 初始状态：未绑定网卡、未扫描从站
 	kAdapterReady,    // SOEM 初始化完成，网卡已绑定
 	kScanned,         // 从站扫描完成，已获取 SlaveInfo
 	kMaintenance,     // 所有从站进入 PREOP，可执行 SDO 维护活动
+	kReadyToRun,      // PDO / IOmap / SafeOp / DC 已准备，等待进入 OP
 	kOperational,     // 所有从站进入 OPERATIONAL，PDO 周期可运行
-	kError            // 异常状态：只能 Stop() 回到 Uninitialized
+	kFault,           // 普通故障状态：只能 Stop() 或受控恢复
+	kError = kFault,  // 兼容旧命名
+	kEmergencyStop    // 紧急安全事件：禁止自动恢复
+};
+
+enum class MasterAction {
+	kInitializeAdapter,
+	kScanSlaves,
+	kEnterMaintenance,
+	kPrepareRun,
+	kStartOperation,
+	kBackToMaintenance,
+	kStop,
+	kRequestFault,
+	kRequestEmergencyStop,
 };
 
 class EcatController
@@ -47,11 +62,23 @@ class EcatController
 	// 请求进入 OPERATIONAL 状态（PDO 阶段使用；当前 main 不调用）
 	bool StartOperation();
 
+	// 请求完成 PDO / IOmap / SafeOp / DC 等运行前准备，到达 ReadyToRun。
+	bool PrepareRun();
+
+	// 从 ReadyToRun / Operational 受控回到 Maintenance。
+	bool BackToMaintenance();
+
 	// 安全停止：根据当前状态回滚，最终回到 INIT 并清理资源
 	void Stop();
 
-	// 请求进入错误状态。供 ActivityScheduler / ProcessDataEngine 等调度/监控类调用。
+	// 请求进入普通故障状态。供 ActivityScheduler / ProcessDataEngine 等调度/监控类调用。
+	void RequestFault(const std::string &reason);
+
+	// 兼容旧接口：内部转为 RequestFault()。
 	void RequestErrorState(const std::string &reason);
+
+	// 请求进入紧急停止状态。供安全 IO / 外部急停 / 严重故障调用。
+	void RequestEmergencyStop(const std::string &reason);
 
 	// 安全遍历所有 SlaveNode，不暴露 SlaveNodeManager 本身。
 	// EcatApplication 应使用此接口，而不是 GetSlaveNodeManager()。
@@ -76,18 +103,29 @@ class EcatController
 	static const char *StateToString(ControllerState state);
 
       private:
-	// 统一状态转换入口。负责查表校验、执行单步或复合转换、失败处理。
+	// 兼容旧目标状态入口。内部转换为 Dispatch(MasterAction)。
 	bool TransitionTo(ControllerState target);
+
+	// 统一状态机入口。负责查表校验、执行动作、失败处理。
+	bool Dispatch(MasterAction action, const std::string &reason = {});
 
 	// 状态转换表：当前状态 -> 允许的目标状态集合。
 	// 只记录公开状态之间的相邻或回退转换。
 	static const std::map<ControllerState, std::vector<ControllerState>> kAllowedTransitions;
 
+	static const std::map<ControllerState, std::vector<MasterAction>> kAllowedActions;
+
 	// 执行单个公开状态转换步骤（Init/Scan/Maintenance/Operational/Shutdown）。
 	bool DoStepTo(ControllerState next);
 
-	// Maintenance -> Operational 的复合转换。
-	// 内部顺序执行 PDO 配置 -> SafeOp -> DC 配置 -> Op，任一失败进入 kError。
+	bool DoAction(MasterAction action);
+
+	// Maintenance -> ReadyToRun 的复合转换。
+	// 内部顺序执行 PDO 配置 -> SafeOp -> DC 配置，任一失败进入 kFault。
+	bool DoPrepareRun();
+
+	// Maintenance/ReadyToRun -> Operational 的兼容复合转换。
+	// 从 Maintenance 调用时会先 PrepareRun，再进入 Op。
 	bool DoStartOperation();
 
 	// 各公开状态对应的具体实现
@@ -107,6 +145,9 @@ class EcatController
 
 	// 进入错误状态时打印所有从站快照，用于现场定位问题。
 	void LogSlaveSnapshot();
+
+	void EnterFault(const std::string &reason);
+	void EnterEmergencyStop(const std::string &reason);
 
 	// 从 EcMaster 刷新所有从站信息。
 	std::vector<SlaveInfo> RefreshSlaveInfos() const;

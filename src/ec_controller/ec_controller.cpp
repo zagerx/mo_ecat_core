@@ -129,9 +129,34 @@ const std::map<ControllerState, std::vector<ControllerState>> EcatController::kA
 		{ControllerState::kScanned,
 		 {ControllerState::kMaintenance, ControllerState::kUninitialized}},
 		{ControllerState::kMaintenance,
-		 {ControllerState::kOperational, ControllerState::kUninitialized}},
-		{ControllerState::kOperational, {ControllerState::kUninitialized}},
-		{ControllerState::kError, {ControllerState::kUninitialized}},
+		 {ControllerState::kReadyToRun, ControllerState::kOperational,
+		  ControllerState::kUninitialized}},
+		{ControllerState::kReadyToRun,
+		 {ControllerState::kOperational, ControllerState::kMaintenance,
+		  ControllerState::kUninitialized}},
+		{ControllerState::kOperational,
+		 {ControllerState::kMaintenance, ControllerState::kUninitialized}},
+		{ControllerState::kFault, {ControllerState::kUninitialized}},
+		{ControllerState::kEmergencyStop, {ControllerState::kUninitialized}},
+};
+
+const std::map<ControllerState, std::vector<MasterAction>> EcatController::kAllowedActions =
+	{
+		{ControllerState::kUninitialized, {MasterAction::kInitializeAdapter}},
+		{ControllerState::kAdapterReady,
+		 {MasterAction::kScanSlaves, MasterAction::kStop}},
+		{ControllerState::kScanned,
+		 {MasterAction::kEnterMaintenance, MasterAction::kStop}},
+		{ControllerState::kMaintenance,
+		 {MasterAction::kPrepareRun, MasterAction::kStartOperation,
+		  MasterAction::kStop}},
+		{ControllerState::kReadyToRun,
+		 {MasterAction::kStartOperation, MasterAction::kBackToMaintenance,
+		  MasterAction::kStop}},
+		{ControllerState::kOperational,
+		 {MasterAction::kBackToMaintenance, MasterAction::kStop}},
+		{ControllerState::kFault, {MasterAction::kStop}},
+		{ControllerState::kEmergencyStop, {MasterAction::kStop}},
 };
 
 EcatController::EcatController()
@@ -155,10 +180,14 @@ const char *EcatController::StateToString(ControllerState state)
 		return "Scanned";
 	case ControllerState::kMaintenance:
 		return "Maintenance";
+	case ControllerState::kReadyToRun:
+		return "ReadyToRun";
 	case ControllerState::kOperational:
 		return "Operational";
-	case ControllerState::kError:
-		return "Error";
+	case ControllerState::kFault:
+		return "Fault";
+	case ControllerState::kEmergencyStop:
+		return "EmergencyStop";
 	}
 	return "Unknown";
 }
@@ -175,51 +204,80 @@ std::vector<SlaveInfo> EcatController::RefreshSlaveInfos() const
 	return slave_infos;
 }
 
-// 统一状态转换入口。
+// 兼容旧目标状态入口。
 // 1. 相同状态直接返回 true
-// 2. kError 状态只允许回到 kUninitialized
-// 3. 目标状态必须被 kAllowedTransitions 允许
-// 4. Maintenance -> Operational 使用复合转换 DoStartOperation()
+// 2. 目标状态映射为 MasterAction
+// 3. 由 Dispatch() 统一校验和执行
 bool EcatController::TransitionTo(ControllerState target)
 {
 	if (state_ == target) {
 		return true;
 	}
 
-	// 错误状态只能 Stop（回到 Uninitialized）
-	if (state_ == ControllerState::kError) {
-		if (target != ControllerState::kUninitialized) {
-			LOG_ERROR << "In error state, only Stop() is allowed (target="
-				  << StateToString(target) << ")";
-			return false;
+	MasterAction action;
+	switch (target) {
+	case ControllerState::kAdapterReady:
+		action = MasterAction::kInitializeAdapter;
+		break;
+	case ControllerState::kScanned:
+		action = MasterAction::kScanSlaves;
+		break;
+	case ControllerState::kMaintenance:
+		action = MasterAction::kBackToMaintenance;
+		if (state_ == ControllerState::kScanned) {
+			action = MasterAction::kEnterMaintenance;
 		}
-		return DoStepTo(target);
-	}
-
-	// 辅助函数：查转换表
-	auto is_allowed = [this](ControllerState from, ControllerState to) -> bool {
-		auto it = kAllowedTransitions.find(from);
-		if (it == kAllowedTransitions.end()) {
-			return false;
-		}
-		const auto &allowed = it->second;
-		return std::find(allowed.begin(), allowed.end(), to) != allowed.end();
-	};
-
-	// 目标状态必须被允许
-	if (!is_allowed(state_, target)) {
-		LOG_ERROR << "Invalid transition: " << StateToString(state_) << " -> "
-			  << StateToString(target);
+		break;
+	case ControllerState::kReadyToRun:
+		action = MasterAction::kPrepareRun;
+		break;
+	case ControllerState::kOperational:
+		action = MasterAction::kStartOperation;
+		break;
+	case ControllerState::kUninitialized:
+		action = MasterAction::kStop;
+		break;
+	case ControllerState::kFault:
+		action = MasterAction::kRequestFault;
+		break;
+	case ControllerState::kEmergencyStop:
+		action = MasterAction::kRequestEmergencyStop;
+		break;
+	default:
+		LOG_ERROR << "Unknown target state " << StateToString(target);
 		return false;
 	}
 
-	// Maintenance -> Operational 是复合转换，不经过公开中间状态。
-	if (state_ == ControllerState::kMaintenance &&
-	    target == ControllerState::kOperational) {
-		return DoStartOperation();
+	return Dispatch(action);
+}
+
+bool EcatController::Dispatch(MasterAction action, const std::string &reason)
+{
+	if (action == MasterAction::kRequestEmergencyStop) {
+		EnterEmergencyStop(reason.empty() ? "Emergency stop requested" : reason);
+		return true;
 	}
 
-	return DoStepTo(target);
+	if (action == MasterAction::kRequestFault) {
+		EnterFault(reason.empty() ? "Fault requested" : reason);
+		return true;
+	}
+
+	auto is_allowed = [this](ControllerState state, MasterAction candidate) -> bool {
+		auto it = kAllowedActions.find(state);
+		if (it == kAllowedActions.end()) {
+			return false;
+		}
+		const auto &allowed = it->second;
+		return std::find(allowed.begin(), allowed.end(), candidate) != allowed.end();
+	};
+
+	if (!is_allowed(state_, action)) {
+		LOG_ERROR << "Action is not allowed in state " << StateToString(state_);
+		return false;
+	}
+
+	return DoAction(action);
 }
 
 // 执行单个公开状态转换步骤。
@@ -232,6 +290,8 @@ bool EcatController::DoStepTo(ControllerState next)
 		return DoScan();
 	case ControllerState::kMaintenance:
 		return DoEnterMaintenance();
+	case ControllerState::kReadyToRun:
+		return DoPrepareRun();
 	case ControllerState::kOperational:
 		return DoStartOperation();
 	case ControllerState::kUninitialized:
@@ -242,18 +302,56 @@ bool EcatController::DoStepTo(ControllerState next)
 	}
 }
 
-// Maintenance -> Operational 复合转换。
-// 依次执行 PDO 配置、SafeOp、DC 配置、Operational。
-// 任一失败调用 RequestErrorState()，state_ 变为 kError。
-bool EcatController::DoStartOperation()
+bool EcatController::DoAction(MasterAction action)
+{
+	switch (action) {
+	case MasterAction::kInitializeAdapter:
+		return DoStepTo(ControllerState::kAdapterReady);
+	case MasterAction::kScanSlaves:
+		return DoStepTo(ControllerState::kScanned);
+	case MasterAction::kEnterMaintenance:
+		return DoStepTo(ControllerState::kMaintenance);
+	case MasterAction::kPrepareRun:
+		return DoStepTo(ControllerState::kReadyToRun);
+	case MasterAction::kStartOperation:
+		return DoStepTo(ControllerState::kOperational);
+	case MasterAction::kBackToMaintenance:
+		if (state_ == ControllerState::kReadyToRun) {
+			state_ = ControllerState::kMaintenance;
+			LOG_INFO << "EcatController -> Maintenance";
+			return true;
+		}
+		if (state_ == ControllerState::kOperational) {
+			if (!master_.RequestSafeOpState()) {
+				LOG_WARN << "Failed to request SAFE_OP before Maintenance";
+			}
+			if (!master_.RequestPreOpState()) {
+				return false;
+			}
+			state_ = ControllerState::kMaintenance;
+			LOG_INFO << "EcatController -> Maintenance";
+			return true;
+		}
+		return false;
+	case MasterAction::kStop:
+		return DoStepTo(ControllerState::kUninitialized);
+	default:
+		LOG_ERROR << "Unsupported action";
+		return false;
+	}
+}
+
+// Maintenance -> ReadyToRun 复合转换。
+// 依次执行 PDO 配置、SafeOp、DC 配置。
+// 任一失败调用 RequestFault()，state_ 变为 kFault。
+bool EcatController::DoPrepareRun()
 {
 	if (state_ != ControllerState::kMaintenance) {
-		LOG_ERROR << "DoStartOperation called in invalid state "
-			  << StateToString(state_);
+		LOG_ERROR << "DoPrepareRun called in invalid state " << StateToString(state_);
 		return false;
 	}
 
-	LOG_INFO << "Starting operation from Maintenance...";
+	LOG_INFO << "Preparing operation from Maintenance...";
 
 	if (!DoPdoConfigure()) {
 		return false;
@@ -262,6 +360,28 @@ bool EcatController::DoStartOperation()
 		return false;
 	}
 	if (!DoDcConfigure()) {
+		return false;
+	}
+
+	state_ = ControllerState::kReadyToRun;
+	LOG_INFO << "EcatController -> ReadyToRun";
+	return true;
+}
+
+// Maintenance/ReadyToRun -> Operational 复合转换。
+// 从 Maintenance 调用时兼容旧行为：先 PrepareRun，再进入 OP。
+bool EcatController::DoStartOperation()
+{
+	if (state_ != ControllerState::kMaintenance &&
+	    state_ != ControllerState::kReadyToRun) {
+		LOG_ERROR << "DoStartOperation called in invalid state "
+			  << StateToString(state_);
+		return false;
+	}
+
+	LOG_INFO << "Starting operation from " << StateToString(state_) << "...";
+
+	if (state_ == ControllerState::kMaintenance && !DoPrepareRun()) {
 		return false;
 	}
 	if (!DoOperational()) {
@@ -384,7 +504,7 @@ bool EcatController::DoPdoConfigure()
 	}
 
 	if (!node_manager_.ConfigureAll()) {
-		RequestErrorState("Failed to configure slave nodes");
+		RequestFault("Failed to configure slave nodes");
 		return false;
 	}
 
@@ -401,12 +521,12 @@ bool EcatController::DoSafeOp()
 	}
 
 	if (!master_.ConfigureProcessData()) {
-		RequestErrorState("Failed to configure process data");
+		RequestFault("Failed to configure process data");
 		return false;
 	}
 
 	if (!master_.RequestSafeOpState() || !master_.CheckAllSlavesInState(EC_STATE_SAFE_OP)) {
-		RequestErrorState("Failed to enter SAFEOP");
+		RequestFault("Failed to enter SAFEOP");
 		return false;
 	}
 
@@ -423,7 +543,7 @@ bool EcatController::DoDcConfigure()
 	}
 
 	if (!master_.ConfigureDc()) {
-		RequestErrorState("Failed to configure DC");
+		RequestFault("Failed to configure DC");
 		return false;
 	}
 
@@ -434,14 +554,14 @@ bool EcatController::DoDcConfigure()
 // 请求所有从站进入 OPERATIONAL 并更新状态（StartOperation 最后子步骤）。
 bool EcatController::DoOperational()
 {
-	if (state_ != ControllerState::kMaintenance) {
+	if (state_ != ControllerState::kReadyToRun) {
 		LOG_ERROR << "DoOperational called in invalid state " << StateToString(state_);
 		return false;
 	}
 
 	if (!master_.RequestOperationalState() ||
 	    !master_.CheckAllSlavesInState(EC_STATE_OPERATIONAL)) {
-		RequestErrorState("Failed to enter OPERATIONAL");
+		RequestFault("Failed to enter OPERATIONAL");
 		return false;
 	}
 
@@ -464,6 +584,7 @@ bool EcatController::DoShutdown()
 	}
 
 	if (state_ == ControllerState::kOperational ||
+	    state_ == ControllerState::kReadyToRun ||
 	    state_ == ControllerState::kMaintenance) {
 		if (!master_.RequestPreOpState()) {
 			LOG_WARN << "Failed to request PRE_OP during shutdown";
@@ -500,12 +621,35 @@ void EcatController::LogSlaveSnapshot()
 	}
 }
 
-// 请求进入错误状态，记录原因。供 ActivityScheduler / ProcessDataEngine 调用。
-void EcatController::RequestErrorState(const std::string &reason)
+void EcatController::EnterFault(const std::string &reason)
 {
 	LOG_ERROR << "Entering error state: " << reason;
 	LogSlaveSnapshot();
-	state_ = ControllerState::kError;
+	state_ = ControllerState::kFault;
+}
+
+void EcatController::EnterEmergencyStop(const std::string &reason)
+{
+	LOG_ERROR << "Entering emergency stop state: " << reason;
+	LogSlaveSnapshot();
+	state_ = ControllerState::kEmergencyStop;
+}
+
+// 请求进入普通故障状态，记录原因。供 ActivityScheduler / ProcessDataEngine 调用。
+void EcatController::RequestFault(const std::string &reason)
+{
+	Dispatch(MasterAction::kRequestFault, reason);
+}
+
+// 兼容旧接口。
+void EcatController::RequestErrorState(const std::string &reason)
+{
+	RequestFault(reason);
+}
+
+void EcatController::RequestEmergencyStop(const std::string &reason)
+{
+	Dispatch(MasterAction::kRequestEmergencyStop, reason);
 }
 
 // 便捷接口：Uninitialized -> AdapterReady -> Scanned -> Maintenance。
@@ -559,15 +703,40 @@ bool EcatController::EnterMaintenance()
 	return TransitionTo(ControllerState::kMaintenance);
 }
 
-// 请求进入 OPERATIONAL：Maintenance -> Operational（复合转换）。
+// 请求进入 OPERATIONAL：
+// - Maintenance -> ReadyToRun -> Operational（兼容旧 start 一键启动）
+// - ReadyToRun -> Operational
 bool EcatController::StartOperation()
 {
-	if (state_ != ControllerState::kMaintenance) {
+	if (state_ != ControllerState::kMaintenance &&
+	    state_ != ControllerState::kReadyToRun) {
 		LOG_WARN << "StartOperation called in invalid state " << StateToString(state_);
 		return false;
 	}
 
-	return TransitionTo(ControllerState::kOperational);
+	return Dispatch(MasterAction::kStartOperation);
+}
+
+bool EcatController::PrepareRun()
+{
+	if (state_ != ControllerState::kMaintenance) {
+		LOG_WARN << "PrepareRun called in invalid state " << StateToString(state_);
+		return false;
+	}
+
+	return Dispatch(MasterAction::kPrepareRun);
+}
+
+bool EcatController::BackToMaintenance()
+{
+	if (state_ != ControllerState::kReadyToRun &&
+	    state_ != ControllerState::kOperational) {
+		LOG_WARN << "BackToMaintenance called in invalid state "
+			 << StateToString(state_);
+		return false;
+	}
+
+	return Dispatch(MasterAction::kBackToMaintenance);
 }
 
 // 安全停止：根据当前状态回滚，最终回到 kUninitialized。
@@ -577,7 +746,7 @@ void EcatController::Stop()
 		return;
 	}
 
-	TransitionTo(ControllerState::kUninitialized);
+	Dispatch(MasterAction::kStop);
 }
 
 // 安全遍历所有 SlaveNode，不对外暴露 SlaveNodeManager。

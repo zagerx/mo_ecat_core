@@ -44,8 +44,8 @@ bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity)
 	if (!ok) {
 		switch (activity->GetFailurePolicy()) {
 		case ActivityFailurePolicy::kEnterError:
-			controller_.RequestErrorState(std::string("Activity failed: ") +
-						      activity->GetName());
+			controller_.RequestFault(std::string("Activity failed: ") +
+						 activity->GetName());
 			break;
 		case ActivityFailurePolicy::kShutdown:
 			controller_.Stop();

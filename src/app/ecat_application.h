@@ -41,6 +41,7 @@ private:
 	void HandleAdapterReadyState(const std::string *command);
 	void HandleScannedState(const std::string *command);
 	void HandleMaintenanceState(const std::string *command);
+	void HandleReadyToRunState(const std::string *command);
 	void HandleOperationalState(const std::string *command);
 	void HandleErrorState(const std::string *command);
 

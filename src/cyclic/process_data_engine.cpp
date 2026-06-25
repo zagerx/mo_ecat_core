@@ -25,7 +25,7 @@ void ProcessDataEngine::RunOnce()
 	node_manager_.UpdateAllInputs();
 }
 
-// 检查从站状态：Maintenance/Operational 阶段检测到掉线则请求 kError。
+// 检查从站状态：Maintenance/Operational 阶段检测到掉线则请求 Fault。
 // 按 kStateCheckInterval 节流，避免每周期频繁读取总线。
 void ProcessDataEngine::CheckSlaveStates()
 {
@@ -38,12 +38,12 @@ void ProcessDataEngine::CheckSlaveStates()
 	switch (controller_.GetState()) {
 	case ControllerState::kMaintenance:
 		if (!master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
-			controller_.RequestErrorState("Slave dropped out of PREOP");
+			controller_.RequestFault("Slave dropped out of PREOP");
 		}
 		break;
 	case ControllerState::kOperational:
 		if (!master_.CheckAllSlavesInState(EC_STATE_OPERATIONAL)) {
-			controller_.RequestErrorState("Slave dropped out of OPERATIONAL");
+			controller_.RequestFault("Slave dropped out of OPERATIONAL");
 		}
 		break;
 	default:

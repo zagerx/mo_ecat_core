@@ -11,7 +11,7 @@ namespace mo_ecat
 
 // 周期数据处理引擎。
 // 职责：根据当前 ControllerState 执行 PDO 周期收发和从站状态监控。
-// 不发起状态迁移，发现异常时通过 RequestErrorState() 通知 EcatController。
+// 不发起状态迁移，发现异常时通过 RequestFault() 通知 EcatController。
 class ProcessDataEngine
 {
 public:

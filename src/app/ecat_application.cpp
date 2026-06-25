@@ -91,10 +91,16 @@ bool EcatApplication::Run()
 	case ControllerState::kMaintenance:
 		HandleMaintenanceState(has_command ? &command : nullptr);
 		break;
+	case ControllerState::kReadyToRun:
+		HandleReadyToRunState(has_command ? &command : nullptr);
+		break;
 	case ControllerState::kOperational:
 		HandleOperationalState(has_command ? &command : nullptr);
 		break;
 	case ControllerState::kError:
+		HandleErrorState(has_command ? &command : nullptr);
+		break;
+	case ControllerState::kEmergencyStop:
 		HandleErrorState(has_command ? &command : nullptr);
 		break;
 	default:
@@ -183,6 +189,11 @@ void EcatApplication::HandleMaintenanceState(const std::string *command)
 			args.push_back(token);
 		}
 		OnPdo(args);
+	} else if (*command == "prepare") {
+		LOG_INFO << "Command: prepare";
+		if (!controller_.PrepareRun()) {
+			LOG_ERROR << "Failed to prepare operation";
+		}
 	} else if (*command == "start") {
 		LOG_INFO << "Command: start";
 		if (!controller_.StartOperation()) {
@@ -195,6 +206,34 @@ void EcatApplication::HandleMaintenanceState(const std::string *command)
 		OnHelp();
 	} else {
 		LOG_ERROR << "Unknown command: " << *command;
+	}
+}
+
+// ReadyToRun 状态：PDO/DC/SafeOp 已准备，只允许 start / back / stop / help。
+void EcatApplication::HandleReadyToRunState(const std::string *command)
+{
+	if (command == nullptr) {
+		return;
+	}
+
+	if (*command == "start") {
+		LOG_INFO << "Command: start";
+		if (!controller_.StartOperation()) {
+			LOG_ERROR << "Failed to start operation";
+		}
+	} else if (*command == "back") {
+		LOG_INFO << "Command: back";
+		if (!controller_.BackToMaintenance()) {
+			LOG_ERROR << "Failed to back to Maintenance";
+		}
+	} else if (*command == "stop") {
+		LOG_INFO << "Command: stop";
+		controller_.Stop();
+	} else if (*command == "help") {
+		OnHelp();
+	} else {
+		LOG_ERROR << "Command '" << *command
+			  << "' not allowed in ReadyToRun state";
 	}
 }
 
@@ -364,7 +403,10 @@ void EcatApplication::OnHelp()
 		 << "  [Maintenance]  param <idx> <sub> <val> - Write a parameter\n"
 		 << "  [Maintenance]  inspect                - Inspect slave states\n"
 		 << "  [Maintenance]  pdo [slave_id]         - Show PDO mapping (all or single slave)\n"
-		 << "  [Maintenance]  start                  - Enter OPERATIONAL\n"
+		 << "  [Maintenance]  prepare                - Prepare PDO/DC/SafeOp and enter ReadyToRun\n"
+		 << "  [Maintenance]  start                  - Prepare and enter OPERATIONAL\n"
+		 << "  [ReadyToRun]   start                  - Enter OPERATIONAL\n"
+		 << "  [ReadyToRun]   back                   - Return to Maintenance\n"
 		 << "  [Any]          loglevel <level>       - Set log level (debug/info/warn/error)\n"
 		 << "  [Any]          stop                   - Stop controller\n"
 		 << "  [Any]          exit / quit            - Quit program";
