@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 
-CORE_BUILD_DIR="${PROJECT_ROOT}/build"
+CORE_BUILD_DIR="${SCRIPT_DIR}/build"
 CLI_BUILD_DIR="${SCRIPT_DIR}/cli/build"
 
 echo "Building mo_ecat_core..."
