@@ -5,7 +5,7 @@
 #include <sstream>
 #include <vector>
 
-#include "utils/logger.h"
+#include "cli_logger.h"
 
 namespace mo_ecat
 {
@@ -398,22 +398,22 @@ void EcatApplication::OnLogLevel(const std::vector<std::string> &args)
 		return;
 	}
 
-	LogLevel level;
+	CliLogLevel level;
 	if (args[1] == "debug") {
-		level = LogLevel::Debug;
+		level = CliLogLevel::kDebug;
 	} else if (args[1] == "info") {
-		level = LogLevel::Info;
+		level = CliLogLevel::kInfo;
 	} else if (args[1] == "warn") {
-		level = LogLevel::Warn;
+		level = CliLogLevel::kWarn;
 	} else if (args[1] == "error") {
-		level = LogLevel::Error;
+		level = CliLogLevel::kError;
 	} else {
 		LOG_ERROR << "Unknown log level: " << args[1]
 			  << "\nUsage: loglevel debug|info|warn|error";
 		return;
 	}
 
-	Logger::GetInstance().SetLogLevel(level);
+	SetCliLogLevel(level);
 	LOG_INFO << "Log level set to " << args[1];
 }
 

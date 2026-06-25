@@ -60,10 +60,6 @@ if(MO_ECAT_BUILD_CLI)
         examples/cli/stdin_command_reader.cpp
     )
 
-    target_include_directories(ecat_cli PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-
     target_link_libraries(ecat_cli PRIVATE mo_ecat_core)
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

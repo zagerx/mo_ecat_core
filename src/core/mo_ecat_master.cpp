@@ -120,16 +120,19 @@ void MoEcatMaster::Impl::ConfigureLogSink(const EcMasterConfig &config)
 
 	switch (config.log_sink) {
 	case LogSinkMode::kNone:
+		logger.SetConsoleEnabled(false);
 		logger.SetLogFile("");
 		DisableLogCallback();
 		break;
 
 	case LogSinkMode::kFile:
+		logger.SetConsoleEnabled(false);
 		logger.SetLogFile(config.log_path);
 		DisableLogCallback();
 		break;
 
 	case LogSinkMode::kCallback:
+		logger.SetConsoleEnabled(false);
 		logger.SetLogFile("");
 		logger.SetCallbackSink(
 			LogLevel::Debug,
@@ -143,6 +146,7 @@ void MoEcatMaster::Impl::ConfigureLogSink(const EcMasterConfig &config)
 		break;
 
 	case LogSinkMode::kFileAndCallback:
+		logger.SetConsoleEnabled(false);
 		logger.SetLogFile(config.log_path);
 		logger.SetCallbackSink(
 			LogLevel::Debug,

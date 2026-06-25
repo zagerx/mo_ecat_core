@@ -51,6 +51,12 @@ void Logger::SetFileLevel(LogLevel level)
     file_level_ = level;
 }
 
+void Logger::SetConsoleEnabled(bool enabled)
+{
+    std::lock_guard<std::mutex> lock(sink_mutex_);
+    has_console_ = enabled;
+}
+
 void Logger::SetLogLevel(LogLevel level)
 {
     std::lock_guard<std::mutex> lock(sink_mutex_);
@@ -153,7 +159,7 @@ void Logger::WriteToSinks(const LogRecord &record)
     std::string formatted = FormatRecord(record);
 
     std::lock_guard<std::mutex> lock(sink_mutex_);
-    if (static_cast<int>(record.level) >= static_cast<int>(console_level_)) {
+    if (has_console_ && static_cast<int>(record.level) >= static_cast<int>(console_level_)) {
         if (record.level >= LogLevel::Warn) {
             std::cerr << formatted;
         } else {
@@ -175,7 +181,8 @@ void Logger::Log(LogLevel level, const char *file, int line, std::string message
     bool log_callback = false;
     {
         std::lock_guard<std::mutex> lock(sink_mutex_);
-        log_console = static_cast<int>(level) >= static_cast<int>(console_level_);
+        log_console = has_console_ &&
+                      static_cast<int>(level) >= static_cast<int>(console_level_);
         log_file = has_file_ && static_cast<int>(level) >= static_cast<int>(file_level_);
         log_callback = has_callback_ && static_cast<int>(level) >= static_cast<int>(callback_level_);
     }

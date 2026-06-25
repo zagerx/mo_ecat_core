@@ -8,8 +8,8 @@
 
 #include "ecat_application.h"
 #include "stdin_command_reader.h"
+#include "cli_logger.h"
 #include "mo_ecat/master.h"
-#include "utils/logger.h"
 
 namespace
 {
@@ -39,6 +39,19 @@ int main(int argc, char *argv[])
 	config.use_dc = true;
 
 	mo_ecat::MoEcatMaster master;
+	master.on_log_message = [](const std::string &level, const std::string &source,
+				   const std::string &message) {
+		if (level == "error" || level == "fatal") {
+			LOG_ERROR << "[" << source << "] " << message;
+		} else if (level == "warn") {
+			LOG_WARN << "[" << source << "] " << message;
+		} else if (level == "debug") {
+			LOG_DEBUG << "[" << source << "] " << message;
+		} else {
+			LOG_INFO << "[" << source << "] " << message;
+		}
+	};
+
 	auto app = std::make_unique<mo_ecat::EcatApplication>(
 		std::make_unique<mo_ecat::StdinCommandReader>(), master);
 

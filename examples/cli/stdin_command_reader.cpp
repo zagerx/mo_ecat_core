@@ -7,7 +7,7 @@
 #include <cstring>
 #include <iostream>
 
-#include "utils/logger.h"
+#include "cli_logger.h"
 
 namespace mo_ecat
 {

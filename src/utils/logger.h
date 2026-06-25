@@ -30,6 +30,7 @@ public:
 
     void SetConsoleLevel(LogLevel level);
     void SetFileLevel(LogLevel level);
+    void SetConsoleEnabled(bool enabled);
 
     // 同时设置控制台和文件日志级别。
     void SetLogLevel(LogLevel level);
@@ -77,6 +78,7 @@ private:
     // 输出目标相关
     std::mutex sink_mutex_;
     std::ofstream file_stream_;
+    bool has_console_ = true;
     LogLevel console_level_ = LogLevel::Info;
     LogLevel file_level_ = LogLevel::Debug;
     bool has_file_ = false;
