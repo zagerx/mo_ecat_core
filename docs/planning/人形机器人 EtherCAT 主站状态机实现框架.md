@@ -635,25 +635,27 @@ bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity) {
 
 ## 12. 与当前代码的演进关系
 
-当前项目已有的结构接近该框架：
+当前项目已按该框架完成核心收敛：
 
 - `main.cpp` 创建 `EcatController`、`ActivityScheduler`、`ProcessDataEngine`、`EcatApplication`。
 - `EcatApplication::Run()` 根据 `ControllerState` 分发命令。
-- `EcatController::TransitionTo()` 已经是统一状态转换入口。
-- `EcatController::kAllowedTransitions` 已经是状态迁移表。
-- `ProcessDataEngine` 可以通过 `RequestErrorState()` 上报异常。
+- `EcatController::Dispatch()` 是唯一状态机动作入口。
+- `EcatController::kAllowedActions` 是动作迁移表。
+- `ProcessDataEngine` 可以通过 `RequestFault()` 上报普通故障。
+- `ActivityScheduler` 可以根据 Activity 失败策略请求 `Fault` 或 `Stop`。
 
-建议演进：
+已完成的演进：
 
-| 当前 | 建议演进 |
+| 原状态 | 当前状态 |
 |------|----------|
-| `ControllerState` 6 状态 | 扩展为 8 状态，增加 `ReadyToRun`、`EmergencyStop` |
-| `TransitionTo(target)` | 改为 `Dispatch(action, reason)` |
-| `Maintenance -> Operational` 复合转换 | 拆成 `Maintenance -> ReadyToRun -> Operational` |
-| `kError` | 重命名或扩展为 `kFault` |
-| `RequestErrorState` | 拆成 `RequestFault` 和 `RequestEmergencyStop` |
+| `ControllerState` 6 状态 | 8 状态，包含 `ReadyToRun`、`Fault`、`EmergencyStop` |
+| `TransitionTo(target)` | 已移除，统一使用 `Dispatch(action, reason)` |
+| `kAllowedTransitions` | 已移除，统一使用 `kAllowedActions` |
+| `Maintenance -> Operational` 复合转换 | 已拆成 `Maintenance -> ReadyToRun -> Operational` |
+| `kError` | 已替换为 `kFault` |
+| `RequestErrorState` | 已替换为 `RequestFault` 和 `RequestEmergencyStop` |
 | `StartOperation()` | 只负责 `ReadyToRun -> Operational` |
-| `PrepareRun()` | 新增，负责 PDO、IOmap、DC、SAFEOP、初始输出 |
+| `PrepareRun()` | 负责 PDO、IOmap、DC、SAFEOP、初始输出 |
 
 ## 13. 结语
 

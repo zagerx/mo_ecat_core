@@ -24,7 +24,6 @@ enum class ControllerState {
 	kReadyToRun,      // PDO / IOmap / SafeOp / DC 已准备，等待进入 OP
 	kOperational,     // 所有从站进入 OPERATIONAL，PDO 周期可运行
 	kFault,           // 普通故障状态：只能 Stop() 或受控恢复
-	kError = kFault,  // 兼容旧命名
 	kEmergencyStop    // 紧急安全事件：禁止自动恢复
 };
 
@@ -74,9 +73,6 @@ class EcatController
 	// 请求进入普通故障状态。供 ActivityScheduler / ProcessDataEngine 等调度/监控类调用。
 	void RequestFault(const std::string &reason);
 
-	// 兼容旧接口：内部转为 RequestFault()。
-	void RequestErrorState(const std::string &reason);
-
 	// 请求进入紧急停止状态。供安全 IO / 外部急停 / 严重故障调用。
 	void RequestEmergencyStop(const std::string &reason);
 
@@ -103,20 +99,10 @@ class EcatController
 	static const char *StateToString(ControllerState state);
 
       private:
-	// 兼容旧目标状态入口。内部转换为 Dispatch(MasterAction)。
-	bool TransitionTo(ControllerState target);
-
 	// 统一状态机入口。负责查表校验、执行动作、失败处理。
 	bool Dispatch(MasterAction action, const std::string &reason = {});
 
-	// 状态转换表：当前状态 -> 允许的目标状态集合。
-	// 只记录公开状态之间的相邻或回退转换。
-	static const std::map<ControllerState, std::vector<ControllerState>> kAllowedTransitions;
-
 	static const std::map<ControllerState, std::vector<MasterAction>> kAllowedActions;
-
-	// 执行单个公开状态转换步骤（Init/Scan/Maintenance/Operational/Shutdown）。
-	bool DoStepTo(ControllerState next);
 
 	bool DoAction(MasterAction action);
 
@@ -124,8 +110,7 @@ class EcatController
 	// 内部顺序执行 PDO 配置 -> SafeOp -> DC 配置，任一失败进入 kFault。
 	bool DoPrepareRun();
 
-	// Maintenance/ReadyToRun -> Operational 的兼容复合转换。
-	// 从 Maintenance 调用时会先 PrepareRun，再进入 Op。
+	// ReadyToRun -> Operational。
 	bool DoStartOperation();
 
 	// 各公开状态对应的具体实现
@@ -143,7 +128,7 @@ class EcatController
 	// 安全停止：根据当前状态逐级回滚，最终关闭 SOEM 并清理资源。
 	bool DoShutdown();
 
-	// 进入错误状态时打印所有从站快照，用于现场定位问题。
+	// 进入故障状态时打印所有从站快照，用于现场定位问题。
 	void LogSlaveSnapshot();
 
 	void EnterFault(const std::string &reason);

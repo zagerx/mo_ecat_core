@@ -12,7 +12,7 @@ enum class ControllerState;
 // Activity 执行失败后的主站处理策略
 enum class ActivityFailurePolicy {
 	kKeepControllerState, // 只记录日志，保持当前主站状态
-	kEnterError,          // 进入 kError，等待 Stop 后恢复
+	kEnterError,          // 进入 Fault，等待 Stop 后恢复
 	kShutdown,            // 自动调用 Stop() 回到 Uninitialized
 };
 

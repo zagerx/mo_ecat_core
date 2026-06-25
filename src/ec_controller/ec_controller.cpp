@@ -121,24 +121,6 @@ std::string FormatSlaveInfo(const mo_ecat::SlaveInfo &info)
 namespace mo_ecat
 {
 
-const std::map<ControllerState, std::vector<ControllerState>> EcatController::kAllowedTransitions =
-	{
-		{ControllerState::kUninitialized, {ControllerState::kAdapterReady}},
-		{ControllerState::kAdapterReady,
-		 {ControllerState::kScanned, ControllerState::kUninitialized}},
-		{ControllerState::kScanned,
-		 {ControllerState::kMaintenance, ControllerState::kUninitialized}},
-		{ControllerState::kMaintenance,
-		 {ControllerState::kReadyToRun, ControllerState::kUninitialized}},
-		{ControllerState::kReadyToRun,
-		 {ControllerState::kOperational, ControllerState::kMaintenance,
-		  ControllerState::kUninitialized}},
-		{ControllerState::kOperational,
-		 {ControllerState::kMaintenance, ControllerState::kUninitialized}},
-		{ControllerState::kFault, {ControllerState::kUninitialized}},
-		{ControllerState::kEmergencyStop, {ControllerState::kUninitialized}},
-};
-
 const std::map<ControllerState, std::vector<MasterAction>> EcatController::kAllowedActions =
 	{
 		{ControllerState::kUninitialized, {MasterAction::kInitializeAdapter}},
@@ -202,53 +184,6 @@ std::vector<SlaveInfo> EcatController::RefreshSlaveInfos() const
 	return slave_infos;
 }
 
-// 兼容旧目标状态入口。
-// 1. 相同状态直接返回 true
-// 2. 目标状态映射为 MasterAction
-// 3. 由 Dispatch() 统一校验和执行
-bool EcatController::TransitionTo(ControllerState target)
-{
-	if (state_ == target) {
-		return true;
-	}
-
-	MasterAction action;
-	switch (target) {
-	case ControllerState::kAdapterReady:
-		action = MasterAction::kInitializeAdapter;
-		break;
-	case ControllerState::kScanned:
-		action = MasterAction::kScanSlaves;
-		break;
-	case ControllerState::kMaintenance:
-		action = MasterAction::kBackToMaintenance;
-		if (state_ == ControllerState::kScanned) {
-			action = MasterAction::kEnterMaintenance;
-		}
-		break;
-	case ControllerState::kReadyToRun:
-		action = MasterAction::kPrepareRun;
-		break;
-	case ControllerState::kOperational:
-		action = MasterAction::kStartOperation;
-		break;
-	case ControllerState::kUninitialized:
-		action = MasterAction::kStop;
-		break;
-	case ControllerState::kFault:
-		action = MasterAction::kRequestFault;
-		break;
-	case ControllerState::kEmergencyStop:
-		action = MasterAction::kRequestEmergencyStop;
-		break;
-	default:
-		LOG_ERROR << "Unknown target state " << StateToString(target);
-		return false;
-	}
-
-	return Dispatch(action);
-}
-
 bool EcatController::Dispatch(MasterAction action, const std::string &reason)
 {
 	if (action == MasterAction::kRequestEmergencyStop) {
@@ -278,41 +213,19 @@ bool EcatController::Dispatch(MasterAction action, const std::string &reason)
 	return DoAction(action);
 }
 
-// 执行单个公开状态转换步骤。
-bool EcatController::DoStepTo(ControllerState next)
-{
-	switch (next) {
-	case ControllerState::kAdapterReady:
-		return DoInit();
-	case ControllerState::kScanned:
-		return DoScan();
-	case ControllerState::kMaintenance:
-		return DoEnterMaintenance();
-	case ControllerState::kReadyToRun:
-		return DoPrepareRun();
-	case ControllerState::kOperational:
-		return DoStartOperation();
-	case ControllerState::kUninitialized:
-		return DoShutdown();
-	default:
-		LOG_ERROR << "Unknown target state " << StateToString(next);
-		return false;
-	}
-}
-
 bool EcatController::DoAction(MasterAction action)
 {
 	switch (action) {
 	case MasterAction::kInitializeAdapter:
-		return DoStepTo(ControllerState::kAdapterReady);
+		return DoInit();
 	case MasterAction::kScanSlaves:
-		return DoStepTo(ControllerState::kScanned);
+		return DoScan();
 	case MasterAction::kEnterMaintenance:
-		return DoStepTo(ControllerState::kMaintenance);
+		return DoEnterMaintenance();
 	case MasterAction::kPrepareRun:
-		return DoStepTo(ControllerState::kReadyToRun);
+		return DoPrepareRun();
 	case MasterAction::kStartOperation:
-		return DoStepTo(ControllerState::kOperational);
+		return DoStartOperation();
 	case MasterAction::kBackToMaintenance:
 		if (state_ == ControllerState::kReadyToRun) {
 			state_ = ControllerState::kMaintenance;
@@ -332,7 +245,7 @@ bool EcatController::DoAction(MasterAction action)
 		}
 		return false;
 	case MasterAction::kStop:
-		return DoStepTo(ControllerState::kUninitialized);
+		return DoShutdown();
 	default:
 		LOG_ERROR << "Unsupported action";
 		return false;
@@ -634,12 +547,6 @@ void EcatController::RequestFault(const std::string &reason)
 	Dispatch(MasterAction::kRequestFault, reason);
 }
 
-// 兼容旧接口。
-void EcatController::RequestErrorState(const std::string &reason)
-{
-	RequestFault(reason);
-}
-
 void EcatController::RequestEmergencyStop(const std::string &reason)
 {
 	Dispatch(MasterAction::kRequestEmergencyStop, reason);
@@ -671,7 +578,7 @@ bool EcatController::InitializeAdapter(const EcMasterConfig &config)
 	}
 
 	config_ = config;
-	return TransitionTo(ControllerState::kAdapterReady);
+	return Dispatch(MasterAction::kInitializeAdapter);
 }
 
 // 扫描从站：AdapterReady -> Scanned。
@@ -682,7 +589,7 @@ bool EcatController::Scan()
 		return false;
 	}
 
-	return TransitionTo(ControllerState::kScanned);
+	return Dispatch(MasterAction::kScanSlaves);
 }
 
 // 请求进入 PREOP：Scanned -> Maintenance。
@@ -693,7 +600,7 @@ bool EcatController::EnterMaintenance()
 		return false;
 	}
 
-	return TransitionTo(ControllerState::kMaintenance);
+	return Dispatch(MasterAction::kEnterMaintenance);
 }
 
 // 请求进入 OPERATIONAL：ReadyToRun -> Operational。

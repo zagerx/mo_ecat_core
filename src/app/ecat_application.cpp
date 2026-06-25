@@ -97,7 +97,7 @@ bool EcatApplication::Run()
 	case ControllerState::kOperational:
 		HandleOperationalState(has_command ? &command : nullptr);
 		break;
-	case ControllerState::kError:
+	case ControllerState::kFault:
 		HandleErrorState(has_command ? &command : nullptr);
 		break;
 	case ControllerState::kEmergencyStop:
