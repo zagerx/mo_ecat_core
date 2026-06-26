@@ -228,6 +228,11 @@ bool EcatController::DoAction(MasterAction action)
 		return DoStartOperation();
 	case MasterAction::kBackToMaintenance:
 		if (state_ == ControllerState::kReadyToRun) {
+			if (!master_.RequestPreOpState() ||
+			    !master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
+				EnterFault("Failed to return from ReadyToRun to PREOP maintenance");
+				return false;
+			}
 			state_ = ControllerState::kMaintenance;
 			LOG_INFO << "EcatController -> Maintenance";
 			return true;
@@ -236,7 +241,9 @@ bool EcatController::DoAction(MasterAction action)
 			if (!master_.RequestSafeOpState()) {
 				LOG_WARN << "Failed to request SAFE_OP before Maintenance";
 			}
-			if (!master_.RequestPreOpState()) {
+			if (!master_.RequestPreOpState() ||
+			    !master_.CheckAllSlavesInState(EC_STATE_PRE_OP)) {
+				EnterFault("Failed to return from Operational to PREOP maintenance");
 				return false;
 			}
 			state_ = ControllerState::kMaintenance;
