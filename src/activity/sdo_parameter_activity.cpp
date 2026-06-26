@@ -2,7 +2,6 @@
 
 #include <iomanip>
 
-#include "ec_controller/ec_controller.h"
 #include "slave_node/slave_node.h"
 #include "utils/logger.h"
 
@@ -21,11 +20,9 @@ const char *SdoParameterActivity::GetName() const
 	return "SdoParameter";
 }
 
-bool SdoParameterActivity::CanStart(ControllerState state) const
+bool SdoParameterActivity::CanStart(const MasterRuntimeState &state) const
 {
-	// Maintenance(PREOP) 和 Operational 阶段 SDO 都可用
-	return state == ControllerState::kMaintenance ||
-	       state == ControllerState::kOperational;
+	return CanRunMaintenanceActivity(state);
 }
 
 ActivityFailurePolicy SdoParameterActivity::GetFailurePolicy() const

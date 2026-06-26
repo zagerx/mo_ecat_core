@@ -52,6 +52,10 @@ struct MasterRuntimeState {
 };
 
 bool IsValidRuntimeState(const MasterRuntimeState &state);
+bool CanRunMaintenanceActivity(const MasterRuntimeState &state);
+bool CanRunProcessData(const MasterRuntimeState &state);
+bool ShouldCheckPreOpSlaves(const MasterRuntimeState &state);
+bool ShouldCheckOperationalSlaves(const MasterRuntimeState &state);
 std::string ToDisplayString(const MasterRuntimeState &state);
 
 // 从站身份标识，用于扫描后身份/拓扑校验。

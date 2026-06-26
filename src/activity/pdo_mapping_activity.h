@@ -18,7 +18,7 @@ public:
 	explicit PdoMappingActivity(SlaveNode &node);
 
 	const char *GetName() const override;
-	bool CanStart(ControllerState state) const override;
+	bool CanStart(const MasterRuntimeState &state) const override;
 	ActivityFailurePolicy GetFailurePolicy() const override;
 	bool Execute() override;
 

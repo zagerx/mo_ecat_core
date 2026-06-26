@@ -3,7 +3,6 @@
 #include <iomanip>
 #include <sstream>
 
-#include "ec_controller/ec_controller.h"
 #include "slave_node/slave_node.h"
 #include "utils/logger.h"
 
@@ -19,11 +18,9 @@ const char *PdoMappingActivity::GetName() const
 	return "PdoMapping";
 }
 
-bool PdoMappingActivity::CanStart(ControllerState state) const
+bool PdoMappingActivity::CanStart(const MasterRuntimeState &state) const
 {
-	// PREOP 和 OP 下都可以通过 SDO 读取 PDO 映射。
-	return state == ControllerState::kMaintenance ||
-	       state == ControllerState::kOperational;
+	return CanRunMaintenanceActivity(state);
 }
 
 ActivityFailurePolicy PdoMappingActivity::GetFailurePolicy() const

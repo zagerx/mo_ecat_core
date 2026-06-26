@@ -19,7 +19,7 @@ class SdoDiagnosticsActivity : public EcatActivity
 	explicit SdoDiagnosticsActivity(SlaveNode &node);
 
 	const char *GetName() const override;
-	bool CanStart(ControllerState state) const override;
+	bool CanStart(const MasterRuntimeState &state) const override;
 	bool Execute() override;
 	ActivityFailurePolicy GetFailurePolicy() const override;
 

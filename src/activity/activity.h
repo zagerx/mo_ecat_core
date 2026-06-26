@@ -3,11 +3,10 @@
 #include <memory>
 #include <string>
 
+#include "mo_ecat/types.h"
+
 namespace mo_ecat
 {
-
-// 前向声明，避免与 ec_controller.h 循环包含
-enum class ControllerState;
 
 // Activity 执行失败后的主站处理策略
 enum class ActivityFailurePolicy {
@@ -27,8 +26,8 @@ class EcatActivity
 	// 活动名称，用于日志
 	virtual const char *GetName() const = 0;
 
-	// 是否允许在给定主站状态下启动
-	virtual bool CanStart(ControllerState state) const = 0;
+	// 是否允许在给定主站运行时状态下启动
+	virtual bool CanStart(const MasterRuntimeState &state) const = 0;
 
 	// 执行活动，返回是否成功
 	virtual bool Execute() = 0;

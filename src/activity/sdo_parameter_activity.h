@@ -20,7 +20,7 @@ public:
 			     uint32_t value, bool verify = true);
 
 	const char *GetName() const override;
-	bool CanStart(ControllerState state) const override;
+	bool CanStart(const MasterRuntimeState &state) const override;
 	bool Execute() override;
 	ActivityFailurePolicy GetFailurePolicy() const override;
 

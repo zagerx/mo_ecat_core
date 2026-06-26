@@ -1,13 +1,17 @@
 #include "activity/activity_scheduler.h"
 
+#include <utility>
+
 #include "ec_controller/ec_controller.h"
 #include "utils/logger.h"
 
 namespace mo_ecat
 {
 
-// 构造 ActivityScheduler，通过 controller 查询状态并处理失败策略。
-ActivityScheduler::ActivityScheduler(EcatController &controller) : controller_(controller)
+// 构造 ActivityScheduler，通过运行时状态提供器检查启动许可，并通过 controller 处理失败策略。
+ActivityScheduler::ActivityScheduler(
+	EcatController &controller, std::function<MasterRuntimeState()> runtime_state_provider)
+	: controller_(controller), runtime_state_provider_(std::move(runtime_state_provider))
 {
 }
 
@@ -25,10 +29,11 @@ bool ActivityScheduler::Execute(std::unique_ptr<EcatActivity> activity)
 		return false;
 	}
 
-	const auto state = controller_.GetState();
+	const auto state = runtime_state_provider_ ? runtime_state_provider_() :
+						     MasterRuntimeState{};
 	if (!activity->CanStart(state)) {
 		LOG_ERROR << "Activity " << activity->GetName()
-			  << " cannot start in state " << EcatController::StateToString(state);
+			  << " cannot start in state " << ToDisplayString(state);
 		running_.store(false);
 		return false;
 	}

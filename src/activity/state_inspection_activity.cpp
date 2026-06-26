@@ -42,11 +42,9 @@ const char *StateInspectionActivity::GetName() const
 	return "StateInspection";
 }
 
-bool StateInspectionActivity::CanStart(ControllerState state) const
+bool StateInspectionActivity::CanStart(const MasterRuntimeState &state) const
 {
-	// Maintenance(PREOP) 和 Operational 阶段都可以巡检
-	return state == ControllerState::kMaintenance ||
-	       state == ControllerState::kOperational;
+	return CanRunMaintenanceActivity(state);
 }
 
 ActivityFailurePolicy StateInspectionActivity::GetFailurePolicy() const

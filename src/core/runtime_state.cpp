@@ -33,6 +33,30 @@ bool IsValidRuntimeState(const MasterRuntimeState &state)
 	return false;
 }
 
+bool CanRunMaintenanceActivity(const MasterRuntimeState &state)
+{
+	return state.mode == MasterMode::kPrepare &&
+	       state.transition == TransitionStage::kStable &&
+	       state.prepare_stage == PrepareStage::kPreOpMaintenance;
+}
+
+bool CanRunProcessData(const MasterRuntimeState &state)
+{
+	return state.mode == MasterMode::kRun &&
+	       state.transition == TransitionStage::kStable &&
+	       state.prepare_stage == PrepareStage::kNone;
+}
+
+bool ShouldCheckPreOpSlaves(const MasterRuntimeState &state)
+{
+	return CanRunMaintenanceActivity(state);
+}
+
+bool ShouldCheckOperationalSlaves(const MasterRuntimeState &state)
+{
+	return CanRunProcessData(state);
+}
+
 std::string ToDisplayString(const MasterRuntimeState &state)
 {
 	const auto transition_prefix = [](TransitionStage transition) -> const char * {

@@ -139,7 +139,7 @@ private:
 };
 
 MoEcatMaster::Impl::Impl()
-	: scheduler_(controller_),
+	: scheduler_(controller_, [this]() { return CurrentRuntimeState(); }),
 	  engine_(controller_, controller_.GetEcMaster(), controller_.GetSlaveNodeManager())
 {
 }
@@ -290,17 +290,13 @@ void MoEcatMaster::Impl::RequestEmergencyStop(const std::string &reason)
 void MoEcatMaster::Impl::Service()
 {
 	const auto old_state = GetState();
+	const auto runtime_state = CurrentRuntimeState();
 
-	switch (controller_.GetState()) {
-	case ControllerState::kMaintenance:
+	if (ShouldCheckPreOpSlaves(runtime_state)) {
 		engine_.CheckSlaveStates();
-		break;
-	case ControllerState::kOperational:
+	} else if (CanRunProcessData(runtime_state)) {
 		engine_.RunOnce();
 		engine_.CheckSlaveStates();
-		break;
-	default:
-		break;
 	}
 
 	const auto new_state = GetState();
