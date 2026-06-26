@@ -12,6 +12,6 @@ Thumbs.db
 .cache/
 .codex/
 .agents/
-
+.clangd
 
 
