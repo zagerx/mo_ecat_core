@@ -1,3 +1,6 @@
 [submodule "third_party/SOEM"]
 	path = third_party/SOEM
 	url = https://github.com/zagerx/SOEM.git
+[submodule "third_party/IGH"]
+	path = third_party/IGH
+	url = git@gitlab.com:etherlab.org/ethercat.git
