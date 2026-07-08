@@ -11,5 +11,5 @@ cmake --build "${BUILD_DIR}" -j"$(nproc)"
 
 echo ""
 echo "Build finished."
-echo "  Core library: ${BUILD_DIR}/mo_ecat_core/libmo_ecat_core.a"
+echo "  Core library: ${BUILD_DIR}/core/libmo_ecat_core.a"
 echo "  CLI binary:   ${BUILD_DIR}/ecat_cli"
