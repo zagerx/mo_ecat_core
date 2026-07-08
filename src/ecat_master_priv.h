@@ -43,4 +43,23 @@ struct ec_master {
     void                     *user_data;    /**< 用户私有数据 */
 };
 
+/* ==================== 从站模块（ecat_slave.c） ==================== */
+
+int  ecat_slave_array_alloc(struct slave_group *group, int slave_count);
+void ecat_slave_array_free(struct slave_group *group);
+void ecat_slave_fill_info(struct ec_slave_info *info, const ec_slavet *slave);
+
+/* ==================== 从站组模块（ecat_slave_group.c） ==================== */
+
+int  ecat_slave_group_init(struct slave_group *group, ecx_contextt *context);
+void ecat_slave_group_cleanup(struct slave_group *group);
+int  ecat_slave_group_map(struct slave_group *group, ecx_contextt *context,
+                          uint8_t **iomap, size_t *iomap_size);
+
+/* ==================== 主站状态机入口（ecat_master_states.c） ==================== */
+
+void master_state_init(struct statemachine *sm);
+void master_state_ready(struct statemachine *sm);
+void master_state_fault(struct statemachine *sm);
+
 #endif /* ECAT_MASTER_PRIV_H */
