@@ -7,10 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "mo_ecat/ecat_master.h"
-#include "statemachine/statemachine.h"
-
-/* SOEM 相关常量已包含在 soem.h 中 */
+#include "ecat_master_priv.h"
 
 #ifdef __GNUC__
 #define EC_MASTER_UNUSED __attribute__((unused))
@@ -25,7 +22,7 @@ static void master_state_running(struct statemachine *sm);
 static void master_state_fault(struct statemachine *sm);
 static void EC_MASTER_UNUSED master_state_controlled(struct statemachine *sm);
 
-static const char *state_name(ec_master_state_id_t id)
+static const char *state_name(enum ec_master_state id)
 {
     switch (id) {
         case EC_MASTER_STATE_INIT:       return "INIT";
@@ -37,7 +34,7 @@ static const char *state_name(ec_master_state_id_t id)
     }
 }
 
-static void master_set_state(ec_master_t *master, ec_master_state_id_t id)
+static void master_set_state(struct ec_master *master, enum ec_master_state id)
 {
     if (!master) {
         return;
@@ -46,13 +43,13 @@ static void master_set_state(ec_master_t *master, ec_master_state_id_t id)
     printf("[EC Master] enter state: %s\n", state_name(id));
 }
 
-static void master_enter_fault(ec_master_t *master, const char *reason)
+static void master_enter_fault(struct ec_master *master, const char *reason)
 {
     fprintf(stderr, "[EC Master] FAULT: %s\n", reason);
     sm_transition(&master->sm, master_state_fault);
 }
 
-static int master_alloc_slave_array(ec_master_t *master)
+static int master_alloc_slave_array(struct ec_master *master)
 {
     int count = master->context.slavecount;
 
@@ -69,21 +66,21 @@ static int master_alloc_slave_array(ec_master_t *master)
     }
 
     for (int i = 1; i <= count; ++i) {
-        struct slave_info *info = &master->group[0].slaves[i].info;
-        info->position    = (uint16_t)i;
-        info->alias       = master->context.slavelist[i].aliasadr;
-        info->vendor_id   = master->context.slavelist[i].eep_man;
-        info->product_code= master->context.slavelist[i].eep_id;
-        info->state       = master->context.slavelist[i].state;
+        struct ec_slave_info *info = &master->group[0].slaves[i].info;
+        info->position     = (uint16_t)i;
+        info->alias        = master->context.slavelist[i].aliasadr;
+        info->vendor_id    = master->context.slavelist[i].eep_man;
+        info->product_code = master->context.slavelist[i].eep_id;
+        info->state        = master->context.slavelist[i].state;
         strncpy(info->name, (const char *)master->context.slavelist[i].name,
-                EC_MAXNAME);
-        info->name[EC_MAXNAME] = '\0';
+                EC_MASTER_MAX_NAME_LEN);
+        info->name[EC_MASTER_MAX_NAME_LEN] = '\0';
     }
 
     return 0;
 }
 
-static void master_free_resources(ec_master_t *master)
+static void master_free_resources(struct ec_master *master)
 {
     if (!master) {
         return;
@@ -108,7 +105,7 @@ static void master_free_resources(ec_master_t *master)
 
 static void master_state_init(struct statemachine *sm)
 {
-    ec_master_t *master = (ec_master_t *)sm->data;
+    struct ec_master *master = (struct ec_master *)sm->data;
 
     if (sm->phase == ENTER) {
         master_set_state(master, EC_MASTER_STATE_INIT);
@@ -159,7 +156,7 @@ static void master_state_init(struct statemachine *sm)
 
 static void master_state_ready(struct statemachine *sm)
 {
-    ec_master_t *master = (ec_master_t *)sm->data;
+    struct ec_master *master = (struct ec_master *)sm->data;
 
     if (sm->phase == ENTER) {
         master_set_state(master, EC_MASTER_STATE_READY);
@@ -181,7 +178,7 @@ static void master_state_ready(struct statemachine *sm)
 
 static void master_state_running(struct statemachine *sm)
 {
-    ec_master_t *master = (ec_master_t *)sm->data;
+    struct ec_master *master = (struct ec_master *)sm->data;
 
     if (sm->phase == ENTER) {
         master_set_state(master, EC_MASTER_STATE_RUNNING);
@@ -202,7 +199,7 @@ static void master_state_running(struct statemachine *sm)
 
 static void master_state_fault(struct statemachine *sm)
 {
-    ec_master_t *master = (ec_master_t *)sm->data;
+    struct ec_master *master = (struct ec_master *)sm->data;
 
     if (sm->phase == ENTER) {
         master_set_state(master, EC_MASTER_STATE_FAULT);
@@ -215,9 +212,9 @@ static void master_state_fault(struct statemachine *sm)
     }
 }
 
-static void master_state_controlled(struct statemachine *sm)
+static void EC_MASTER_UNUSED master_state_controlled(struct statemachine *sm)
 {
-    ec_master_t *master = (ec_master_t *)sm->data;
+    struct ec_master *master = (struct ec_master *)sm->data;
 
     if (sm->phase == ENTER) {
         master_set_state(master, EC_MASTER_STATE_CONTROLLED);
@@ -228,13 +225,13 @@ static void master_state_controlled(struct statemachine *sm)
 
 /* ==================== 公共 API ==================== */
 
-ec_master_t *ec_master_create(const char *ifname)
+struct ec_master *ec_master_create(const char *ifname)
 {
     if (!ifname) {
         return NULL;
     }
 
-    ec_master_t *master = (ec_master_t *)calloc(1, sizeof(ec_master_t));
+    struct ec_master *master = calloc(1, sizeof(struct ec_master));
     if (!master) {
         return NULL;
     }
@@ -248,7 +245,7 @@ ec_master_t *ec_master_create(const char *ifname)
     return master;
 }
 
-void ec_master_destroy(ec_master_t *master)
+void ec_master_destroy(struct ec_master *master)
 {
     if (!master) {
         return;
@@ -258,7 +255,7 @@ void ec_master_destroy(ec_master_t *master)
     free(master);
 }
 
-int ec_master_start(ec_master_t *master)
+int ec_master_start(struct ec_master *master)
 {
     if (!master) {
         return -1;
@@ -269,7 +266,7 @@ int ec_master_start(ec_master_t *master)
     return 0;
 }
 
-void ec_master_stop(ec_master_t *master)
+void ec_master_stop(struct ec_master *master)
 {
     if (!master) {
         return;
@@ -281,7 +278,7 @@ void ec_master_stop(ec_master_t *master)
     sm_transition(&master->sm, master_state_ready);
 }
 
-void ec_master_run_cycle(ec_master_t *master)
+void ec_master_run_cycle(struct ec_master *master)
 {
     if (!master) {
         return;
@@ -290,7 +287,7 @@ void ec_master_run_cycle(ec_master_t *master)
     sm_dispatch(&master->sm);
 }
 
-ec_master_state_id_t ec_master_get_state(const ec_master_t *master)
+enum ec_master_state ec_master_get_state(const struct ec_master *master)
 {
     if (!master) {
         return EC_MASTER_STATE_FAULT;
@@ -298,8 +295,16 @@ ec_master_state_id_t ec_master_get_state(const ec_master_t *master)
     return master->state_id;
 }
 
-int ec_master_get_slave_info(const ec_master_t *master, uint16_t position,
-                             struct slave_info *info)
+int ec_master_get_slave_count(const struct ec_master *master)
+{
+    if (!master) {
+        return -1;
+    }
+    return master->group[0].slave_count;
+}
+
+int ec_master_get_slave_info(const struct ec_master *master, uint16_t position,
+                             struct ec_slave_info *info)
 {
     if (!master || !info) {
         return -1;
@@ -313,4 +318,12 @@ int ec_master_get_slave_info(const ec_master_t *master, uint16_t position,
     info->state = master->context.slavelist[position].state;
 
     return 0;
+}
+
+int64_t ec_master_get_dc_time(const struct ec_master *master)
+{
+    if (!master) {
+        return 0;
+    }
+    return master->dc_time;
 }

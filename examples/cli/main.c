@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     printf("EtherCAT CLI example\n");
     printf("Interface: %s\n", ifname);
 
-    ec_master_t *master = ec_master_create(ifname);
+    struct ec_master *master = ec_master_create(ifname);
     if (!master) {
         fprintf(stderr, "Failed to create master\n");
         return -1;
@@ -40,15 +40,15 @@ int main(int argc, char *argv[])
         /* 每秒打印一次状态 */
         if (++print_counter >= 1000) {
             print_counter = 0;
-            ec_master_state_id_t state = ec_master_get_state(master);
-            printf("State: %d | DC time: %lld\n", state, (long long)master->dc_time);
+            enum ec_master_state state = ec_master_get_state(master);
+            int64_t dc_time = ec_master_get_dc_time(master);
+            int slave_count = ec_master_get_slave_count(master);
 
-            int slave_count = 0;
-            if (master->group[0].slave_count > 0) {
-                slave_count = master->group[0].slave_count;
-            }
+            printf("State: %d | DC time: %lld | Slaves: %d\n",
+                   state, (long long)dc_time, slave_count);
+
             for (int i = 1; i <= slave_count; ++i) {
-                struct slave_info info;
+                struct ec_slave_info info;
                 if (ec_master_get_slave_info(master, (uint16_t)i, &info) == 0) {
                     printf("  Slave[%d]: %s, state=0x%04X\n",
                            i, info.name, info.state);
