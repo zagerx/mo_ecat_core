@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+t#!/usr/bin/env python3
 """Parse SII EEPROM backup to show STRINGS and GENERAL categories."""
 
 import struct
 import sys
 
-EEPROM_FILE = "docs/backup_eeprom_20260617_170023.bin"
+EEPROM_FILE = "examples/tool/python/joint2.bin"
 ECT_SII_STRING = 0x0A
 ECT_SII_GENERAL = 0x1E
 ECT_SII_FMMU = 0x28
