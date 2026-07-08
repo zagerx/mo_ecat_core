@@ -8,11 +8,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(third_party/SOEM)
 
 set(MO_ECAT_CORE_SOURCES
-    src/common/statemachine/statemachine.c
-    src/ecat_master.c
-    src/ecat_master_states.c
-    src/ecat_slave.c
-    src/ecat_slave_group.c
+    src/mo_ecat_master.c
+    src/backend/soem_backend.c
+    src/backend/mock_backend.c
 )
 
 add_library(mo_ecat_core STATIC ${MO_ECAT_CORE_SOURCES})
@@ -20,14 +18,13 @@ add_library(mo_ecat_core STATIC ${MO_ECAT_CORE_SOURCES})
 target_include_directories(mo_ecat_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/common>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(mo_ecat_core
     PUBLIC soem
-    PRIVATE pthread
+    PUBLIC pthread
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -36,4 +33,3 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         -Wextra
     )
 endif()
-

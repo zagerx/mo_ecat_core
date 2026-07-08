@@ -1,0 +1,387 @@
+/**
+ * @file soem_backend.c
+ * @brief SOEM 后端适配器实现（简化版）
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "soem/soem.h"
+#include "mo_ecat/soem_backend.h"
+#include "mo_ecat_master_priv.h"
+
+struct soem_backend_ctx {
+    ecx_contextt context;
+    size_t       capacity;
+    uint8_t     *iomap;
+    uint32_t     expected_wkc;
+};
+
+static struct soem_backend_ctx *soem_ctx(struct mo_ecat_backend *backend)
+{
+    return (struct soem_backend_ctx *)backend->ctx;
+}
+
+static enum mo_ecat_al_state soem_to_al_state(uint16_t soem_state)
+{
+    switch (soem_state & 0x0F) {
+        case EC_STATE_INIT:       return MO_ECAT_AL_STATE_INIT;
+        case EC_STATE_PRE_OP:     return MO_ECAT_AL_STATE_PRE_OP;
+        case EC_STATE_SAFE_OP:    return MO_ECAT_AL_STATE_SAFE_OP;
+        case EC_STATE_OPERATIONAL:return MO_ECAT_AL_STATE_OP;
+        case EC_STATE_BOOT:       return MO_ECAT_AL_STATE_BOOTSTRAP;
+        default:                  return MO_ECAT_AL_STATE_UNKNOWN;
+    }
+}
+
+static int soem_backend_open(struct mo_ecat_backend *backend,
+                             const struct mo_ecat_config *config)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+    if (!ctx || !config || !config->interface_name) {
+        return -1;
+    }
+
+    if (!ecx_init(&ctx->context, config->interface_name)) {
+        fprintf(stderr, "SOEM backend: ecx_init failed on %s\n",
+                config->interface_name);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int soem_validate_config(const struct mo_ecat_config *config,
+                                ecx_contextt *context)
+{
+    if (!config || !context) {
+        return -1;
+    }
+
+    if (config->slave_count != (size_t)context->slavecount) {
+        fprintf(stderr, "SOEM backend: slave count mismatch: config=%zu, bus=%d\n",
+                config->slave_count, context->slavecount);
+        return -1;
+    }
+
+    for (size_t i = 0; i < config->slave_count; ++i) {
+        const struct mo_ecat_slave_config *cfg = &config->slaves[i];
+        const ec_slavet *soem_slave = &context->slavelist[i + 1];
+
+        if (cfg->vendor_id != 0 && cfg->vendor_id != soem_slave->eep_man) {
+            fprintf(stderr, "SOEM backend: vendor_id mismatch at slave %zu\n", i);
+            return -1;
+        }
+        if (cfg->product_code != 0 && cfg->product_code != soem_slave->eep_id) {
+            fprintf(stderr, "SOEM backend: product_code mismatch at slave %zu\n", i);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/*
+ * 根据配置中的 pdo_entries 顺序，在 slave 的输入/输出区域内顺序分配 offset。
+ * 这是简化实现：假设配置顺序与实际 PDO 映射顺序一致。
+ */
+static void soem_fill_pdo_refs(ecx_contextt *context,
+                               const struct mo_ecat_config *config,
+                               struct mo_ecat_pdo_ref *refs,
+                               uint8_t *iomap)
+{
+    size_t idx = 0;
+
+    for (size_t i = 0; i < config->slave_count; ++i) {
+        const struct mo_ecat_slave_config *slave_cfg = &config->slaves[i];
+        const ec_slavet *soem_slave = &context->slavelist[i + 1];
+
+        uint32_t out_bit = 0;
+        uint32_t in_bit = 0;
+
+        for (size_t j = 0; j < slave_cfg->pdo_entry_count; ++j) {
+            struct mo_ecat_pdo_ref *ref = &refs[idx++];
+
+            if (ref->direction == MO_ECAT_PDO_OUTPUT) {
+                if (soem_slave->Obytes > 0) {
+                    ref->byte_offset = (uint32_t)(soem_slave->outputs - iomap) +
+                                       (out_bit / 8);
+                    ref->bit_offset  = (uint8_t)(out_bit % 8);
+                }
+                out_bit += ref->bit_length;
+            } else {
+                if (soem_slave->Ibytes > 0) {
+                    ref->byte_offset = (uint32_t)(soem_slave->inputs - iomap) +
+                                       (in_bit / 8);
+                    ref->bit_offset  = (uint8_t)(in_bit % 8);
+                }
+                in_bit += ref->bit_length;
+            }
+        }
+    }
+}
+
+static void soem_fill_slave_info(struct mo_ecat_slave *slaves,
+                                 size_t slave_count,
+                                 ecx_contextt *context)
+{
+    for (size_t i = 0; i < slave_count; ++i) {
+        struct mo_ecat_slave *slave = &slaves[i];
+        const ec_slavet *soem_slave = &context->slavelist[i + 1];
+
+        slave->position = soem_slave->configadr - EC_NODEOFFSET;
+        slave->alias    = soem_slave->aliasadr;
+        slave->vendor_id    = soem_slave->eep_man;
+        slave->product_code = soem_slave->eep_id;
+        slave->revision_number = soem_slave->eep_rev;
+        slave->has_dc = soem_slave->hasdc ? 1 : 0;
+        slave->propagation_delay_ns = soem_slave->pdelay;
+
+        strncpy(slave->name, (const char *)soem_slave->name,
+                MO_ECAT_MAX_NAME_LEN);
+        slave->name[MO_ECAT_MAX_NAME_LEN] = '\0';
+
+        slave->state.al_state = soem_to_al_state(soem_slave->state);
+    }
+}
+
+static int soem_backend_configure(struct mo_ecat_backend *backend,
+                                  const struct mo_ecat_config *config,
+                                  struct mo_ecat_process_image *image,
+                                  struct mo_ecat_pdo_ref *pdo_refs,
+                                  size_t pdo_ref_count,
+                                  struct mo_ecat_slave *slaves,
+                                  size_t slave_count)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+    if (!ctx || !config || !image || !slaves) {
+        return -1;
+    }
+
+    if (ctx->capacity == 0) {
+        fprintf(stderr, "SOEM backend: process_image_capacity is 0\n");
+        return -1;
+    }
+
+    /* 1. 扫描从站 */
+    if (ecx_config_init(&ctx->context) <= 0) {
+        fprintf(stderr, "SOEM backend: ecx_config_init failed\n");
+        return -1;
+    }
+
+    /* 2. 校验配置与实际总线是否一致 */
+    if (soem_validate_config(config, &ctx->context) < 0) {
+        return -1;
+    }
+
+    /* 3. 分配 IOmap 内存 */
+    if (ctx->iomap) {
+        free(ctx->iomap);
+    }
+    ctx->iomap = (uint8_t *)malloc(ctx->capacity);
+    if (!ctx->iomap) {
+        return -1;
+    }
+
+    /* 4. 执行 PDO 映射 */
+    int mapped_size = ecx_config_map_group(&ctx->context, ctx->iomap, 0);
+    if (mapped_size <= 0 || (size_t)mapped_size > ctx->capacity) {
+        fprintf(stderr, "SOEM backend: map failed or exceeds capacity\n");
+        free(ctx->iomap);
+        ctx->iomap = NULL;
+        return -1;
+    }
+
+    /* 5. 回填过程数据域 */
+    image->memory = ctx->iomap;
+    image->size   = (size_t)mapped_size;
+    image->generation++;
+    image->active = 0;
+
+    /* 6. 计算期望 WKC */
+    ctx->expected_wkc = ctx->context.grouplist[0].outputsWKC +
+                        ctx->context.grouplist[0].inputsWKC;
+
+    /* 7. 填充从站静态信息 */
+    soem_fill_slave_info(slaves, slave_count, &ctx->context);
+
+    /* 8. 填充 PDO 引用 offset */
+    if (pdo_refs && pdo_ref_count > 0) {
+        soem_fill_pdo_refs(&ctx->context, config, pdo_refs, ctx->iomap);
+        for (size_t i = 0; i < pdo_ref_count; ++i) {
+            pdo_refs[i].generation = image->generation;
+        }
+    }
+
+    printf("SOEM backend: %d slaves, IOmap %d bytes, expected WKC %u\n",
+           ctx->context.slavecount, mapped_size, ctx->expected_wkc);
+
+    return 0;
+}
+
+static int soem_backend_activate(struct mo_ecat_backend *backend)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    if (!ctx) {
+        return -1;
+    }
+
+    /* SOEM 下 activate 可视为完成一次 send，为后续 receive 建立起点 */
+    ecx_send_processdata(&ctx->context);
+
+    /* 请求所有从站进入 OP */
+    ctx->context.slavelist[0].state = EC_STATE_OPERATIONAL;
+    ecx_writestate(&ctx->context, 0);
+
+    /* 简单等待进入 OP（简化版，不阻塞太久） */
+    ecx_statecheck(&ctx->context, 0, EC_STATE_OPERATIONAL, 50000);
+
+    return 0;
+}
+
+static int soem_backend_cycle_begin(struct mo_ecat_backend *backend,
+                                    struct mo_ecat_cycle_result *result)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    if (!ctx) {
+        return -1;
+    }
+
+    int rc = ecx_receive_processdata(&ctx->context, EC_TIMEOUTRET);
+    if (rc > 0) {
+        result->link_up = 1;
+    } else {
+        result->link_up = 0;
+    }
+
+    result->actual_wkc   = (rc > 0) ? (uint32_t)rc : 0;
+    result->expected_wkc = ctx->expected_wkc;
+    result->dc_time_ns   = ctx->context.DCtime;
+    result->dc_time_valid = 1;
+
+    if (rc <= 0) {
+        result->backend_error = rc;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int soem_backend_cycle_end(struct mo_ecat_backend *backend,
+                                  struct mo_ecat_cycle_result *result)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    if (!ctx) {
+        return -1;
+    }
+
+    int rc = ecx_send_processdata(&ctx->context);
+    if (rc <= 0) {
+        result->backend_error = rc;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int soem_backend_read_diagnostics(struct mo_ecat_backend *backend,
+                                         struct mo_ecat_slave_state *states,
+                                         size_t state_count)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    if (!ctx) {
+        return -1;
+    }
+
+    ecx_readstate(&ctx->context);
+
+    if (state_count != (size_t)ctx->context.slavecount) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < state_count; ++i) {
+        const ec_slavet *soem_slave = &ctx->context.slavelist[i + 1];
+        states[i].al_state = soem_to_al_state(soem_slave->state);
+        states[i].error = (soem_slave->ALstatuscode != 0) ? 1 : 0;
+        states[i].al_status_code = soem_slave->ALstatuscode;
+        states[i].online = 1;
+        states[i].operational =
+            (states[i].al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
+    }
+
+    return 0;
+}
+
+static int soem_backend_deactivate(struct mo_ecat_backend *backend)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    if (!ctx) {
+        return -1;
+    }
+
+    /* 请求所有从站回到 SAFE_OP */
+    ctx->context.slavelist[0].state = EC_STATE_SAFE_OP;
+    ecx_writestate(&ctx->context, 0);
+    return 0;
+}
+
+static void soem_backend_close(struct mo_ecat_backend *backend)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    if (!ctx) {
+        return;
+    }
+
+    ecx_close(&ctx->context);
+
+    if (ctx->iomap) {
+        free(ctx->iomap);
+        ctx->iomap = NULL;
+    }
+
+    free(ctx);
+    backend->ctx = NULL;
+}
+
+static const struct mo_ecat_backend_ops soem_ops = {
+    .name = "soem",
+    .open = soem_backend_open,
+    .configure = soem_backend_configure,
+    .activate = soem_backend_activate,
+    .cycle_begin = soem_backend_cycle_begin,
+    .cycle_end = soem_backend_cycle_end,
+    .read_diagnostics = soem_backend_read_diagnostics,
+    .deactivate = soem_backend_deactivate,
+    .close = soem_backend_close,
+};
+
+int mo_ecat_soem_backend_init(struct mo_ecat_backend *backend,
+                              const struct mo_ecat_soem_options *options)
+{
+    if (!backend || !options) {
+        return -1;
+    }
+
+    struct soem_backend_ctx *ctx =
+        (struct soem_backend_ctx *)calloc(1, sizeof(struct soem_backend_ctx));
+    if (!ctx) {
+        return -1;
+    }
+
+    ctx->capacity = options->process_image_capacity;
+
+    backend->ops = &soem_ops;
+    backend->discovery_ops = NULL;       /* 简化版不实现在线发现 */
+    backend->manual_state_ops = NULL;    /* 简化版不实现手动状态控制 */
+    backend->caps.online_discovery = 0;
+    backend->caps.dynamic_pdo_mapping = 0;
+    backend->caps.dc_support = 1;
+    backend->caps.redundancy = 0;
+    backend->caps.manual_state_control = 0;
+    backend->ctx = ctx;
+
+    return 0;
+}
