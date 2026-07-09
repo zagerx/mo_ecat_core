@@ -15,39 +15,102 @@ static void signal_handler(int sig)
 	g_running = 0;
 }
 
-static int run_with_backend(struct mo_ecat_backend *backend, const struct mo_ecat_config *config)
+static int run_master_loop(struct mo_ecat_backend *backend, const struct mo_ecat_config *config)
 {
+	enum {
+		WAIT_IDLE,
+		WAIT_READY,
+		WAIT_RUNNING,
+		RUNNING,
+		FAILED
+	} phase = WAIT_IDLE;
+	const int startup_timeout_cycles = 10000;
+	int startup_wait_cycles = 0;
+	int rc = 0;
+
 	struct mo_ecat_master *master = mo_ecat_master_create();
 	if (!master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;
 	}
 
-	if (mo_ecat_master_configure(master, config, backend) < 0) {
-		fprintf(stderr, "Failed to configure master\n");
-		mo_ecat_master_destroy(master);
-		return -1;
-	}
-
-	if (mo_ecat_master_activate(master) < 0) {
-		fprintf(stderr, "Failed to activate master\n");
-		mo_ecat_master_destroy(master);
-		return -1;
-	}
-
-	struct mo_ecat_cycle_result result;
+	struct mo_ecat_cycle_result result = {0};
 	int print_counter = 0;
 
 	while (g_running) {
-		(void)mo_ecat_master_cycle_begin(master, &result);
-		(void)mo_ecat_master_cycle_end(master, &result);
+		mo_ecat_master_dispatch(master);
 
-		if (++print_counter >= 1000) {
+		enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
+		if (state == MO_ECAT_MASTER_STATE_FAULT) {
+			fprintf(stderr, "Master entered FAULT state\n");
+			rc = -1;
+			phase = FAILED;
+		}
+
+		switch (phase) {
+		case WAIT_IDLE:
+			if (state == MO_ECAT_MASTER_STATE_IDLE) {
+				if (mo_ecat_master_configure(master, config, backend) < 0) {
+					fprintf(stderr, "Failed to submit configure command\n");
+					rc = -1;
+					phase = FAILED;
+					break;
+				}
+				startup_wait_cycles = 0;
+				phase = WAIT_READY;
+			} else if (++startup_wait_cycles >= startup_timeout_cycles) {
+				fprintf(stderr, "Timed out waiting for master IDLE state\n");
+				rc = -1;
+				phase = FAILED;
+			}
+			break;
+
+		case WAIT_READY:
+			if (state == MO_ECAT_MASTER_STATE_READY) {
+				if (mo_ecat_master_activate(master) < 0) {
+					fprintf(stderr, "Failed to submit activate command\n");
+					rc = -1;
+					phase = FAILED;
+					break;
+				}
+				startup_wait_cycles = 0;
+				phase = WAIT_RUNNING;
+			} else if (++startup_wait_cycles >= startup_timeout_cycles) {
+				fprintf(stderr, "Timed out waiting for master READY state\n");
+				rc = -1;
+				phase = FAILED;
+			}
+			break;
+
+		case WAIT_RUNNING:
+			if (state == MO_ECAT_MASTER_STATE_RUNNING) {
+				startup_wait_cycles = 0;
+				phase = RUNNING;
+			} else if (++startup_wait_cycles >= startup_timeout_cycles) {
+				fprintf(stderr, "Timed out waiting for master RUNNING state\n");
+				rc = -1;
+				phase = FAILED;
+			}
+			break;
+
+		case RUNNING:
+			(void)mo_ecat_master_cycle_begin(master, &result);
+			(void)mo_ecat_master_cycle_end(master, &result);
+			break;
+
+		case FAILED:
+			g_running = 0;
+			break;
+
+		default:
+			break;
+		}
+
+		if (phase == RUNNING && ++print_counter >= 1000) {
 			print_counter = 0;
 
 			mo_ecat_master_read_diagnostics(master);
 
-			enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
 			size_t slave_count = mo_ecat_master_get_slave_count(master);
 
 			printf("State: %d | Slaves: %zu | WKC: %u/%u | DC: %lld\n", state,
@@ -70,7 +133,7 @@ static int run_with_backend(struct mo_ecat_backend *backend, const struct mo_eca
 
 	printf("\nStopping...\n");
 	mo_ecat_master_destroy(master);
-	return 0;
+	return rc;
 }
 
 int main(int argc, char *argv[])
@@ -117,5 +180,5 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	return run_with_backend(&backend, &config);
+	return run_master_loop(&backend, &config);
 }

@@ -9,8 +9,7 @@
 
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat_master_priv.h"
-
-#define MO_ECAT_DEFAULT_FAULT_THRESHOLD 3U
+#include "mo_ecat_master_states.h"
 
 static void config_free(struct mo_ecat_config *config);
 
@@ -127,8 +126,64 @@ static void build_pdo_refs(struct mo_ecat_master *master,
 
 static int master_cycle_state_allows_io(enum mo_ecat_master_state state)
 {
-    return state == MO_ECAT_MASTER_STATE_ACTIVE ||
+    return state == MO_ECAT_MASTER_STATE_RUNNING ||
            state == MO_ECAT_MASTER_STATE_DEGRADED;
+}
+
+static int master_submit_command(struct mo_ecat_master *master,
+                                 enum mo_ecat_master_command command)
+{
+    if (!master || command == MO_ECAT_MASTER_CMD_NONE ||
+        master->command_pending) {
+        return -1;
+    }
+
+    master->command = command;
+    master->command_pending = 1;
+    master->command_result = 0;
+    return 0;
+}
+
+void mo_ecat_master_clear_command(struct mo_ecat_master *master, int result)
+{
+    if (!master) {
+        return;
+    }
+
+    if (master->command == MO_ECAT_MASTER_CMD_CONFIGURE) {
+        master->pending_config = NULL;
+        master->pending_backend = NULL;
+    }
+
+    master->command = MO_ECAT_MASTER_CMD_NONE;
+    master->command_pending = 0;
+    master->command_result = result;
+}
+
+void mo_ecat_master_release_resources(struct mo_ecat_master *master)
+{
+    if (!master) {
+        return;
+    }
+
+    if (master->backend.ops && master->backend.ops->close) {
+        master->backend.ops->close(&master->backend);
+    }
+
+    config_free(&master->config);
+    free(master->slaves);
+    free(master->diagnostics);
+    free(master->pdo_refs);
+
+    memset(&master->backend, 0, sizeof(master->backend));
+    memset(&master->image, 0, sizeof(master->image));
+    master->slaves = NULL;
+    master->diagnostics = NULL;
+    master->pdo_refs = NULL;
+    master->pdo_ref_count = 0;
+    master->cycle_result_pending = 0;
+    master->cycle_abnormal = 0;
+    master->consecutive_cycle_errors = 0;
 }
 
 static int pdo_ref_in_bounds(const struct mo_ecat_process_image *image,
@@ -168,20 +223,21 @@ static void master_handle_cycle_result(struct mo_ecat_master *master,
         }
     }
 
-    if (!abnormal) {
-        master->consecutive_cycle_errors = 0;
-        if (master->state == MO_ECAT_MASTER_STATE_DEGRADED) {
-            master->state = MO_ECAT_MASTER_STATE_ACTIVE;
-        }
-        return;
+    master->cycle_result_pending = 1;
+    master->cycle_abnormal = master->cycle_abnormal || abnormal;
+}
+
+int mo_ecat_master_take_cycle_result(struct mo_ecat_master *master,
+                                     int *abnormal)
+{
+    if (!master || !abnormal || !master->cycle_result_pending) {
+        return 0;
     }
 
-    master->consecutive_cycle_errors++;
-    if (master->consecutive_cycle_errors >= MO_ECAT_DEFAULT_FAULT_THRESHOLD) {
-        master->state = MO_ECAT_MASTER_STATE_FAULT;
-    } else if (master->state == MO_ECAT_MASTER_STATE_ACTIVE) {
-        master->state = MO_ECAT_MASTER_STATE_DEGRADED;
-    }
+    *abnormal = master->cycle_abnormal;
+    master->cycle_result_pending = 0;
+    master->cycle_abnormal = 0;
+    return 1;
 }
 
 struct mo_ecat_master *mo_ecat_master_create(void)
@@ -192,7 +248,8 @@ struct mo_ecat_master *mo_ecat_master_create(void)
         return NULL;
     }
 
-    master->state = MO_ECAT_MASTER_STATE_CLOSED;
+    statemachine_init(&master->sm, master, mo_ecat_master_state_init);
+
     return master;
 }
 
@@ -203,19 +260,34 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
     }
 
     if (master_cycle_state_allows_io(master->state)) {
-        (void)mo_ecat_master_deactivate(master);
+        (void)mo_ecat_master_backend_deactivate(master);
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_CLOSED &&
-        master->backend.ops && master->backend.ops->close) {
-        master->backend.ops->close(&master->backend);
+    if (master->state != MO_ECAT_MASTER_STATE_IDLE) {
+        mo_ecat_master_release_resources(master);
     }
 
-    config_free(&master->config);
-    free(master->slaves);
-    free(master->diagnostics);
-    free(master->pdo_refs);
     free(master);
+}
+
+int mo_ecat_master_reset(struct mo_ecat_master *master)
+{
+    if (!master) {
+        return -1;
+    }
+
+    if (master->state == MO_ECAT_MASTER_STATE_IDLE) {
+        return 0;
+    }
+
+    return master_submit_command(master, MO_ECAT_MASTER_CMD_RESET);
+}
+
+void mo_ecat_master_dispatch(struct mo_ecat_master *master)
+{
+    if (master) {
+        sm_dispatch(&master->sm);
+    }
 }
 
 int mo_ecat_master_configure(struct mo_ecat_master *master,
@@ -226,8 +298,27 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
         return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_CLOSED) {
-        fprintf(stderr, "mo_ecat: master is not in CLOSED state\n");
+    if (master->command_pending) {
+        return -1;
+    }
+
+    master->pending_config = config;
+    master->pending_backend = backend;
+
+    if (master_submit_command(master, MO_ECAT_MASTER_CMD_CONFIGURE) < 0) {
+        master->pending_config = NULL;
+        master->pending_backend = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
+                                  const struct mo_ecat_config *config,
+                                  struct mo_ecat_backend *backend)
+{
+    if (!master || !config || !backend) {
         return -1;
     }
 
@@ -235,8 +326,10 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
         return -1;
     }
 
+    mo_ecat_master_release_resources(master);
+
     if (config_copy(&master->config, config) < 0) {
-        return -1;
+        goto fail;
     }
 
     master->pdo_ref_count = count_pdo_refs(config);
@@ -244,8 +337,7 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
         master->pdo_refs = (struct mo_ecat_pdo_ref *)calloc(
             master->pdo_ref_count, sizeof(struct mo_ecat_pdo_ref));
         if (!master->pdo_refs) {
-            config_free(&master->config);
-            return -1;
+            goto fail;
         }
         build_pdo_refs(master, config);
     }
@@ -255,22 +347,30 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
     master->diagnostics = (struct mo_ecat_slave_state *)calloc(
         config->slave_count, sizeof(struct mo_ecat_slave_state));
     if (config->slave_count > 0 && (!master->slaves || !master->diagnostics)) {
-        config_free(&master->config);
-        free(master->pdo_refs);
-        master->pdo_refs = NULL;
-        free(master->slaves);
-        free(master->diagnostics);
-        return -1;
+        goto fail;
     }
 
     /* 复制后端实例 */
     memcpy(&master->backend, backend, sizeof(struct mo_ecat_backend));
 
+    return 0;
+
+fail:
+    mo_ecat_master_release_resources(master);
+    return -1;
+}
+
+int mo_ecat_master_backend_configure(struct mo_ecat_master *master)
+{
+    if (!master || !master->backend.ops || !master->backend.ops->open ||
+        !master->backend.ops->configure) {
+        return -1;
+    }
+
     int rc = master->backend.ops->open(&master->backend, &master->config);
     if (rc < 0) {
-        goto fail;
+        return rc;
     }
-    master->state = MO_ECAT_MASTER_STATE_OPENED;
 
     rc = master->backend.ops->configure(&master->backend,
                                         &master->config,
@@ -280,7 +380,7 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
                                         master->slaves,
                                         master->config.slave_count);
     if (rc < 0) {
-        goto fail;
+        return rc;
     }
 
     /* 后端已填充 PDO refs 的 generation，未填充的统一刷一次 */
@@ -300,24 +400,7 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
         }
     }
 
-    master->state = MO_ECAT_MASTER_STATE_CONFIGURED;
     return 0;
-
-fail:
-    if (master->state == MO_ECAT_MASTER_STATE_OPENED &&
-        master->backend.ops->close) {
-        master->backend.ops->close(&master->backend);
-    }
-    config_free(&master->config);
-    free(master->slaves);
-    free(master->diagnostics);
-    free(master->pdo_refs);
-    master->pdo_refs = NULL;
-    master->slaves = NULL;
-    master->diagnostics = NULL;
-    memset(&master->backend, 0, sizeof(master->backend));
-    master->state = MO_ECAT_MASTER_STATE_CLOSED;
-    return -1;
 }
 
 int mo_ecat_master_activate(struct mo_ecat_master *master)
@@ -326,19 +409,23 @@ int mo_ecat_master_activate(struct mo_ecat_master *master)
         return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_CONFIGURED) {
+    if (master->state != MO_ECAT_MASTER_STATE_READY) {
+        return -1;
+    }
+
+    return master_submit_command(master, MO_ECAT_MASTER_CMD_ACTIVATE);
+}
+
+int mo_ecat_master_backend_activate(struct mo_ecat_master *master)
+{
+    if (!master) {
         return -1;
     }
 
     if (master->backend.ops && master->backend.ops->activate) {
-        if (master->backend.ops->activate(&master->backend) < 0) {
-            return -1;
-        }
+        return master->backend.ops->activate(&master->backend);
     }
 
-    master->image.active = 1;
-    master->state = MO_ECAT_MASTER_STATE_ACTIVE;
-    master->consecutive_cycle_errors = 0;
     return 0;
 }
 
@@ -352,19 +439,19 @@ int mo_ecat_master_deactivate(struct mo_ecat_master *master)
         return -1;
     }
 
-    int rc = 0;
+    return master_submit_command(master, MO_ECAT_MASTER_CMD_DEACTIVATE);
+}
+
+int mo_ecat_master_backend_deactivate(struct mo_ecat_master *master)
+{
+    if (!master) {
+        return -1;
+    }
+
     if (master->backend.ops && master->backend.ops->deactivate) {
-        rc = master->backend.ops->deactivate(&master->backend);
+        return master->backend.ops->deactivate(&master->backend);
     }
 
-    master->image.active = 0;
-    master->consecutive_cycle_errors = 0;
-    if (rc < 0) {
-        master->state = MO_ECAT_MASTER_STATE_FAULT;
-        return rc;
-    }
-
-    master->state = MO_ECAT_MASTER_STATE_CONFIGURED;
     return 0;
 }
 
@@ -391,7 +478,6 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
         return rc;
     }
 
-    master->image.active = 1;
     return 0;
 }
 
@@ -421,8 +507,8 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
         return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_CONFIGURED &&
-        master->state != MO_ECAT_MASTER_STATE_ACTIVE &&
+    if (master->state != MO_ECAT_MASTER_STATE_READY &&
+        master->state != MO_ECAT_MASTER_STATE_RUNNING &&
         master->state != MO_ECAT_MASTER_STATE_DEGRADED &&
         master->state != MO_ECAT_MASTER_STATE_FAULT) {
         return -1;
@@ -449,7 +535,7 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
 enum mo_ecat_master_state mo_ecat_master_get_state(
     const struct mo_ecat_master *master)
 {
-    return master ? master->state : MO_ECAT_MASTER_STATE_CLOSED;
+    return master ? master->state : MO_ECAT_MASTER_STATE_INIT;
 }
 
 size_t mo_ecat_master_get_slave_count(const struct mo_ecat_master *master)
@@ -488,8 +574,8 @@ int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,
         return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_CONFIGURED &&
-        master->state != MO_ECAT_MASTER_STATE_ACTIVE &&
+    if (master->state != MO_ECAT_MASTER_STATE_READY &&
+        master->state != MO_ECAT_MASTER_STATE_RUNNING &&
         master->state != MO_ECAT_MASTER_STATE_DEGRADED) {
         return -1;
     }

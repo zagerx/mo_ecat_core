@@ -11,7 +11,9 @@ add_subdirectory(third_party/SOEM)
 
 set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_master.c
+    src/mo_ecat_master_states.c
     src/backend/soem_backend.c
+    src/common/statemachine/statemachine.c
 )
 
 add_library(mo_ecat_core STATIC ${MO_ECAT_CORE_SOURCES})
