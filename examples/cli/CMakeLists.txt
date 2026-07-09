@@ -5,11 +5,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 将顶层核心库作为子目录构建，产物放在当前 build 目录下的 core/ 中
-add_subdirectory(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../..
-    ${CMAKE_CURRENT_BINARY_DIR}/core
-)
+if(NOT TARGET mo_ecat_core)
+    # 支持在 examples/cli 目录下独立构建。
+    set(MO_ECAT_BUILD_EXAMPLES OFF CACHE BOOL "Build mo_ecat examples" FORCE)
+    add_subdirectory(
+        ${CMAKE_CURRENT_SOURCE_DIR}/../..
+        ${CMAKE_CURRENT_BINARY_DIR}/core
+    )
+endif()
 
 add_executable(ecat_cli main.c)
 

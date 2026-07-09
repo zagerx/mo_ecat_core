@@ -11,52 +11,53 @@ extern "C" {
 
 /* 便捷内联包装 */
 static inline int mo_ecat_backend_open(struct mo_ecat_backend *backend,
-                                       const struct mo_ecat_config *config)
+				       const struct mo_ecat_config *config)
 {
-    return backend->ops->open(backend, config);
+	return backend->ops->open(backend, config);
 }
 
 static inline int mo_ecat_backend_configure(struct mo_ecat_backend *backend,
-                                            const struct mo_ecat_config *config,
-                                            struct mo_ecat_process_image *image,
-                                            struct mo_ecat_pdo_ref *pdo_refs,
-                                            size_t pdo_ref_count)
+					    const struct mo_ecat_config *config,
+					    struct mo_ecat_process_image *image,
+					    struct mo_ecat_pdo_ref *pdo_refs, size_t pdo_ref_count,
+					    struct mo_ecat_slave *slaves, size_t slave_count)
 {
-    return backend->ops->configure(backend, config, image, pdo_refs, pdo_ref_count);
+	return backend->ops->configure(backend, config, image, pdo_refs, pdo_ref_count, slaves,
+				       slave_count);
 }
 
 static inline int mo_ecat_backend_activate(struct mo_ecat_backend *backend)
 {
-    return backend->ops->activate(backend);
+	return backend->ops->activate(backend);
 }
 
 static inline int mo_ecat_backend_cycle_begin(struct mo_ecat_backend *backend,
-                                              struct mo_ecat_cycle_result *result)
+					      struct mo_ecat_cycle_result *result)
 {
-    return backend->ops->cycle_begin(backend, result);
+	return backend->ops->cycle_begin(backend, result);
 }
 
 static inline int mo_ecat_backend_cycle_end(struct mo_ecat_backend *backend,
-                                            struct mo_ecat_cycle_result *result)
+					    struct mo_ecat_cycle_result *result)
 {
-    return backend->ops->cycle_end(backend, result);
+	return backend->ops->cycle_end(backend, result);
 }
 
 static inline int mo_ecat_backend_read_diagnostics(struct mo_ecat_backend *backend,
-                                                   struct mo_ecat_slave_state *states,
-                                                   size_t state_count)
+						   struct mo_ecat_slave_state *states,
+						   size_t state_count)
 {
-    return backend->ops->read_diagnostics(backend, states, state_count);
+	return backend->ops->read_diagnostics(backend, states, state_count);
 }
 
 static inline int mo_ecat_backend_deactivate(struct mo_ecat_backend *backend)
 {
-    return backend->ops->deactivate(backend);
+	return backend->ops->deactivate(backend);
 }
 
 static inline void mo_ecat_backend_close(struct mo_ecat_backend *backend)
 {
-    backend->ops->close(backend);
+	backend->ops->close(backend);
 }
 
 #ifdef __cplusplus

@@ -10,6 +10,10 @@
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat_master_priv.h"
 
+#define MO_ECAT_DEFAULT_FAULT_THRESHOLD 3U
+
+static void config_free(struct mo_ecat_config *config);
+
 static int config_copy(struct mo_ecat_config *dst,
                        const struct mo_ecat_config *src)
 {
@@ -49,6 +53,7 @@ static int config_copy(struct mo_ecat_config *dst,
             if (s->name) {
                 d->name = strdup(s->name);
                 if (!d->name) {
+                    config_free(dst);
                     return -1;
                 }
             }
@@ -58,6 +63,7 @@ static int config_copy(struct mo_ecat_config *dst,
                 d->pdo_entries = (struct mo_ecat_pdo_entry_config *)calloc(
                     d->pdo_entry_count, sizeof(struct mo_ecat_pdo_entry_config));
                 if (!d->pdo_entries) {
+                    config_free(dst);
                     return -1;
                 }
                 memcpy((void *)d->pdo_entries, s->pdo_entries,
@@ -119,6 +125,65 @@ static void build_pdo_refs(struct mo_ecat_master *master,
     }
 }
 
+static int master_cycle_state_allows_io(enum mo_ecat_master_state state)
+{
+    return state == MO_ECAT_MASTER_STATE_ACTIVE ||
+           state == MO_ECAT_MASTER_STATE_DEGRADED;
+}
+
+static int pdo_ref_in_bounds(const struct mo_ecat_process_image *image,
+                             const struct mo_ecat_pdo_ref *ref)
+{
+    if (!image || !ref || !image->memory || ref->bit_length == 0) {
+        return 0;
+    }
+
+    if (ref->byte_offset >= image->size) {
+        return 0;
+    }
+
+    size_t image_bits = image->size * 8U;
+    size_t start_bit = (size_t)ref->byte_offset * 8U + ref->bit_offset;
+    size_t end_bit = start_bit + ref->bit_length;
+
+    return end_bit >= start_bit && end_bit <= image_bits;
+}
+
+static void master_handle_cycle_result(struct mo_ecat_master *master,
+                                       int rc,
+                                       struct mo_ecat_cycle_result *result)
+{
+    int abnormal = (rc < 0);
+
+    if (result) {
+        if (!result->link_up) {
+            abnormal = 1;
+        }
+        if (result->expected_wkc > 0 &&
+            result->actual_wkc != result->expected_wkc) {
+            abnormal = 1;
+        }
+        if (abnormal) {
+            result->diagnostics_required = 1;
+        }
+    }
+
+    if (!abnormal) {
+        master->consecutive_cycle_errors = 0;
+        if (master->state == MO_ECAT_MASTER_STATE_DEGRADED) {
+            master->state = MO_ECAT_MASTER_STATE_ACTIVE;
+        }
+        return;
+    }
+
+    master->consecutive_cycle_errors++;
+    if (master->consecutive_cycle_errors >= MO_ECAT_DEFAULT_FAULT_THRESHOLD) {
+        master->state = MO_ECAT_MASTER_STATE_FAULT;
+    } else if (master->state == MO_ECAT_MASTER_STATE_ACTIVE) {
+        master->state = MO_ECAT_MASTER_STATE_DEGRADED;
+    }
+}
+
 struct mo_ecat_master *mo_ecat_master_create(void)
 {
     struct mo_ecat_master *master =
@@ -137,8 +202,8 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
         return;
     }
 
-    if (master->state == MO_ECAT_MASTER_STATE_ACTIVE) {
-        mo_ecat_master_deactivate(master);
+    if (master_cycle_state_allows_io(master->state)) {
+        (void)mo_ecat_master_deactivate(master);
     }
 
     if (master->state != MO_ECAT_MASTER_STATE_CLOSED &&
@@ -273,25 +338,34 @@ int mo_ecat_master_activate(struct mo_ecat_master *master)
 
     master->image.active = 1;
     master->state = MO_ECAT_MASTER_STATE_ACTIVE;
+    master->consecutive_cycle_errors = 0;
     return 0;
 }
 
-void mo_ecat_master_deactivate(struct mo_ecat_master *master)
+int mo_ecat_master_deactivate(struct mo_ecat_master *master)
 {
     if (!master) {
-        return;
+        return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_ACTIVE) {
-        return;
+    if (!master_cycle_state_allows_io(master->state)) {
+        return -1;
     }
 
+    int rc = 0;
     if (master->backend.ops && master->backend.ops->deactivate) {
-        master->backend.ops->deactivate(&master->backend);
+        rc = master->backend.ops->deactivate(&master->backend);
     }
 
     master->image.active = 0;
+    master->consecutive_cycle_errors = 0;
+    if (rc < 0) {
+        master->state = MO_ECAT_MASTER_STATE_FAULT;
+        return rc;
+    }
+
     master->state = MO_ECAT_MASTER_STATE_CONFIGURED;
+    return 0;
 }
 
 int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
@@ -301,7 +375,7 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
         return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_ACTIVE) {
+    if (!master_cycle_state_allows_io(master->state)) {
         return -1;
     }
 
@@ -312,6 +386,7 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
     }
 
     int rc = master->backend.ops->cycle_begin(&master->backend, result);
+    master_handle_cycle_result(master, rc, result);
     if (rc < 0) {
         return rc;
     }
@@ -327,7 +402,7 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
         return -1;
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_ACTIVE) {
+    if (!master_cycle_state_allows_io(master->state)) {
         return -1;
     }
 
@@ -335,7 +410,9 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
         return -1;
     }
 
-    return master->backend.ops->cycle_end(&master->backend, result);
+    int rc = master->backend.ops->cycle_end(&master->backend, result);
+    master_handle_cycle_result(master, rc, result);
+    return rc;
 }
 
 int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
@@ -345,7 +422,9 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
     }
 
     if (master->state != MO_ECAT_MASTER_STATE_CONFIGURED &&
-        master->state != MO_ECAT_MASTER_STATE_ACTIVE) {
+        master->state != MO_ECAT_MASTER_STATE_ACTIVE &&
+        master->state != MO_ECAT_MASTER_STATE_DEGRADED &&
+        master->state != MO_ECAT_MASTER_STATE_FAULT) {
         return -1;
     }
 
@@ -410,7 +489,8 @@ int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,
     }
 
     if (master->state != MO_ECAT_MASTER_STATE_CONFIGURED &&
-        master->state != MO_ECAT_MASTER_STATE_ACTIVE) {
+        master->state != MO_ECAT_MASTER_STATE_ACTIVE &&
+        master->state != MO_ECAT_MASTER_STATE_DEGRADED) {
         return -1;
     }
 
@@ -430,18 +510,15 @@ const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
         return NULL;
     }
 
-    if (!master->image.memory || ref->generation != master->image.generation) {
-        return NULL;
-    }
-
-    if (ref->byte_offset >= master->image.size) {
+    if (ref->generation != master->image.generation ||
+        !pdo_ref_in_bounds(&master->image, ref)) {
         return NULL;
     }
 
     return &master->image.memory[ref->byte_offset];
 }
 
-void *mo_ecat_pdo_output(const struct mo_ecat_master *master,
+void *mo_ecat_pdo_output(struct mo_ecat_master *master,
                          const struct mo_ecat_pdo_ref *ref)
 {
     if (!master || !ref) {
@@ -452,11 +529,8 @@ void *mo_ecat_pdo_output(const struct mo_ecat_master *master,
         return NULL;
     }
 
-    if (!master->image.memory || ref->generation != master->image.generation) {
-        return NULL;
-    }
-
-    if (ref->byte_offset >= master->image.size) {
+    if (ref->generation != master->image.generation ||
+        !pdo_ref_in_bounds(&master->image, ref)) {
         return NULL;
     }
 

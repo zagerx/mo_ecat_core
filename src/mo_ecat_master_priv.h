@@ -18,6 +18,7 @@ struct mo_ecat_master {
     struct mo_ecat_pdo_ref *pdo_refs;
     size_t                 pdo_ref_count;
     enum mo_ecat_master_state state;
+    unsigned int           consecutive_cycle_errors;
     void                  *user_data;
 };
 

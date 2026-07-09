@@ -83,14 +83,47 @@ static int soem_validate_config(const struct mo_ecat_config *config,
     return 0;
 }
 
+static size_t bytes_for_bits(uint32_t bits)
+{
+    return (bits + 7U) / 8U;
+}
+
+static size_t soem_estimate_iomap_size_from_config(const struct mo_ecat_config *config)
+{
+    size_t output_bytes = 0;
+    size_t input_bytes = 0;
+
+    for (size_t i = 0; i < config->slave_count; ++i) {
+        uint32_t output_bits = 0;
+        uint32_t input_bits = 0;
+
+        for (size_t j = 0; j < config->slaves[i].pdo_entry_count; ++j) {
+            const struct mo_ecat_pdo_entry_config *entry =
+                &config->slaves[i].pdo_entries[j];
+            if (entry->direction == MO_ECAT_PDO_OUTPUT) {
+                output_bits += entry->bit_length;
+            } else {
+                input_bits += entry->bit_length;
+            }
+        }
+
+        output_bytes += bytes_for_bits(output_bits);
+        input_bytes += bytes_for_bits(input_bits);
+    }
+
+    return output_bytes + input_bytes;
+}
+
 /*
  * 根据配置中的 pdo_entries 顺序，在 slave 的输入/输出区域内顺序分配 offset。
  * 这是简化实现：假设配置顺序与实际 PDO 映射顺序一致。
  */
-static void soem_fill_pdo_refs(ecx_contextt *context,
-                               const struct mo_ecat_config *config,
-                               struct mo_ecat_pdo_ref *refs,
-                               uint8_t *iomap)
+static int soem_fill_pdo_refs(ecx_contextt *context,
+                              const struct mo_ecat_config *config,
+                              struct mo_ecat_pdo_ref *refs,
+                              size_t pdo_ref_count,
+                              uint8_t *iomap,
+                              size_t iomap_size)
 {
     size_t idx = 0;
 
@@ -100,26 +133,52 @@ static void soem_fill_pdo_refs(ecx_contextt *context,
 
         uint32_t out_bit = 0;
         uint32_t in_bit = 0;
+        uint32_t output_bits = soem_slave->Obits;
+        uint32_t input_bits = soem_slave->Ibits;
 
         for (size_t j = 0; j < slave_cfg->pdo_entry_count; ++j) {
+            if (idx >= pdo_ref_count) {
+                return -1;
+            }
+
             struct mo_ecat_pdo_ref *ref = &refs[idx++];
+            uint32_t *used_bits =
+                (ref->direction == MO_ECAT_PDO_OUTPUT) ? &out_bit : &in_bit;
+            uint32_t available_bits =
+                (ref->direction == MO_ECAT_PDO_OUTPUT) ? output_bits : input_bits;
 
             if (ref->direction == MO_ECAT_PDO_OUTPUT) {
-                if (soem_slave->Obytes > 0) {
-                    ref->byte_offset = (uint32_t)(soem_slave->outputs - iomap) +
-                                       (out_bit / 8);
-                    ref->bit_offset  = (uint8_t)(out_bit % 8);
+                if (!soem_slave->outputs || (*used_bits + ref->bit_length) > available_bits) {
+                    return -1;
                 }
-                out_bit += ref->bit_length;
+                ref->byte_offset = (uint32_t)(soem_slave->outputs - iomap) +
+                                   (*used_bits / 8);
             } else {
-                if (soem_slave->Ibytes > 0) {
-                    ref->byte_offset = (uint32_t)(soem_slave->inputs - iomap) +
-                                       (in_bit / 8);
-                    ref->bit_offset  = (uint8_t)(in_bit % 8);
+                if (!soem_slave->inputs || (*used_bits + ref->bit_length) > available_bits) {
+                    return -1;
                 }
-                in_bit += ref->bit_length;
+                ref->byte_offset = (uint32_t)(soem_slave->inputs - iomap) +
+                                   (*used_bits / 8);
+            }
+
+            ref->bit_offset = (uint8_t)(*used_bits % 8);
+            *used_bits += ref->bit_length;
+
+            size_t start_bit = (size_t)ref->byte_offset * 8U + ref->bit_offset;
+            size_t end_bit = start_bit + ref->bit_length;
+            if (end_bit < start_bit || end_bit > iomap_size * 8U) {
+                return -1;
             }
         }
+    }
+
+    return idx == pdo_ref_count ? 0 : -1;
+}
+
+static void soem_set_backend_error_once(struct mo_ecat_cycle_result *result, int error)
+{
+    if (result && result->backend_error == 0) {
+        result->backend_error = error;
     }
 }
 
@@ -166,6 +225,14 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
         return -1;
     }
 
+    size_t estimated_size = soem_estimate_iomap_size_from_config(config);
+    if (estimated_size > ctx->capacity) {
+        fprintf(stderr,
+                "SOEM backend: configured PDO size estimate %zu exceeds capacity %zu\n",
+                estimated_size, ctx->capacity);
+        return -1;
+    }
+
     /* 1. 扫描从站 */
     if (ecx_config_init(&ctx->context) <= 0) {
         fprintf(stderr, "SOEM backend: ecx_config_init failed\n");
@@ -202,7 +269,7 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
     image->active = 0;
 
     /* 6. 计算期望 WKC */
-    ctx->expected_wkc = ctx->context.grouplist[0].outputsWKC +
+    ctx->expected_wkc = (uint32_t)ctx->context.grouplist[0].outputsWKC * 2U +
                         ctx->context.grouplist[0].inputsWKC;
 
     /* 7. 填充从站静态信息 */
@@ -210,7 +277,11 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
 
     /* 8. 填充 PDO 引用 offset */
     if (pdo_refs && pdo_ref_count > 0) {
-        soem_fill_pdo_refs(&ctx->context, config, pdo_refs, ctx->iomap);
+        if (soem_fill_pdo_refs(&ctx->context, config, pdo_refs, pdo_ref_count,
+                               ctx->iomap, image->size) < 0) {
+            fprintf(stderr, "SOEM backend: configured PDO entries do not match mapped IO\n");
+            return -1;
+        }
         for (size_t i = 0; i < pdo_ref_count; ++i) {
             pdo_refs[i].generation = image->generation;
         }
@@ -237,7 +308,10 @@ static int soem_backend_activate(struct mo_ecat_backend *backend)
     ecx_writestate(&ctx->context, 0);
 
     /* 简单等待进入 OP（简化版，不阻塞太久） */
-    ecx_statecheck(&ctx->context, 0, EC_STATE_OPERATIONAL, 50000);
+    if (ecx_statecheck(&ctx->context, 0, EC_STATE_OPERATIONAL, 50000) !=
+        EC_STATE_OPERATIONAL) {
+        return -1;
+    }
 
     return 0;
 }
@@ -263,8 +337,13 @@ static int soem_backend_cycle_begin(struct mo_ecat_backend *backend,
     result->dc_time_valid = 1;
 
     if (rc <= 0) {
-        result->backend_error = rc;
+        soem_set_backend_error_once(result, rc);
+        result->diagnostics_required = 1;
         return -1;
+    }
+
+    if (result->expected_wkc > 0 && result->actual_wkc != result->expected_wkc) {
+        result->diagnostics_required = 1;
     }
 
     return 0;
@@ -280,7 +359,8 @@ static int soem_backend_cycle_end(struct mo_ecat_backend *backend,
 
     int rc = ecx_send_processdata(&ctx->context);
     if (rc <= 0) {
-        result->backend_error = rc;
+        soem_set_backend_error_once(result, rc);
+        result->diagnostics_required = 1;
         return -1;
     }
 

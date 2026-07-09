@@ -45,7 +45,7 @@ int mo_ecat_master_activate(struct mo_ecat_master *master);
 /**
  * @brief 停用过程数据周期
  */
-void mo_ecat_master_deactivate(struct mo_ecat_master *master);
+int mo_ecat_master_deactivate(struct mo_ecat_master *master);
 
 /**
  * @brief 周期开始（接收）
@@ -108,7 +108,7 @@ const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
 /**
  * @brief 获取输出 PDO 在过程数据中的地址
  */
-void *mo_ecat_pdo_output(const struct mo_ecat_master *master,
+void *mo_ecat_pdo_output(struct mo_ecat_master *master,
                          const struct mo_ecat_pdo_ref *ref);
 
 /**
