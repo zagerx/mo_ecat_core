@@ -16,6 +16,7 @@ struct soem_backend_ctx {
     size_t       capacity;
     uint8_t     *iomap;
     uint32_t     expected_wkc;
+    int          opened;
 };
 
 static struct soem_backend_ctx *soem_ctx(struct mo_ecat_backend *backend)
@@ -50,6 +51,7 @@ static int soem_backend_open(struct mo_ecat_backend *backend,
         return -1;
     }
 
+    ctx->opened = 1;
     return 0;
 }
 
@@ -415,7 +417,10 @@ static void soem_backend_close(struct mo_ecat_backend *backend)
         return;
     }
 
-    ecx_close(&ctx->context);
+    if (ctx->opened) {
+        ecx_close(&ctx->context);
+        ctx->opened = 0;
+    }
 
     if (ctx->iomap) {
         free(ctx->iomap);
