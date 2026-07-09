@@ -6,6 +6,7 @@
 
 #include "mo_ecat/mo_ecat_types.h"
 #include "common/statemachine/statemachine.h"
+#include "mo_ecat_master_states.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +34,7 @@ struct mo_ecat_master_cmd {
     int pending;                    /**< 是否有未处理命令 */
     int result;                     /**< 上条命令的处理结果 */
     const struct mo_ecat_config *pending_config;   /**< CONFIGURE 携带的配置 */
-    struct mo_ecat_backend *pending_backend;       /**< CONFIGURE 携带的后端 */
+    struct mo_ecat_backend pending_backend_value;  /**< CONFIGURE 携带的后端副本 */
 };
 
 /**
@@ -86,7 +87,6 @@ struct mo_ecat_master_pdo {
  */
 struct mo_ecat_master {
     struct statemachine sm;                /**< 底层状态机 */
-    enum mo_ecat_master_state state;       /**< 当前生命周期状态 */
 
     struct mo_ecat_master_cmd cmd;         /**< 命令槽 */
     struct mo_ecat_master_runtime rt;      /**< 运行时资源 */

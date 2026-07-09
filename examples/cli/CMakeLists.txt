@@ -14,6 +14,11 @@ if(NOT TARGET mo_ecat_core)
     )
 endif()
 
-add_executable(ecat_cli main.c)
+add_executable(ecat_cli
+    main.c
+    threads.c
+    print.c
+    commands.c
+)
 
 target_link_libraries(ecat_cli PRIVATE mo_ecat_core)

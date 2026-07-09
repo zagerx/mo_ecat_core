@@ -11,10 +11,42 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_slave.h"
 #include "mo_ecat/mo_ecat_pdo.h"
+#include "mo_ecat/soem_backend.h"
 #include "mo_ecat_master_priv.h"
 #include "mo_ecat_master_states.h"
 
 static void config_free(struct mo_ecat_config *config);
+
+/**
+ * @brief 根据状态机当前函数指针推断主站生命周期状态
+ */
+static enum mo_ecat_master_state master_state_from_sm(const struct mo_ecat_master *master)
+{
+    if (!master) {
+        return MO_ECAT_MASTER_STATE_INIT;
+    }
+
+    sm_state_t cur = master->sm.current_state;
+
+    if (cur == mo_ecat_master_state_idle) {
+        return MO_ECAT_MASTER_STATE_IDLE;
+    }
+    if (cur == mo_ecat_master_state_ready) {
+        return MO_ECAT_MASTER_STATE_READY;
+    }
+    if (cur == mo_ecat_master_state_running) {
+        return MO_ECAT_MASTER_STATE_RUNNING;
+    }
+    if (cur == mo_ecat_master_state_degraded) {
+        return MO_ECAT_MASTER_STATE_DEGRADED;
+    }
+    if (cur == mo_ecat_master_state_fault) {
+        return MO_ECAT_MASTER_STATE_FAULT;
+    }
+
+    /* 默认视为 INIT（包含初始状态和未知状态） */
+    return MO_ECAT_MASTER_STATE_INIT;
+}
 
 static int config_copy(struct mo_ecat_config *dst,
                        const struct mo_ecat_config *src)
@@ -96,6 +128,36 @@ static void config_free(struct mo_ecat_config *config)
     config->interface_name = NULL;
 }
 
+static int backend_create(const struct mo_ecat_backend_config *config,
+                          struct mo_ecat_backend *backend)
+{
+    if (!config || !backend) {
+        return -1;
+    }
+
+    memset(backend, 0, sizeof(*backend));
+
+    switch (config->type) {
+    case MO_ECAT_BACKEND_SOEM:
+        return mo_ecat_soem_backend_init(backend, &config->options.soem);
+    default:
+        return -1;
+    }
+}
+
+static void backend_destroy(struct mo_ecat_backend *backend)
+{
+    if (!backend) {
+        return;
+    }
+
+    if (backend->ops && backend->ops->close) {
+        backend->ops->close(backend);
+    }
+
+    memset(backend, 0, sizeof(*backend));
+}
+
 static size_t count_pdo_refs(const struct mo_ecat_config *config)
 {
     size_t count = 0;
@@ -127,8 +189,9 @@ static void build_pdo_refs(struct mo_ecat_master *master,
     }
 }
 
-static int master_cycle_state_allows_io(enum mo_ecat_master_state state)
+static int master_cycle_state_allows_io(const struct mo_ecat_master *master)
 {
+    enum mo_ecat_master_state state = master_state_from_sm(master);
     return state == MO_ECAT_MASTER_STATE_RUNNING ||
            state == MO_ECAT_MASTER_STATE_DEGRADED;
 }
@@ -155,7 +218,8 @@ void mo_ecat_master_clear_command(struct mo_ecat_master *master, int result)
 
     if (master->cmd.id == MO_ECAT_MASTER_CMD_CONFIGURE) {
         master->cmd.pending_config = NULL;
-        master->cmd.pending_backend = NULL;
+        /* 如果后端实例尚未转移到运行时资源，在这里释放，避免泄漏 */
+        backend_destroy(&master->cmd.pending_backend_value);
     }
 
     master->cmd.id = MO_ECAT_MASTER_CMD_NONE;
@@ -270,11 +334,11 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
 
     pthread_mutex_lock(&master->lock);
 
-    if (master_cycle_state_allows_io(master->state)) {
+    if (master_cycle_state_allows_io(master)) {
         (void)mo_ecat_master_backend_deactivate(master);
     }
 
-    if (master->state != MO_ECAT_MASTER_STATE_IDLE) {
+    if (master_state_from_sm(master) != MO_ECAT_MASTER_STATE_IDLE) {
         mo_ecat_master_release_resources(master);
     }
 
@@ -294,7 +358,7 @@ int mo_ecat_master_reset(struct mo_ecat_master *master)
 
     pthread_mutex_lock(&master->lock);
 
-    if (master->state == MO_ECAT_MASTER_STATE_IDLE) {
+    if (master_state_from_sm(master) == MO_ECAT_MASTER_STATE_IDLE) {
         pthread_mutex_unlock(&master->lock);
         return 0;
     }
@@ -317,11 +381,16 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master)
 
 int mo_ecat_master_configure(struct mo_ecat_master *master,
                              const struct mo_ecat_config *config,
-                             struct mo_ecat_backend *backend)
+                             const struct mo_ecat_backend_config *backend_config)
 {
     int rc;
+    struct mo_ecat_backend backend;
 
-    if (!master || !config || !backend) {
+    if (!master || !config || !backend_config) {
+        return -1;
+    }
+
+    if (backend_create(backend_config, &backend) < 0) {
         return -1;
     }
 
@@ -329,16 +398,19 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
 
     if (master->cmd.pending) {
         pthread_mutex_unlock(&master->lock);
+        backend_destroy(&backend);
         return -1;
     }
 
     master->cmd.pending_config = config;
-    master->cmd.pending_backend = backend;
+    master->cmd.pending_backend_value = backend;
 
     rc = master_submit_command(master, MO_ECAT_MASTER_CMD_CONFIGURE);
     if (rc < 0) {
         master->cmd.pending_config = NULL;
-        master->cmd.pending_backend = NULL;
+        backend_destroy(&master->cmd.pending_backend_value);
+        memset(&master->cmd.pending_backend_value, 0,
+               sizeof(master->cmd.pending_backend_value));
     }
 
     pthread_mutex_unlock(&master->lock);
@@ -382,8 +454,10 @@ int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
         goto fail;
     }
 
-    /* 复制后端实例 */
+    /* 复制后端实例，所有权从命令槽转移到运行时资源 */
     memcpy(&master->rt.backend, backend, sizeof(struct mo_ecat_backend));
+    master->cmd.pending_backend_value.ctx = NULL;
+    master->cmd.pending_backend_value.ops = NULL;
 
     return 0;
 
@@ -445,7 +519,7 @@ int mo_ecat_master_activate(struct mo_ecat_master *master)
 
     pthread_mutex_lock(&master->lock);
 
-    if (master->state != MO_ECAT_MASTER_STATE_READY) {
+    if (master_state_from_sm(master) != MO_ECAT_MASTER_STATE_READY) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
@@ -478,7 +552,7 @@ int mo_ecat_master_deactivate(struct mo_ecat_master *master)
 
     pthread_mutex_lock(&master->lock);
 
-    if (!master_cycle_state_allows_io(master->state)) {
+    if (!master_cycle_state_allows_io(master)) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
@@ -512,7 +586,7 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
 
     pthread_mutex_lock(&master->lock);
 
-    if (!master_cycle_state_allows_io(master->state)) {
+    if (!master_cycle_state_allows_io(master)) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
@@ -541,7 +615,7 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
 
     pthread_mutex_lock(&master->lock);
 
-    if (!master_cycle_state_allows_io(master->state)) {
+    if (!master_cycle_state_allows_io(master)) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
@@ -570,10 +644,10 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
 
     pthread_mutex_lock(&master->lock);
 
-    if (master->state != MO_ECAT_MASTER_STATE_READY &&
-        master->state != MO_ECAT_MASTER_STATE_RUNNING &&
-        master->state != MO_ECAT_MASTER_STATE_DEGRADED &&
-        master->state != MO_ECAT_MASTER_STATE_FAULT) {
+    if (master_state_from_sm(master) != MO_ECAT_MASTER_STATE_READY &&
+        master_state_from_sm(master) != MO_ECAT_MASTER_STATE_RUNNING &&
+        master_state_from_sm(master) != MO_ECAT_MASTER_STATE_DEGRADED &&
+        master_state_from_sm(master) != MO_ECAT_MASTER_STATE_FAULT) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
@@ -609,7 +683,7 @@ enum mo_ecat_master_state mo_ecat_master_get_state(
     }
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-    state = master->state;
+    state = master_state_from_sm(master);
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return state;
 }
@@ -703,9 +777,9 @@ int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 
-    if (master->state != MO_ECAT_MASTER_STATE_READY &&
-        master->state != MO_ECAT_MASTER_STATE_RUNNING &&
-        master->state != MO_ECAT_MASTER_STATE_DEGRADED) {
+    if (master_state_from_sm(master) != MO_ECAT_MASTER_STATE_READY &&
+        master_state_from_sm(master) != MO_ECAT_MASTER_STATE_RUNNING &&
+        master_state_from_sm(master) != MO_ECAT_MASTER_STATE_DEGRADED) {
         pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
         return -1;
     }

@@ -43,7 +43,6 @@ void mo_ecat_master_state_init(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->state = MO_ECAT_MASTER_STATE_INIT;
 			master->cycle.result_pending = 0;
 			master->cycle.abnormal = 0;
 		}
@@ -86,7 +85,6 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->state = MO_ECAT_MASTER_STATE_IDLE;
 			master->rt.image.active = 0;
 			master->cycle.consecutive_errors = 0;
 		}
@@ -108,7 +106,7 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 		break;
 	case EXEC_CONFIGURE:
 		rc = mo_ecat_master_prepare_config(master, master->cmd.pending_config,
-						   master->cmd.pending_backend);
+						   &master->cmd.pending_backend_value);
 		if (rc == 0) {
 			rc = mo_ecat_master_backend_configure(master);
 		}
@@ -151,7 +149,6 @@ void mo_ecat_master_state_ready(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->state = MO_ECAT_MASTER_STATE_READY;
 			master->rt.image.active = 0;
 			master->cycle.consecutive_errors = 0;
 		}
@@ -218,7 +215,6 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->state = MO_ECAT_MASTER_STATE_RUNNING;
 			master->rt.image.active = 1;
 			master->cycle.consecutive_errors = 0;
 		}
@@ -307,7 +303,6 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->state = MO_ECAT_MASTER_STATE_DEGRADED;
 			master->rt.image.active = 1;
 		}
 		sm->count = 0;
@@ -391,7 +386,6 @@ void mo_ecat_master_state_fault(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->state = MO_ECAT_MASTER_STATE_FAULT;
 			master->rt.image.active = 0;
 		}
 		sm->count = 0;

@@ -143,6 +143,29 @@ struct mo_ecat_backend_caps {
     int manual_state_control;
 };
 
+/* ==================== Backend 配置选项 ==================== */
+
+enum mo_ecat_backend_type {
+    MO_ECAT_BACKEND_SOEM = 1, /**< SOEM 后端 */
+};
+
+struct mo_ecat_soem_options {
+    size_t process_image_capacity;
+};
+
+/**
+ * @brief 后端配置描述符
+ *
+ * 调用者通过该结构告诉核心层使用哪种后端以及对应选项。
+ * 核心层会据此创建并持有 backend 实例，调用者无需手动管理其生命周期。
+ */
+struct mo_ecat_backend_config {
+    enum mo_ecat_backend_type type;
+    union {
+        struct mo_ecat_soem_options soem;
+    } options;
+};
+
 /* ==================== Backend 契约 ==================== */
 
 struct mo_ecat_backend;          /* 前向声明，用于 ops 函数指针 */

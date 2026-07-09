@@ -48,14 +48,17 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master);
  * 该函数只把 CONFIGURE 命令放入命令槽，实际配置工作由后续
  * mo_ecat_master_dispatch() 在 IDLE 状态执行。
  *
- * @param master  主站对象
- * @param config  顶层配置，命令执行前必须保持有效
- * @param backend 已初始化的后端实例，命令执行前必须保持有效
+ * 核心层会根据 @p backend_config 创建并持有后端实例，调用者无需手动
+ * 管理 backend 生命周期。
+ *
+ * @param master         主站对象
+ * @param config         顶层配置，命令执行前必须保持有效
+ * @param backend_config 后端配置描述符，命令执行前必须保持有效
  * @return 0 表示命令已接受，非 0 表示拒绝
  */
 int mo_ecat_master_configure(struct mo_ecat_master *master,
                              const struct mo_ecat_config *config,
-                             struct mo_ecat_backend *backend);
+                             const struct mo_ecat_backend_config *backend_config);
 
 /**
  * @brief 提交激活命令
