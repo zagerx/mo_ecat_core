@@ -52,17 +52,6 @@ struct mo_ecat_master_cycle {
 };
 
 /**
- * @brief 运行时资源
- *
- * 包含当前挂载的后端、已深拷贝的配置以及过程数据映像。
- */
-struct mo_ecat_master_runtime {
-    struct mo_ecat_backend backend;     /**< 后端实例 */
-    struct mo_ecat_config config;       /**< 配置副本 */
-    struct mo_ecat_process_image image; /**< 过程数据映像 */
-};
-
-/**
  * @brief 从站诊断信息
  *
  * 从站静态信息与最近一次诊断状态。
@@ -90,7 +79,9 @@ struct mo_ecat_master {
     struct statemachine sm;                /**< 底层状态机 */
 
     struct mo_ecat_master_cmd cmd;         /**< 命令槽 */
-    struct mo_ecat_master_runtime rt;      /**< 运行时资源 */
+    struct mo_ecat_backend backend;        /**< 后端实例 */
+    const struct mo_ecat_config *config;   /**< 配置指针，由调用者保证生命周期 */
+    struct mo_ecat_process_image image;    /**< 过程数据映像 */
     struct mo_ecat_master_diagnostics diag;/**< 从站诊断 */
     struct mo_ecat_master_pdo pdo;         /**< PDO 引用 */
     struct mo_ecat_master_cycle cycle;     /**< 周期运行状态 */

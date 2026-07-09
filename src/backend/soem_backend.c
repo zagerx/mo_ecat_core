@@ -41,7 +41,7 @@ static int soem_backend_open(struct mo_ecat_backend *backend,
 {
     struct soem_backend_ctx *ctx = soem_ctx(backend);
 
-    if (!ctx || !config || !config->interface_name) {
+    if (!ctx || !config || config->interface_name[0] == '\0') {
         return -1;
     }
 

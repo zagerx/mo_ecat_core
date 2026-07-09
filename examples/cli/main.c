@@ -29,26 +29,6 @@ volatile int g_running = 1;
 struct mo_ecat_config g_config = {0};
 char g_ifname_buf[128] = {0};
 
-/** 默认从站 PDO 配置 */
-static struct mo_ecat_pdo_entry_config s_slave0_pdos[] = {
-	{0x7000, 0x01, 16, MO_ECAT_PDO_OUTPUT},
-	{0x6000, 0x01, 16, MO_ECAT_PDO_INPUT},
-};
-
-/** 默认从站配置 */
-static struct mo_ecat_slave_config s_slaves[] = {
-	{
-		.alias = 0,
-		.position = 0,
-		.vendor_id = 0,
-		.product_code = 0,
-		.revision_number = 0,
-		.pdo_entries = s_slave0_pdos,
-		.pdo_entry_count = 2,
-		.dc_active = 0,
-	},
-};
-
 static void signal_handler(int sig)
 {
 	(void)sig;
@@ -87,8 +67,20 @@ int main(int argc, char *argv[])
 	g_ifname_buf[sizeof(g_ifname_buf) - 1] = '\0';
 
 	/* 初始化默认配置 */
-	g_config.interface_name = g_ifname_buf;
-	g_config.slaves = s_slaves;
+	strncpy(g_config.interface_name, g_ifname_buf, sizeof(g_config.interface_name) - 1);
+	g_config.interface_name[sizeof(g_config.interface_name) - 1] = '\0';
+
+	g_config.slaves[0].alias = 0;
+	g_config.slaves[0].position = 0;
+	g_config.slaves[0].vendor_id = 0;
+	g_config.slaves[0].product_code = 0;
+	g_config.slaves[0].revision_number = 0;
+	g_config.slaves[0].pdo_entries[0] =
+	    (struct mo_ecat_pdo_entry_config){0x7000, 0x01, 16, MO_ECAT_PDO_OUTPUT};
+	g_config.slaves[0].pdo_entries[1] =
+	    (struct mo_ecat_pdo_entry_config){0x6000, 0x01, 16, MO_ECAT_PDO_INPUT};
+	g_config.slaves[0].pdo_entry_count = 2;
+	g_config.slaves[0].dc_active = 0;
 	g_config.slave_count = 1;
 
 	printf("EtherCAT CLI test harness (decoupled backend)\n");

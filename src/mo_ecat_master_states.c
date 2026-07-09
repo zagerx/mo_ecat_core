@@ -85,7 +85,7 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->rt.image.active = 0;
+			master->image.active = 0;
 			master->cycle.consecutive_errors = 0;
 		}
 		sm->count = 0;
@@ -149,7 +149,7 @@ void mo_ecat_master_state_ready(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->rt.image.active = 0;
+			master->image.active = 0;
 			master->cycle.consecutive_errors = 0;
 		}
 		sm->count = 0;
@@ -215,7 +215,7 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->rt.image.active = 1;
+			master->image.active = 1;
 			master->cycle.consecutive_errors = 0;
 		}
 		sm->count = 0;
@@ -303,7 +303,7 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->rt.image.active = 1;
+			master->image.active = 1;
 		}
 		sm->count = 0;
 		sm->phase = RUNNING;
@@ -386,7 +386,7 @@ void mo_ecat_master_state_fault(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->rt.image.active = 0;
+			master->image.active = 0;
 		}
 		sm->count = 0;
 		sm->phase = WAIT_RESET;

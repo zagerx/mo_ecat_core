@@ -8,7 +8,10 @@
 extern "C" {
 #endif
 
-#define MO_ECAT_MAX_NAME_LEN 80
+#define MO_ECAT_MAX_NAME_LEN     80
+#define MO_ECAT_MAX_IFNAME_LEN   64
+#define MO_ECAT_MAX_SLAVES       16
+#define MO_ECAT_MAX_PDO_ENTRIES  32
 
 /* ==================== 主站生命周期状态 ==================== */
 
@@ -61,6 +64,12 @@ struct mo_ecat_dc_config {
     int32_t  sync0_shift_ns;
 };
 
+/**
+ * @brief 从站配置
+ *
+ * 配置模型采用固定大小数组，避免指针嵌套和动态分配。
+ * 调用者直接填充字段即可，核心层通过值拷贝持有配置。
+ */
 struct mo_ecat_slave_config {
     uint16_t alias;
     uint16_t position;
@@ -69,18 +78,23 @@ struct mo_ecat_slave_config {
     uint32_t product_code;
     uint32_t revision_number;
 
-    const char *name;
+    char     name[MO_ECAT_MAX_NAME_LEN + 1];
 
-    const struct mo_ecat_pdo_entry_config *pdo_entries;
+    struct mo_ecat_pdo_entry_config pdo_entries[MO_ECAT_MAX_PDO_ENTRIES];
     size_t pdo_entry_count;
 
     int dc_active;
 };
 
+/**
+ * @brief 顶层配置
+ *
+ * 自包含的固定大小结构，可直接用 = 赋值或 memcpy 拷贝。
+ */
 struct mo_ecat_config {
-    const char *interface_name;
+    char interface_name[MO_ECAT_MAX_IFNAME_LEN + 1];
 
-    const struct mo_ecat_slave_config *slaves;
+    struct mo_ecat_slave_config slaves[MO_ECAT_MAX_SLAVES];
     size_t slave_count;
 };
 
