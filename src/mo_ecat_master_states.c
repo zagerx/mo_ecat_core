@@ -105,8 +105,11 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 		}
 		break;
 	case EXEC_CONFIGURE:
-		rc = mo_ecat_master_prepare_config(master, master->cmd.pending_config,
-						   &master->cmd.pending_backend_value);
+		mo_ecat_master_release_resources(master);
+		rc = mo_ecat_backend_init(&master->backend);
+		if (rc == 0) {
+			rc = mo_ecat_master_prepare_config(master);
+		}
 		if (rc == 0) {
 			rc = mo_ecat_master_backend_configure(master);
 		}

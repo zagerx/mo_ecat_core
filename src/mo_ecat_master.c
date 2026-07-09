@@ -15,6 +15,9 @@
 #include "mo_ecat_master_priv.h"
 #include "mo_ecat_master_states.h"
 
+static struct mo_ecat_master s_master_instance;
+static int s_master_instance_in_use;
+
 /**
  * @brief 根据状态机当前函数指针推断主站生命周期状态
  */
@@ -63,19 +66,6 @@ static int config_validate(const struct mo_ecat_config *config)
     }
 
     return 0;
-}
-
-static void backend_destroy(struct mo_ecat_backend *backend)
-{
-    if (!backend) {
-        return;
-    }
-
-    if (backend->ops && backend->ops->close) {
-        backend->ops->close(backend);
-    }
-
-    memset(backend, 0, sizeof(*backend));
 }
 
 static size_t count_pdo_refs(const struct mo_ecat_config *config)
@@ -136,12 +126,6 @@ void mo_ecat_master_clear_command(struct mo_ecat_master *master, int result)
         return;
     }
 
-    if (master->cmd.id == MO_ECAT_MASTER_CMD_CONFIGURE) {
-        master->cmd.pending_config = NULL;
-        /* 如果后端实例尚未转移到运行时资源，在这里释放，避免泄漏 */
-        backend_destroy(&master->cmd.pending_backend_value);
-    }
-
     master->cmd.id = MO_ECAT_MASTER_CMD_NONE;
     master->cmd.pending = 0;
     master->cmd.result = result;
@@ -157,7 +141,6 @@ void mo_ecat_master_release_resources(struct mo_ecat_master *master)
         master->backend.ops->close(&master->backend);
     }
 
-    master->config = NULL;
     free(master->diag.slaves);
     free(master->diag.states);
     free(master->pdo.refs);
@@ -228,77 +211,26 @@ int mo_ecat_master_take_cycle_result(struct mo_ecat_master *master,
     return 1;
 }
 
-struct mo_ecat_master *mo_ecat_master_create(
-    const struct mo_ecat_config *config)
+int mo_ecat_master_init(struct mo_ecat_master *master,
+                        const struct mo_ecat_config *config)
 {
-    if (!config) {
-        return NULL;
+    if (!master || !config) {
+        return -1;
     }
 
-    struct mo_ecat_master *master =
-        (struct mo_ecat_master *)calloc(1, sizeof(struct mo_ecat_master));
-    if (!master) {
-        return NULL;
-    }
+    memset(master, 0, sizeof(*master));
 
     if (pthread_mutex_init(&master->lock, NULL) != 0) {
-        free(master);
-        return NULL;
+        return -1;
     }
 
+    master->config = config;
     statemachine_init(&master->sm, master, mo_ecat_master_state_init);
 
-    if (mo_ecat_backend_init(&master->backend) < 0) {
-        goto fail;
-    }
-
-    pthread_mutex_lock(&master->lock);
-
-    if (config_validate(config) < 0) {
-        pthread_mutex_unlock(&master->lock);
-        goto fail;
-    }
-    master->config = config;
-
-    master->diag.count = config->slave_count;
-    master->pdo.count = count_pdo_refs(config);
-    if (master->pdo.count > 0) {
-        master->pdo.refs = (struct mo_ecat_pdo_ref *)calloc(
-            master->pdo.count, sizeof(struct mo_ecat_pdo_ref));
-        if (!master->pdo.refs) {
-            goto setup_fail;
-        }
-        build_pdo_refs(master, config);
-    }
-
-    master->diag.slaves = (struct mo_ecat_slave *)calloc(
-        master->diag.count, sizeof(struct mo_ecat_slave));
-    master->diag.states = (struct mo_ecat_slave_state *)calloc(
-        master->diag.count, sizeof(struct mo_ecat_slave_state));
-    if (master->diag.count > 0 && (!master->diag.slaves || !master->diag.states)) {
-        goto setup_fail;
-    }
-
-    if (mo_ecat_master_backend_configure(master) < 0) {
-        goto setup_fail;
-    }
-
-    sm_transition_sync(&master->sm, mo_ecat_master_state_ready);
-    pthread_mutex_unlock(&master->lock);
-
-    return master;
-
-setup_fail:
-    mo_ecat_master_release_resources(master);
-    pthread_mutex_unlock(&master->lock);
-
-fail:
-    pthread_mutex_destroy(&master->lock);
-    free(master);
-    return NULL;
+    return 0;
 }
 
-void mo_ecat_master_destroy(struct mo_ecat_master *master)
+void mo_ecat_master_deinit(struct mo_ecat_master *master)
 {
     if (!master) {
         return;
@@ -310,14 +242,43 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
         (void)mo_ecat_master_backend_deactivate(master);
     }
 
-    if (master_state_from_sm(master) != MO_ECAT_MASTER_STATE_IDLE) {
-        mo_ecat_master_release_resources(master);
-    }
+    mo_ecat_master_release_resources(master);
 
     pthread_mutex_unlock(&master->lock);
     pthread_mutex_destroy(&master->lock);
 
-    free(master);
+    memset(master, 0, sizeof(*master));
+}
+
+struct mo_ecat_master *mo_ecat_master_create(
+    const struct mo_ecat_config *config)
+{
+    if (s_master_instance_in_use) {
+        return NULL;
+    }
+
+    if (mo_ecat_master_init(&s_master_instance, config) < 0) {
+        return NULL;
+    }
+
+    s_master_instance_in_use = 1;
+    return &s_master_instance;
+}
+
+void mo_ecat_master_destroy(struct mo_ecat_master *master)
+{
+    int is_singleton;
+
+    if (!master) {
+        return;
+    }
+
+    is_singleton = (master == &s_master_instance);
+    mo_ecat_master_deinit(master);
+
+    if (is_singleton) {
+        s_master_instance_in_use = 0;
+    }
 }
 
 int mo_ecat_master_reset(struct mo_ecat_master *master)
@@ -351,18 +312,11 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master)
     pthread_mutex_unlock(&master->lock);
 }
 
-int mo_ecat_master_configure(struct mo_ecat_master *master,
-                             const struct mo_ecat_config *config)
+int mo_ecat_master_configure(struct mo_ecat_master *master)
 {
     int rc;
 
-    if (!master || !config) {
-        return -1;
-    }
-
-    memset(&master->cmd.pending_backend_value, 0,
-           sizeof(master->cmd.pending_backend_value));
-    if (mo_ecat_backend_init(&master->cmd.pending_backend_value) < 0) {
+    if (!master) {
         return -1;
     }
 
@@ -370,44 +324,33 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
 
     if (master->cmd.pending) {
         pthread_mutex_unlock(&master->lock);
-        backend_destroy(&master->cmd.pending_backend_value);
-        memset(&master->cmd.pending_backend_value, 0,
-               sizeof(master->cmd.pending_backend_value));
         return -1;
     }
 
-    master->cmd.pending_config = config;
-
     rc = master_submit_command(master, MO_ECAT_MASTER_CMD_CONFIGURE);
-    if (rc < 0) {
-        master->cmd.pending_config = NULL;
-        backend_destroy(&master->cmd.pending_backend_value);
-        memset(&master->cmd.pending_backend_value, 0,
-               sizeof(master->cmd.pending_backend_value));
-    }
 
     pthread_mutex_unlock(&master->lock);
     return rc;
 }
 
-int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
-                                  const struct mo_ecat_config *config,
-                                  struct mo_ecat_backend *backend)
+int mo_ecat_master_prepare_config(struct mo_ecat_master *master)
 {
-    if (!master || !config || !backend) {
+    const struct mo_ecat_config *config;
+
+    if (!master || !master->config) {
         return -1;
     }
 
-    if (!backend->ops || !backend->ops->open || !backend->ops->configure) {
+    if (!master->backend.ops || !master->backend.ops->open ||
+        !master->backend.ops->configure) {
         return -1;
     }
 
-    mo_ecat_master_release_resources(master);
+    config = master->config;
 
     if (config_validate(config) < 0) {
         goto fail;
     }
-    master->config = config;
 
     master->diag.count = config->slave_count;
     master->pdo.count = count_pdo_refs(config);
@@ -427,15 +370,6 @@ int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
     if (master->diag.count > 0 && (!master->diag.slaves || !master->diag.states)) {
         goto fail;
     }
-
-    /* 复制后端实例，所有权从命令槽转移到运行时资源 */
-    if (backend != &master->backend) {
-        memcpy(&master->backend, backend, sizeof(struct mo_ecat_backend));
-        backend->ctx = NULL;
-        backend->ops = NULL;
-    }
-    master->cmd.pending_backend_value.ctx = NULL;
-    master->cmd.pending_backend_value.ops = NULL;
 
     return 0;
 

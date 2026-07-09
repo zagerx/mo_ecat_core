@@ -20,13 +20,29 @@ struct mo_ecat_master;
  */
 
 /**
- * @brief 创建并配置主站对象
+ * @brief 初始化主站对象
  *
- * 创建主站对象的同时完成后端初始化与总线配置。成功后主站处于 READY
- * 状态，调用者可直接提交激活命令。
+ * 该函数只初始化对象字段、绑定配置指针并初始化内部状态机，
+ * 不打开后端、不配置总线。config 由调用者保证生命周期。
  *
- * @param config 顶层配置
- * @return 成功返回主站对象，失败返回 NULL
+ * @return 0 成功，非 0 失败
+ */
+int mo_ecat_master_init(struct mo_ecat_master *master,
+                        const struct mo_ecat_config *config);
+
+/**
+ * @brief 反初始化主站对象
+ *
+ * 释放运行期资源并关闭后端，不释放 master 对象本身。
+ */
+void mo_ecat_master_deinit(struct mo_ecat_master *master);
+
+/**
+ * @brief 获取并初始化单主站对象
+ *
+ * 单主站场景下，该函数返回核心库内部的静态主站实例，
+ * 并调用 mo_ecat_master_init() 完成字段初始化和配置指针绑定。
+ * 重复调用会失败并返回 NULL。
  */
 struct mo_ecat_master *mo_ecat_master_create(
     const struct mo_ecat_config *config);
@@ -34,7 +50,7 @@ struct mo_ecat_master *mo_ecat_master_create(
 /**
  * @brief 销毁主站对象
  *
- * 销毁前会自动释放后端资源并关闭后端。
+ * 销毁前会自动释放后端资源并关闭后端。该函数不会释放 master 存储本身。
  */
 void mo_ecat_master_destroy(struct mo_ecat_master *master);
 
@@ -55,11 +71,9 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master);
  * 核心层会创建并持有后端实例，调用者无需手动管理 backend 生命周期。
  *
  * @param master 主站对象
- * @param config 顶层配置，命令执行前必须保持有效
  * @return 0 表示命令已接受，非 0 表示拒绝
  */
-int mo_ecat_master_configure(struct mo_ecat_master *master,
-                             const struct mo_ecat_config *config);
+int mo_ecat_master_configure(struct mo_ecat_master *master);
 
 /**
  * @brief 提交激活命令

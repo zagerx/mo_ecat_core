@@ -34,8 +34,6 @@ struct mo_ecat_master_cmd {
     enum mo_ecat_master_command id; /**< 当前命令 */
     int pending;                    /**< 是否有未处理命令 */
     int result;                     /**< 上条命令的处理结果 */
-    const struct mo_ecat_config *pending_config;   /**< CONFIGURE 携带的配置 */
-    struct mo_ecat_backend pending_backend_value;  /**< CONFIGURE 携带的后端副本 */
 };
 
 /**
@@ -91,9 +89,7 @@ struct mo_ecat_master {
 };
 
 /* 内部辅助函数，供状态机与核心模块使用 */
-int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
-                                  const struct mo_ecat_config *config,
-                                  struct mo_ecat_backend *backend);
+int mo_ecat_master_prepare_config(struct mo_ecat_master *master);
 int mo_ecat_master_backend_configure(struct mo_ecat_master *master);
 int mo_ecat_master_backend_activate(struct mo_ecat_master *master);
 int mo_ecat_master_backend_deactivate(struct mo_ecat_master *master);

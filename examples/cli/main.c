@@ -93,6 +93,12 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	if (mo_ecat_master_configure(g_master) < 0) {
+		fprintf(stderr, "Failed to submit initial configure command\n");
+		mo_ecat_master_destroy(g_master);
+		return -1;
+	}
+
 	pthread_t dispatch_thread;
 	pthread_t cycle_thread;
 

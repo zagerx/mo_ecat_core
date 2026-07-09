@@ -26,7 +26,7 @@ void cmd_config(const char *ifname)
 	strncpy(g_config.interface_name, g_ifname_buf, sizeof(g_config.interface_name) - 1);
 	g_config.interface_name[sizeof(g_config.interface_name) - 1] = '\0';
 
-	int rc = mo_ecat_master_configure(g_master, &g_config);
+	int rc = mo_ecat_master_configure(g_master);
 	printf("configure('%s') submit: %d\n", g_ifname_buf, rc);
 }
 
