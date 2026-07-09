@@ -5,6 +5,7 @@
 #include <pthread.h>
 
 #include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat_backend.h"
 #include "common/statemachine/statemachine.h"
 #include "mo_ecat_master_states.h"
 

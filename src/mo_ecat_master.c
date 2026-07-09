@@ -11,7 +11,7 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_slave.h"
 #include "mo_ecat/mo_ecat_pdo.h"
-#include "mo_ecat/soem_backend.h"
+#include "mo_ecat_backend.h"
 #include "mo_ecat_master_priv.h"
 #include "mo_ecat_master_states.h"
 
@@ -136,13 +136,7 @@ static int backend_create(const struct mo_ecat_backend_config *config,
     }
 
     memset(backend, 0, sizeof(*backend));
-
-    switch (config->type) {
-    case MO_ECAT_BACKEND_SOEM:
-        return mo_ecat_soem_backend_init(backend, &config->options.soem);
-    default:
-        return -1;
-    }
+    return mo_ecat_backend_init(backend, config);
 }
 
 static void backend_destroy(struct mo_ecat_backend *backend)

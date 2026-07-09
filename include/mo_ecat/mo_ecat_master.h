@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat/mo_ecat_backend_cfg.h"
 
 #ifdef __cplusplus
 extern "C" {

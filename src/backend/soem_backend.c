@@ -8,8 +8,8 @@
 #include <string.h>
 
 #include "soem/soem.h"
-#include "mo_ecat/soem_backend.h"
-#include "mo_ecat_master_priv.h"
+#include "mo_ecat/mo_ecat_backend_cfg.h"
+#include "mo_ecat_backend.h"
 
 struct soem_backend_ctx {
     ecx_contextt context;
@@ -443,10 +443,10 @@ static const struct mo_ecat_backend_ops soem_ops = {
     .close = soem_backend_close,
 };
 
-int mo_ecat_soem_backend_init(struct mo_ecat_backend *backend,
-                              const struct mo_ecat_soem_options *options)
+int mo_ecat_backend_init(struct mo_ecat_backend *backend,
+                         const struct mo_ecat_backend_config *config)
 {
-    if (!backend || !options) {
+    if (!backend || !config) {
         return -1;
     }
 
@@ -456,7 +456,7 @@ int mo_ecat_soem_backend_init(struct mo_ecat_backend *backend,
         return -1;
     }
 
-    ctx->capacity = options->process_image_capacity;
+    ctx->capacity = config->options.process_image_capacity;
 
     backend->ops = &soem_ops;
     backend->discovery_ops = NULL;       /* 简化版不实现在线发现 */

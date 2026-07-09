@@ -12,9 +12,18 @@ add_subdirectory(third_party/SOEM)
 set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_master.c
     src/mo_ecat_master_states.c
-    src/backend/soem_backend.c
     src/common/statemachine/statemachine.c
 )
+
+option(MO_ECAT_BACKEND_SOEM "Use SOEM backend" ON)
+
+if(MO_ECAT_BACKEND_SOEM)
+    list(APPEND MO_ECAT_CORE_SOURCES src/backend/soem_backend.c)
+endif()
+
+if(NOT MO_ECAT_BACKEND_SOEM)
+    message(FATAL_ERROR "At least one backend must be selected")
+endif()
 
 add_library(mo_ecat_core STATIC ${MO_ECAT_CORE_SOURCES})
 
