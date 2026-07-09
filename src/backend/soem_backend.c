@@ -19,6 +19,8 @@ struct soem_backend_ctx {
     int          opened;
 };
 
+static struct soem_backend_ctx s_soem_ctx;
+
 static struct soem_backend_ctx *soem_ctx(struct mo_ecat_backend *backend)
 {
     return (struct soem_backend_ctx *)backend->ctx;
@@ -406,7 +408,6 @@ static void soem_backend_close(struct mo_ecat_backend *backend)
         ctx->opened = 0;
     }
 
-    free(ctx);
     backend->ctx = NULL;
 }
 
@@ -428,11 +429,8 @@ int mo_ecat_backend_init(struct mo_ecat_backend *backend)
         return -1;
     }
 
-    struct soem_backend_ctx *ctx =
-        (struct soem_backend_ctx *)calloc(1, sizeof(struct soem_backend_ctx));
-    if (!ctx) {
-        return -1;
-    }
+    struct soem_backend_ctx *ctx = &s_soem_ctx;
+    memset(ctx, 0, sizeof(*ctx));
 
     backend->ops = &soem_ops;
     backend->discovery_ops = NULL;       /* 简化版不实现在线发现 */

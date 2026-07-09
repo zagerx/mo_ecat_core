@@ -254,21 +254,43 @@ struct mo_ecat_master *mo_ecat_master_create(
 
     pthread_mutex_lock(&master->lock);
 
-    if (mo_ecat_master_prepare_config(master, config, &master->backend) < 0) {
+    if (config_validate(config) < 0) {
         pthread_mutex_unlock(&master->lock);
         goto fail;
     }
+    master->config = config;
+
+    master->diag.count = config->slave_count;
+    master->pdo.count = count_pdo_refs(config);
+    if (master->pdo.count > 0) {
+        master->pdo.refs = (struct mo_ecat_pdo_ref *)calloc(
+            master->pdo.count, sizeof(struct mo_ecat_pdo_ref));
+        if (!master->pdo.refs) {
+            goto setup_fail;
+        }
+        build_pdo_refs(master, config);
+    }
+
+    master->diag.slaves = (struct mo_ecat_slave *)calloc(
+        master->diag.count, sizeof(struct mo_ecat_slave));
+    master->diag.states = (struct mo_ecat_slave_state *)calloc(
+        master->diag.count, sizeof(struct mo_ecat_slave_state));
+    if (master->diag.count > 0 && (!master->diag.slaves || !master->diag.states)) {
+        goto setup_fail;
+    }
 
     if (mo_ecat_master_backend_configure(master) < 0) {
-        mo_ecat_master_release_resources(master);
-        pthread_mutex_unlock(&master->lock);
-        goto fail;
+        goto setup_fail;
     }
 
     sm_transition_sync(&master->sm, mo_ecat_master_state_ready);
     pthread_mutex_unlock(&master->lock);
 
     return master;
+
+setup_fail:
+    mo_ecat_master_release_resources(master);
+    pthread_mutex_unlock(&master->lock);
 
 fail:
     pthread_mutex_destroy(&master->lock);
