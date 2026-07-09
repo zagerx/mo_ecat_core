@@ -8,13 +8,13 @@
 #include <string.h>
 
 #include "soem/soem.h"
-#include "mo_ecat/mo_ecat_backend_cfg.h"
 #include "mo_ecat_backend.h"
+
+#define MO_ECAT_SOEM_IOMAP_SIZE 2048
 
 struct soem_backend_ctx {
     ecx_contextt context;
-    size_t       capacity;
-    uint8_t     *iomap;
+    uint8_t      iomap[MO_ECAT_SOEM_IOMAP_SIZE];
     uint32_t     expected_wkc;
     int          opened;
 };
@@ -222,16 +222,11 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
         return -1;
     }
 
-    if (ctx->capacity == 0) {
-        fprintf(stderr, "SOEM backend: process_image_capacity is 0\n");
-        return -1;
-    }
-
     size_t estimated_size = soem_estimate_iomap_size_from_config(config);
-    if (estimated_size > ctx->capacity) {
+    if (estimated_size > MO_ECAT_SOEM_IOMAP_SIZE) {
         fprintf(stderr,
-                "SOEM backend: configured PDO size estimate %zu exceeds capacity %zu\n",
-                estimated_size, ctx->capacity);
+                "SOEM backend: configured PDO size estimate %zu exceeds fixed IOmap size %zu\n",
+                estimated_size, (size_t)MO_ECAT_SOEM_IOMAP_SIZE);
         return -1;
     }
 
@@ -246,21 +241,10 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
         return -1;
     }
 
-    /* 3. 分配 IOmap 内存 */
-    if (ctx->iomap) {
-        free(ctx->iomap);
-    }
-    ctx->iomap = (uint8_t *)malloc(ctx->capacity);
-    if (!ctx->iomap) {
-        return -1;
-    }
-
-    /* 4. 执行 PDO 映射 */
+    /* 3. 执行 PDO 映射 */
     int mapped_size = ecx_config_map_group(&ctx->context, ctx->iomap, 0);
-    if (mapped_size <= 0 || (size_t)mapped_size > ctx->capacity) {
-        fprintf(stderr, "SOEM backend: map failed or exceeds capacity\n");
-        free(ctx->iomap);
-        ctx->iomap = NULL;
+    if (mapped_size <= 0 || (size_t)mapped_size > MO_ECAT_SOEM_IOMAP_SIZE) {
+        fprintf(stderr, "SOEM backend: map failed or exceeds fixed IOmap size\n");
         return -1;
     }
 
@@ -422,11 +406,6 @@ static void soem_backend_close(struct mo_ecat_backend *backend)
         ctx->opened = 0;
     }
 
-    if (ctx->iomap) {
-        free(ctx->iomap);
-        ctx->iomap = NULL;
-    }
-
     free(ctx);
     backend->ctx = NULL;
 }
@@ -443,10 +422,9 @@ static const struct mo_ecat_backend_ops soem_ops = {
     .close = soem_backend_close,
 };
 
-int mo_ecat_backend_init(struct mo_ecat_backend *backend,
-                         const struct mo_ecat_backend_config *config)
+int mo_ecat_backend_init(struct mo_ecat_backend *backend)
 {
-    if (!backend || !config) {
+    if (!backend) {
         return -1;
     }
 
@@ -455,8 +433,6 @@ int mo_ecat_backend_init(struct mo_ecat_backend *backend,
     if (!ctx) {
         return -1;
     }
-
-    ctx->capacity = config->options.process_image_capacity;
 
     backend->ops = &soem_ops;
     backend->discovery_ops = NULL;       /* 简化版不实现在线发现 */

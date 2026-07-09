@@ -4,7 +4,6 @@
 #include <stddef.h>
 
 #include "mo_ecat/mo_ecat_types.h"
-#include "mo_ecat/mo_ecat_backend_cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,8 +65,7 @@ struct mo_ecat_backend {
 
 /* ==================== Backend 工厂 ==================== */
 
-int mo_ecat_backend_init(struct mo_ecat_backend *backend,
-                         const struct mo_ecat_backend_config *config);
+int mo_ecat_backend_init(struct mo_ecat_backend *backend);
 
 #ifdef __cplusplus
 }

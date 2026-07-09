@@ -4,7 +4,6 @@
 #include <stddef.h>
 
 #include "mo_ecat/mo_ecat_types.h"
-#include "mo_ecat/mo_ecat_backend_cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,12 +20,16 @@ struct mo_ecat_master;
  */
 
 /**
- * @brief 创建主站对象
+ * @brief 创建并配置主站对象
  *
- * 创建后主站处于 INIT 状态，需要由调用方周期性调用
- * mo_ecat_master_dispatch() 推进状态机。
+ * 创建主站对象的同时完成后端初始化与总线配置。成功后主站处于 READY
+ * 状态，调用者可直接提交激活命令。
+ *
+ * @param config 顶层配置
+ * @return 成功返回主站对象，失败返回 NULL
  */
-struct mo_ecat_master *mo_ecat_master_create(void);
+struct mo_ecat_master *mo_ecat_master_create(
+    const struct mo_ecat_config *config);
 
 /**
  * @brief 销毁主站对象
@@ -49,17 +52,14 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master);
  * 该函数只把 CONFIGURE 命令放入命令槽，实际配置工作由后续
  * mo_ecat_master_dispatch() 在 IDLE 状态执行。
  *
- * 核心层会根据 @p backend_config 创建并持有后端实例，调用者无需手动
- * 管理 backend 生命周期。
+ * 核心层会创建并持有后端实例，调用者无需手动管理 backend 生命周期。
  *
- * @param master         主站对象
- * @param config         顶层配置，命令执行前必须保持有效
- * @param backend_config 后端配置描述符，命令执行前必须保持有效
+ * @param master 主站对象
+ * @param config 顶层配置，命令执行前必须保持有效
  * @return 0 表示命令已接受，非 0 表示拒绝
  */
 int mo_ecat_master_configure(struct mo_ecat_master *master,
-                             const struct mo_ecat_config *config,
-                             const struct mo_ecat_backend_config *backend_config);
+                             const struct mo_ecat_config *config);
 
 /**
  * @brief 提交激活命令

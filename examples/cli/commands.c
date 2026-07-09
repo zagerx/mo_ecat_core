@@ -10,7 +10,6 @@
 #include "commands.h"
 #include "cli_state.h"
 #include "print.h"
-#include "mo_ecat/mo_ecat_backend_cfg.h"
 #include "mo_ecat/mo_ecat_master.h"
 
 void cmd_state(void)
@@ -26,11 +25,7 @@ void cmd_config(const char *ifname)
 	g_ifname_buf[sizeof(g_ifname_buf) - 1] = '\0';
 	g_config.interface_name = g_ifname_buf;
 
-	const struct mo_ecat_backend_config backend_config = {
-		.options = g_backend_options,
-	};
-
-	int rc = mo_ecat_master_configure(g_master, &g_config, &backend_config);
+	int rc = mo_ecat_master_configure(g_master, &g_config);
 	printf("configure('%s') submit: %d\n", g_ifname_buf, rc);
 }
 

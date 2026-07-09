@@ -21,14 +21,12 @@
 #include "threads.h"
 #include "commands.h"
 #include "mo_ecat/mo_ecat_types.h"
-#include "mo_ecat/mo_ecat_backend_cfg.h"
 #include "mo_ecat/mo_ecat_master.h"
 
 /* 全局状态定义，其他模块通过 cli_state.h 引用 */
 struct mo_ecat_master *g_master = NULL;
 volatile int g_running = 1;
 struct mo_ecat_config g_config = {0};
-struct mo_ecat_backend_options g_backend_options = {0};
 char g_ifname_buf[128] = {0};
 
 /** 默认从站 PDO 配置 */
@@ -93,14 +91,11 @@ int main(int argc, char *argv[])
 	g_config.slaves = s_slaves;
 	g_config.slave_count = 1;
 
-	/* 后端选项 */
-	g_backend_options.process_image_capacity = 4096;
-
 	printf("EtherCAT CLI test harness (decoupled backend)\n");
 	printf("Dispatch thread and cycle thread run automatically.\n");
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create();
+	g_master = mo_ecat_master_create(&g_config);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;

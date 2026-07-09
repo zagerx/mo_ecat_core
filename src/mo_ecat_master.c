@@ -128,15 +128,14 @@ static void config_free(struct mo_ecat_config *config)
     config->interface_name = NULL;
 }
 
-static int backend_create(const struct mo_ecat_backend_config *config,
-                          struct mo_ecat_backend *backend)
+static int backend_create(struct mo_ecat_backend *backend)
 {
-    if (!config || !backend) {
+    if (!backend) {
         return -1;
     }
 
     memset(backend, 0, sizeof(*backend));
-    return mo_ecat_backend_init(backend, config);
+    return mo_ecat_backend_init(backend);
 }
 
 static void backend_destroy(struct mo_ecat_backend *backend)
@@ -302,8 +301,13 @@ int mo_ecat_master_take_cycle_result(struct mo_ecat_master *master,
     return 1;
 }
 
-struct mo_ecat_master *mo_ecat_master_create(void)
+struct mo_ecat_master *mo_ecat_master_create(
+    const struct mo_ecat_config *config)
 {
+    if (!config) {
+        return NULL;
+    }
+
     struct mo_ecat_master *master =
         (struct mo_ecat_master *)calloc(1, sizeof(struct mo_ecat_master));
     if (!master) {
@@ -317,7 +321,34 @@ struct mo_ecat_master *mo_ecat_master_create(void)
 
     statemachine_init(&master->sm, master, mo_ecat_master_state_init);
 
+    struct mo_ecat_backend backend;
+    if (backend_create(&backend) < 0) {
+        goto fail;
+    }
+
+    pthread_mutex_lock(&master->lock);
+
+    if (mo_ecat_master_prepare_config(master, config, &backend) < 0) {
+        pthread_mutex_unlock(&master->lock);
+        backend_destroy(&backend);
+        goto fail;
+    }
+
+    if (mo_ecat_master_backend_configure(master) < 0) {
+        mo_ecat_master_release_resources(master);
+        pthread_mutex_unlock(&master->lock);
+        goto fail;
+    }
+
+    sm_transition_sync(&master->sm, mo_ecat_master_state_ready);
+    pthread_mutex_unlock(&master->lock);
+
     return master;
+
+fail:
+    pthread_mutex_destroy(&master->lock);
+    free(master);
+    return NULL;
 }
 
 void mo_ecat_master_destroy(struct mo_ecat_master *master)
@@ -374,17 +405,16 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master)
 }
 
 int mo_ecat_master_configure(struct mo_ecat_master *master,
-                             const struct mo_ecat_config *config,
-                             const struct mo_ecat_backend_config *backend_config)
+                             const struct mo_ecat_config *config)
 {
     int rc;
     struct mo_ecat_backend backend;
 
-    if (!master || !config || !backend_config) {
+    if (!master || !config) {
         return -1;
     }
 
-    if (backend_create(backend_config, &backend) < 0) {
+    if (backend_create(&backend) < 0) {
         return -1;
     }
 
