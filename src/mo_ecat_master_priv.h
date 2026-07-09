@@ -2,6 +2,7 @@
 #define MO_ECAT_MASTER_PRIV_H
 
 #include <stddef.h>
+#include <pthread.h>
 
 #include "mo_ecat/mo_ecat_types.h"
 #include "common/statemachine/statemachine.h"
@@ -37,6 +38,8 @@ struct mo_ecat_master {
 	int cycle_abnormal;
 	unsigned int consecutive_cycle_errors;
 	void *user_data;
+	struct mo_ecat_cycle_result last_result;
+	pthread_mutex_t lock;
 };
 
 int mo_ecat_master_prepare_config(struct mo_ecat_master *master,

@@ -5,11 +5,15 @@
 #include <unistd.h>
 #include <signal.h>
 #include <ctype.h>
+#include <pthread.h>
 
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/soem_backend.h"
 
 static volatile int g_running = 1;
+static pthread_t g_master_thread;
+
+static struct mo_ecat_master *g_master = NULL;
 
 static void signal_handler(int sig)
 {
@@ -17,40 +21,43 @@ static void signal_handler(int sig)
 	g_running = 0;
 }
 
-static void print_state(struct mo_ecat_master *master,
-			const struct mo_ecat_cycle_result *result)
+static const char *state_name(enum mo_ecat_master_state state)
 {
-	enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
-	const char *name = "UNKNOWN";
-
 	switch (state) {
-	case MO_ECAT_MASTER_STATE_INIT:      name = "INIT";      break;
-	case MO_ECAT_MASTER_STATE_IDLE:      name = "IDLE";      break;
-	case MO_ECAT_MASTER_STATE_READY:     name = "READY";     break;
-	case MO_ECAT_MASTER_STATE_RUNNING:   name = "RUNNING";   break;
-	case MO_ECAT_MASTER_STATE_DEGRADED:  name = "DEGRADED";  break;
-	case MO_ECAT_MASTER_STATE_FAULT:     name = "FAULT";     break;
+	case MO_ECAT_MASTER_STATE_INIT:     return "INIT";
+	case MO_ECAT_MASTER_STATE_IDLE:     return "IDLE";
+	case MO_ECAT_MASTER_STATE_READY:    return "READY";
+	case MO_ECAT_MASTER_STATE_RUNNING:  return "RUNNING";
+	case MO_ECAT_MASTER_STATE_DEGRADED: return "DEGRADED";
+	case MO_ECAT_MASTER_STATE_FAULT:    return "FAULT";
+	default:                            return "UNKNOWN";
 	}
+}
 
-	printf("state: %s (%d) | slaves: %zu | WKC: %u/%u | DC: %lld | diag: %d\n",
-	       name, state,
+static void print_state(struct mo_ecat_master *master)
+{
+	struct mo_ecat_cycle_result result = {0};
+	(void)mo_ecat_master_get_cycle_result(master, &result);
+
+	enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
+
+	printf("state: %s (%d) | slaves: %zu | WKC: %u/%u | DC: %lld | diag_required: %d\n",
+	       state_name(state), state,
 	       mo_ecat_master_get_slave_count(master),
-	       result->actual_wkc, result->expected_wkc,
-	       (long long)result->dc_time_ns,
-	       result->diagnostics_required);
+	       result.actual_wkc, result.expected_wkc,
+	       (long long)result.dc_time_ns,
+	       result.diagnostics_required);
 }
 
 static void print_help(void)
 {
 	printf("Commands:\n"
 	       "  help                show this help\n"
-	       "  state               print master state\n"
-	       "  dispatch            call mo_ecat_master_dispatch() once\n"
+	       "  state               print master state and last cycle result\n"
 	       "  config <ifname>     submit CONFIGURE command\n"
 	       "  activate            submit ACTIVATE command\n"
 	       "  deactivate          submit DEACTIVATE command\n"
 	       "  reset               submit RESET command\n"
-	       "  cycle               call cycle_begin() + cycle_end() once\n"
 	       "  diag                call read_diagnostics() and print slave states\n"
 	       "  pdo <idx>           print PDO ref info\n"
 	       "  exit                quit\n");
@@ -110,6 +117,27 @@ static void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
 	}
 }
 
+static void *master_thread_routine(void *arg)
+{
+	(void)arg;
+
+	while (g_running) {
+		mo_ecat_master_dispatch(g_master);
+
+		enum mo_ecat_master_state state = mo_ecat_master_get_state(g_master);
+		if (state == MO_ECAT_MASTER_STATE_RUNNING ||
+		    state == MO_ECAT_MASTER_STATE_DEGRADED) {
+			struct mo_ecat_cycle_result result = {0};
+			mo_ecat_master_cycle_begin(g_master, &result);
+			mo_ecat_master_cycle_end(g_master, &result);
+		}
+
+		usleep(1000);
+	}
+
+	return NULL;
+}
+
 int main(int argc, char *argv[])
 {
 	const char *default_ifname = (argc > 1) ? argv[1] : "eth0";
@@ -118,6 +146,7 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_handler);
 
 	printf("EtherCAT CLI test harness (decoupled backend)\n");
+	printf("Master thread runs dispatch + cycle automatically.\n");
 	printf("Type 'help' for commands.\n");
 
 	struct mo_ecat_pdo_entry_config slave0_pdos[] = {
@@ -138,15 +167,15 @@ int main(int argc, char *argv[])
 		},
 	};
 
-	struct mo_ecat_config config = {
-		.interface_name = default_ifname,
-		.slaves = slaves,
-		.slave_count = 1,
-	};
-
 	static char ifname_buf[128];
 	strncpy(ifname_buf, default_ifname, sizeof(ifname_buf) - 1);
 	ifname_buf[sizeof(ifname_buf) - 1] = '\0';
+
+	struct mo_ecat_config config = {
+		.interface_name = ifname_buf,
+		.slaves = slaves,
+		.slave_count = 1,
+	};
 
 	struct mo_ecat_soem_options soem_options = {
 		.process_image_capacity = 4096,
@@ -155,13 +184,18 @@ int main(int argc, char *argv[])
 	struct mo_ecat_backend backend;
 	memset(&backend, 0, sizeof(backend));
 
-	struct mo_ecat_master *master = mo_ecat_master_create();
-	if (!master) {
+	g_master = mo_ecat_master_create();
+	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;
 	}
 
-	struct mo_ecat_cycle_result result = {0};
+	if (pthread_create(&g_master_thread, NULL, master_thread_routine, NULL) != 0) {
+		fprintf(stderr, "Failed to create master thread\n");
+		mo_ecat_master_destroy(g_master);
+		return -1;
+	}
+
 	char line[256];
 
 	while (g_running) {
@@ -172,10 +206,8 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		/* strip trailing newline */
 		line[strcspn(line, "\n")] = '\0';
 
-		/* skip leading spaces */
 		char *p = line;
 		while (isspace((unsigned char)*p)) {
 			++p;
@@ -191,10 +223,7 @@ int main(int argc, char *argv[])
 		if (strcmp(cmd, "help") == 0 || strcmp(cmd, "h") == 0) {
 			print_help();
 		} else if (strcmp(cmd, "state") == 0 || strcmp(cmd, "status") == 0) {
-			print_state(master, &result);
-		} else if (strcmp(cmd, "dispatch") == 0 || strcmp(cmd, "d") == 0) {
-			mo_ecat_master_dispatch(master);
-			print_state(master, &result);
+			print_state(g_master);
 		} else if (strcmp(cmd, "config") == 0) {
 			const char *ifname = (arg[0] != '\0') ? arg : default_ifname;
 			strncpy(ifname_buf, ifname, sizeof(ifname_buf) - 1);
@@ -212,30 +241,25 @@ int main(int argc, char *argv[])
 				continue;
 			}
 
-			int rc = mo_ecat_master_configure(master, &config, &backend);
+			int rc = mo_ecat_master_configure(g_master, &config, &backend);
 			printf("configure('%s') submit: %d\n", ifname_buf, rc);
 		} else if (strcmp(cmd, "activate") == 0) {
-			int rc = mo_ecat_master_activate(master);
+			int rc = mo_ecat_master_activate(g_master);
 			printf("activate submit: %d\n", rc);
 		} else if (strcmp(cmd, "deactivate") == 0) {
-			int rc = mo_ecat_master_deactivate(master);
+			int rc = mo_ecat_master_deactivate(g_master);
 			printf("deactivate submit: %d\n", rc);
 		} else if (strcmp(cmd, "reset") == 0) {
-			int rc = mo_ecat_master_reset(master);
+			int rc = mo_ecat_master_reset(g_master);
 			printf("reset submit: %d\n", rc);
-		} else if (strcmp(cmd, "cycle") == 0 || strcmp(cmd, "c") == 0) {
-			int rc1 = mo_ecat_master_cycle_begin(master, &result);
-			int rc2 = mo_ecat_master_cycle_end(master, &result);
-			printf("cycle: begin=%d, end=%d\n", rc1, rc2);
-			print_state(master, &result);
 		} else if (strcmp(cmd, "diag") == 0) {
-			print_diagnostics(master);
+			print_diagnostics(g_master);
 		} else if (strcmp(cmd, "pdo") == 0) {
 			if (arg[0] == '\0') {
 				printf("usage: pdo <idx>\n");
 				continue;
 			}
-			print_pdo_ref(master, (size_t)atoi(arg));
+			print_pdo_ref(g_master, (size_t)atoi(arg));
 		} else if (strcmp(cmd, "exit") == 0 || strcmp(cmd, "quit") == 0) {
 			break;
 		} else {
@@ -244,7 +268,9 @@ int main(int argc, char *argv[])
 	}
 
 	printf("\nStopping...\n");
-	mo_ecat_master_destroy(master);
+	g_running = 0;
+	pthread_join(g_master_thread, NULL);
+	mo_ecat_master_destroy(g_master);
 
 	return 0;
 }

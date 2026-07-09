@@ -113,6 +113,12 @@ const struct mo_ecat_pdo_ref *mo_ecat_master_get_pdo_ref(
     const struct mo_ecat_master *master, size_t index);
 
 /**
+ * @brief 获取最近一次周期结果
+ */
+int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
+                                    struct mo_ecat_cycle_result *result);
+
+/**
  * @brief 获取过程数据区指针与大小
  */
 int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,

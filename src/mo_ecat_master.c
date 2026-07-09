@@ -248,6 +248,11 @@ struct mo_ecat_master *mo_ecat_master_create(void)
         return NULL;
     }
 
+    if (pthread_mutex_init(&master->lock, NULL) != 0) {
+        free(master);
+        return NULL;
+    }
+
     statemachine_init(&master->sm, master, mo_ecat_master_state_init);
 
     return master;
@@ -259,6 +264,8 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
         return;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (master_cycle_state_allows_io(master->state)) {
         (void)mo_ecat_master_backend_deactivate(master);
     }
@@ -267,51 +274,71 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
         mo_ecat_master_release_resources(master);
     }
 
+    pthread_mutex_unlock(&master->lock);
+    pthread_mutex_destroy(&master->lock);
+
     free(master);
 }
 
 int mo_ecat_master_reset(struct mo_ecat_master *master)
 {
+    int rc;
+
     if (!master) {
         return -1;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (master->state == MO_ECAT_MASTER_STATE_IDLE) {
+        pthread_mutex_unlock(&master->lock);
         return 0;
     }
 
-    return master_submit_command(master, MO_ECAT_MASTER_CMD_RESET);
+    rc = master_submit_command(master, MO_ECAT_MASTER_CMD_RESET);
+    pthread_mutex_unlock(&master->lock);
+    return rc;
 }
 
 void mo_ecat_master_dispatch(struct mo_ecat_master *master)
 {
-    if (master) {
-        sm_dispatch(&master->sm);
+    if (!master) {
+        return;
     }
+
+    pthread_mutex_lock(&master->lock);
+    sm_dispatch(&master->sm);
+    pthread_mutex_unlock(&master->lock);
 }
 
 int mo_ecat_master_configure(struct mo_ecat_master *master,
                              const struct mo_ecat_config *config,
                              struct mo_ecat_backend *backend)
 {
+    int rc;
+
     if (!master || !config || !backend) {
         return -1;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (master->command_pending) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
     master->pending_config = config;
     master->pending_backend = backend;
 
-    if (master_submit_command(master, MO_ECAT_MASTER_CMD_CONFIGURE) < 0) {
+    rc = master_submit_command(master, MO_ECAT_MASTER_CMD_CONFIGURE);
+    if (rc < 0) {
         master->pending_config = NULL;
         master->pending_backend = NULL;
-        return -1;
     }
 
-    return 0;
+    pthread_mutex_unlock(&master->lock);
+    return rc;
 }
 
 int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
@@ -405,15 +432,22 @@ int mo_ecat_master_backend_configure(struct mo_ecat_master *master)
 
 int mo_ecat_master_activate(struct mo_ecat_master *master)
 {
+    int rc;
+
     if (!master) {
         return -1;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (master->state != MO_ECAT_MASTER_STATE_READY) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    return master_submit_command(master, MO_ECAT_MASTER_CMD_ACTIVATE);
+    rc = master_submit_command(master, MO_ECAT_MASTER_CMD_ACTIVATE);
+    pthread_mutex_unlock(&master->lock);
+    return rc;
 }
 
 int mo_ecat_master_backend_activate(struct mo_ecat_master *master)
@@ -431,15 +465,22 @@ int mo_ecat_master_backend_activate(struct mo_ecat_master *master)
 
 int mo_ecat_master_deactivate(struct mo_ecat_master *master)
 {
+    int rc;
+
     if (!master) {
         return -1;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (!master_cycle_state_allows_io(master->state)) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    return master_submit_command(master, MO_ECAT_MASTER_CMD_DEACTIVATE);
+    rc = master_submit_command(master, MO_ECAT_MASTER_CMD_DEACTIVATE);
+    pthread_mutex_unlock(&master->lock);
+    return rc;
 }
 
 int mo_ecat_master_backend_deactivate(struct mo_ecat_master *master)
@@ -458,70 +499,90 @@ int mo_ecat_master_backend_deactivate(struct mo_ecat_master *master)
 int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
                                struct mo_ecat_cycle_result *result)
 {
+    int rc;
+
     if (!master || !result) {
         return -1;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (!master_cycle_state_allows_io(master->state)) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
     memset(result, 0, sizeof(*result));
 
     if (!master->backend.ops || !master->backend.ops->cycle_begin) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    int rc = master->backend.ops->cycle_begin(&master->backend, result);
+    rc = master->backend.ops->cycle_begin(&master->backend, result);
     master_handle_cycle_result(master, rc, result);
-    if (rc < 0) {
-        return rc;
-    }
-
-    return 0;
+    pthread_mutex_unlock(&master->lock);
+    return rc;
 }
 
 int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
                              struct mo_ecat_cycle_result *result)
 {
+    int rc;
+
     if (!master || !result) {
         return -1;
     }
 
+    pthread_mutex_lock(&master->lock);
+
     if (!master_cycle_state_allows_io(master->state)) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
     if (!master->backend.ops || !master->backend.ops->cycle_end) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    int rc = master->backend.ops->cycle_end(&master->backend, result);
+    rc = master->backend.ops->cycle_end(&master->backend, result);
     master_handle_cycle_result(master, rc, result);
+    if (rc == 0) {
+        master->last_result = *result;
+    }
+    pthread_mutex_unlock(&master->lock);
     return rc;
 }
 
 int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
 {
+    int rc;
+
     if (!master) {
         return -1;
     }
+
+    pthread_mutex_lock(&master->lock);
 
     if (master->state != MO_ECAT_MASTER_STATE_READY &&
         master->state != MO_ECAT_MASTER_STATE_RUNNING &&
         master->state != MO_ECAT_MASTER_STATE_DEGRADED &&
         master->state != MO_ECAT_MASTER_STATE_FAULT) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
     if (!master->backend.ops || !master->backend.ops->read_diagnostics) {
+        pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    int rc = master->backend.ops->read_diagnostics(&master->backend,
-                                                   master->diagnostics,
-                                                   master->config.slave_count);
+    rc = master->backend.ops->read_diagnostics(&master->backend,
+                                               master->diagnostics,
+                                               master->config.slave_count);
     if (rc < 0) {
+        pthread_mutex_unlock(&master->lock);
         return rc;
     }
 
@@ -529,41 +590,102 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
         master->slaves[i].state = master->diagnostics[i];
     }
 
+    pthread_mutex_unlock(&master->lock);
     return 0;
 }
 
 enum mo_ecat_master_state mo_ecat_master_get_state(
     const struct mo_ecat_master *master)
 {
-    return master ? master->state : MO_ECAT_MASTER_STATE_INIT;
+    enum mo_ecat_master_state state;
+
+    if (!master) {
+        return MO_ECAT_MASTER_STATE_INIT;
+    }
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    state = master->state;
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return state;
 }
 
 size_t mo_ecat_master_get_slave_count(const struct mo_ecat_master *master)
 {
-    return master ? master->config.slave_count : 0;
+    size_t count;
+
+    if (!master) {
+        return 0;
+    }
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    count = master->config.slave_count;
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return count;
 }
 
 const struct mo_ecat_slave *mo_ecat_master_get_slave(
     const struct mo_ecat_master *master, size_t index)
 {
-    if (!master || index >= master->config.slave_count) {
+    const struct mo_ecat_slave *slave;
+
+    if (!master) {
         return NULL;
     }
-    return &master->slaves[index];
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    if (index >= master->config.slave_count) {
+        pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+        return NULL;
+    }
+    slave = &master->slaves[index];
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return slave;
 }
 
 size_t mo_ecat_master_get_pdo_ref_count(const struct mo_ecat_master *master)
 {
-    return master ? master->pdo_ref_count : 0;
+    size_t count;
+
+    if (!master) {
+        return 0;
+    }
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    count = master->pdo_ref_count;
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return count;
 }
 
 const struct mo_ecat_pdo_ref *mo_ecat_master_get_pdo_ref(
     const struct mo_ecat_master *master, size_t index)
 {
-    if (!master || index >= master->pdo_ref_count) {
+    const struct mo_ecat_pdo_ref *ref;
+
+    if (!master) {
         return NULL;
     }
-    return &master->pdo_refs[index];
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    if (index >= master->pdo_ref_count) {
+        pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+        return NULL;
+    }
+    ref = &master->pdo_refs[index];
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return ref;
+}
+
+int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
+                                    struct mo_ecat_cycle_result *result)
+{
+    if (!master || !result) {
+        return -1;
+    }
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    *result = master->last_result;
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return 0;
 }
 
 int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,
@@ -574,64 +696,89 @@ int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,
         return -1;
     }
 
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+
     if (master->state != MO_ECAT_MASTER_STATE_READY &&
         master->state != MO_ECAT_MASTER_STATE_RUNNING &&
         master->state != MO_ECAT_MASTER_STATE_DEGRADED) {
+        pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
         return -1;
     }
 
     *memory = master->image.memory;
     *size   = master->image.size;
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return 0;
 }
 
 const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
                               const struct mo_ecat_pdo_ref *ref)
 {
+    const void *p;
+
     if (!master || !ref) {
         return NULL;
     }
 
-    if (ref->direction != MO_ECAT_PDO_INPUT) {
-        return NULL;
-    }
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 
-    if (ref->generation != master->image.generation ||
+    if (ref->direction != MO_ECAT_PDO_INPUT ||
+        ref->generation != master->image.generation ||
         !pdo_ref_in_bounds(&master->image, ref)) {
+        pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
         return NULL;
     }
 
-    return &master->image.memory[ref->byte_offset];
+    p = &master->image.memory[ref->byte_offset];
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return p;
 }
 
 void *mo_ecat_pdo_output(struct mo_ecat_master *master,
                          const struct mo_ecat_pdo_ref *ref)
 {
+    void *p;
+
     if (!master || !ref) {
         return NULL;
     }
 
-    if (ref->direction != MO_ECAT_PDO_OUTPUT) {
-        return NULL;
-    }
+    pthread_mutex_lock(&master->lock);
 
-    if (ref->generation != master->image.generation ||
+    if (ref->direction != MO_ECAT_PDO_OUTPUT ||
+        ref->generation != master->image.generation ||
         !pdo_ref_in_bounds(&master->image, ref)) {
+        pthread_mutex_unlock(&master->lock);
         return NULL;
     }
 
-    return &master->image.memory[ref->byte_offset];
+    p = &master->image.memory[ref->byte_offset];
+    pthread_mutex_unlock(&master->lock);
+    return p;
 }
 
 void mo_ecat_master_set_user_data(struct mo_ecat_master *master,
                                   void *user_data)
 {
-    if (master) {
-        master->user_data = user_data;
+    if (!master) {
+        return;
     }
+
+    pthread_mutex_lock(&master->lock);
+    master->user_data = user_data;
+    pthread_mutex_unlock(&master->lock);
 }
 
 void *mo_ecat_master_get_user_data(const struct mo_ecat_master *master)
 {
-    return master ? master->user_data : NULL;
+    void *user_data;
+
+    if (!master) {
+        return NULL;
+    }
+
+    pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+    user_data = master->user_data;
+    pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+    return user_data;
 }
