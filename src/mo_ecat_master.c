@@ -8,6 +8,9 @@
 #include <string.h>
 
 #include "mo_ecat/mo_ecat_master.h"
+#include "mo_ecat/mo_ecat_master_state.h"
+#include "mo_ecat/mo_ecat_slave.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat_master_priv.h"
 #include "mo_ecat_master_states.h"
 
@@ -109,7 +112,7 @@ static void build_pdo_refs(struct mo_ecat_master *master,
     for (size_t i = 0; i < config->slave_count; ++i) {
         const struct mo_ecat_slave_config *slave = &config->slaves[i];
         for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
-            struct mo_ecat_pdo_ref *ref = &master->pdo_refs[idx++];
+            struct mo_ecat_pdo_ref *ref = &master->pdo.refs[idx++];
             const struct mo_ecat_pdo_entry_config *entry = &slave->pdo_entries[j];
 
             ref->slave_index  = i;
@@ -134,13 +137,13 @@ static int master_submit_command(struct mo_ecat_master *master,
                                  enum mo_ecat_master_command command)
 {
     if (!master || command == MO_ECAT_MASTER_CMD_NONE ||
-        master->command_pending) {
+        master->cmd.pending) {
         return -1;
     }
 
-    master->command = command;
-    master->command_pending = 1;
-    master->command_result = 0;
+    master->cmd.id = command;
+    master->cmd.pending = 1;
+    master->cmd.result = 0;
     return 0;
 }
 
@@ -150,14 +153,14 @@ void mo_ecat_master_clear_command(struct mo_ecat_master *master, int result)
         return;
     }
 
-    if (master->command == MO_ECAT_MASTER_CMD_CONFIGURE) {
-        master->pending_config = NULL;
-        master->pending_backend = NULL;
+    if (master->cmd.id == MO_ECAT_MASTER_CMD_CONFIGURE) {
+        master->cmd.pending_config = NULL;
+        master->cmd.pending_backend = NULL;
     }
 
-    master->command = MO_ECAT_MASTER_CMD_NONE;
-    master->command_pending = 0;
-    master->command_result = result;
+    master->cmd.id = MO_ECAT_MASTER_CMD_NONE;
+    master->cmd.pending = 0;
+    master->cmd.result = result;
 }
 
 void mo_ecat_master_release_resources(struct mo_ecat_master *master)
@@ -166,24 +169,25 @@ void mo_ecat_master_release_resources(struct mo_ecat_master *master)
         return;
     }
 
-    if (master->backend.ops && master->backend.ops->close) {
-        master->backend.ops->close(&master->backend);
+    if (master->rt.backend.ops && master->rt.backend.ops->close) {
+        master->rt.backend.ops->close(&master->rt.backend);
     }
 
-    config_free(&master->config);
-    free(master->slaves);
-    free(master->diagnostics);
-    free(master->pdo_refs);
+    config_free(&master->rt.config);
+    free(master->diag.slaves);
+    free(master->diag.states);
+    free(master->pdo.refs);
 
-    memset(&master->backend, 0, sizeof(master->backend));
-    memset(&master->image, 0, sizeof(master->image));
-    master->slaves = NULL;
-    master->diagnostics = NULL;
-    master->pdo_refs = NULL;
-    master->pdo_ref_count = 0;
-    master->cycle_result_pending = 0;
-    master->cycle_abnormal = 0;
-    master->consecutive_cycle_errors = 0;
+    memset(&master->rt.backend, 0, sizeof(master->rt.backend));
+    memset(&master->rt.image, 0, sizeof(master->rt.image));
+    master->diag.slaves = NULL;
+    master->diag.states = NULL;
+    master->diag.count = 0;
+    master->pdo.refs = NULL;
+    master->pdo.count = 0;
+    master->cycle.result_pending = 0;
+    master->cycle.abnormal = 0;
+    master->cycle.consecutive_errors = 0;
 }
 
 static int pdo_ref_in_bounds(const struct mo_ecat_process_image *image,
@@ -223,20 +227,20 @@ static void master_handle_cycle_result(struct mo_ecat_master *master,
         }
     }
 
-    master->cycle_result_pending = 1;
-    master->cycle_abnormal = master->cycle_abnormal || abnormal;
+    master->cycle.result_pending = 1;
+    master->cycle.abnormal = master->cycle.abnormal || abnormal;
 }
 
 int mo_ecat_master_take_cycle_result(struct mo_ecat_master *master,
                                      int *abnormal)
 {
-    if (!master || !abnormal || !master->cycle_result_pending) {
+    if (!master || !abnormal || !master->cycle.result_pending) {
         return 0;
     }
 
-    *abnormal = master->cycle_abnormal;
-    master->cycle_result_pending = 0;
-    master->cycle_abnormal = 0;
+    *abnormal = master->cycle.abnormal;
+    master->cycle.result_pending = 0;
+    master->cycle.abnormal = 0;
     return 1;
 }
 
@@ -323,18 +327,18 @@ int mo_ecat_master_configure(struct mo_ecat_master *master,
 
     pthread_mutex_lock(&master->lock);
 
-    if (master->command_pending) {
+    if (master->cmd.pending) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    master->pending_config = config;
-    master->pending_backend = backend;
+    master->cmd.pending_config = config;
+    master->cmd.pending_backend = backend;
 
     rc = master_submit_command(master, MO_ECAT_MASTER_CMD_CONFIGURE);
     if (rc < 0) {
-        master->pending_config = NULL;
-        master->pending_backend = NULL;
+        master->cmd.pending_config = NULL;
+        master->cmd.pending_backend = NULL;
     }
 
     pthread_mutex_unlock(&master->lock);
@@ -355,30 +359,31 @@ int mo_ecat_master_prepare_config(struct mo_ecat_master *master,
 
     mo_ecat_master_release_resources(master);
 
-    if (config_copy(&master->config, config) < 0) {
+    if (config_copy(&master->rt.config, config) < 0) {
         goto fail;
     }
 
-    master->pdo_ref_count = count_pdo_refs(config);
-    if (master->pdo_ref_count > 0) {
-        master->pdo_refs = (struct mo_ecat_pdo_ref *)calloc(
-            master->pdo_ref_count, sizeof(struct mo_ecat_pdo_ref));
-        if (!master->pdo_refs) {
+    master->diag.count = config->slave_count;
+    master->pdo.count = count_pdo_refs(config);
+    if (master->pdo.count > 0) {
+        master->pdo.refs = (struct mo_ecat_pdo_ref *)calloc(
+            master->pdo.count, sizeof(struct mo_ecat_pdo_ref));
+        if (!master->pdo.refs) {
             goto fail;
         }
         build_pdo_refs(master, config);
     }
 
-    master->slaves = (struct mo_ecat_slave *)calloc(
-        config->slave_count, sizeof(struct mo_ecat_slave));
-    master->diagnostics = (struct mo_ecat_slave_state *)calloc(
-        config->slave_count, sizeof(struct mo_ecat_slave_state));
-    if (config->slave_count > 0 && (!master->slaves || !master->diagnostics)) {
+    master->diag.slaves = (struct mo_ecat_slave *)calloc(
+        master->diag.count, sizeof(struct mo_ecat_slave));
+    master->diag.states = (struct mo_ecat_slave_state *)calloc(
+        master->diag.count, sizeof(struct mo_ecat_slave_state));
+    if (master->diag.count > 0 && (!master->diag.slaves || !master->diag.states)) {
         goto fail;
     }
 
     /* 复制后端实例 */
-    memcpy(&master->backend, backend, sizeof(struct mo_ecat_backend));
+    memcpy(&master->rt.backend, backend, sizeof(struct mo_ecat_backend));
 
     return 0;
 
@@ -389,41 +394,41 @@ fail:
 
 int mo_ecat_master_backend_configure(struct mo_ecat_master *master)
 {
-    if (!master || !master->backend.ops || !master->backend.ops->open ||
-        !master->backend.ops->configure) {
+    if (!master || !master->rt.backend.ops || !master->rt.backend.ops->open ||
+        !master->rt.backend.ops->configure) {
         return -1;
     }
 
-    int rc = master->backend.ops->open(&master->backend, &master->config);
+    int rc = master->rt.backend.ops->open(&master->rt.backend, &master->rt.config);
     if (rc < 0) {
         return rc;
     }
 
-    rc = master->backend.ops->configure(&master->backend,
-                                        &master->config,
-                                        &master->image,
-                                        master->pdo_refs,
-                                        master->pdo_ref_count,
-                                        master->slaves,
-                                        master->config.slave_count);
+    rc = master->rt.backend.ops->configure(&master->rt.backend,
+                                        &master->rt.config,
+                                        &master->rt.image,
+                                        master->pdo.refs,
+                                        master->pdo.count,
+                                        master->diag.slaves,
+                                        master->diag.count);
     if (rc < 0) {
         return rc;
     }
 
     /* 后端已填充 PDO refs 的 generation，未填充的统一刷一次 */
-    for (size_t i = 0; i < master->pdo_ref_count; ++i) {
-        if (master->pdo_refs[i].generation == 0) {
-            master->pdo_refs[i].generation = master->image.generation;
+    for (size_t i = 0; i < master->pdo.count; ++i) {
+        if (master->pdo.refs[i].generation == 0) {
+            master->pdo.refs[i].generation = master->rt.image.generation;
         }
     }
 
     /* 刷新从站诊断状态 */
-    if (master->backend.ops->read_diagnostics) {
-        master->backend.ops->read_diagnostics(&master->backend,
-                                              master->diagnostics,
-                                              master->config.slave_count);
-        for (size_t i = 0; i < master->config.slave_count; ++i) {
-            master->slaves[i].state = master->diagnostics[i];
+    if (master->rt.backend.ops->read_diagnostics) {
+        master->rt.backend.ops->read_diagnostics(&master->rt.backend,
+                                              master->diag.states,
+                                              master->diag.count);
+        for (size_t i = 0; i < master->diag.count; ++i) {
+            master->diag.slaves[i].state = master->diag.states[i];
         }
     }
 
@@ -456,8 +461,8 @@ int mo_ecat_master_backend_activate(struct mo_ecat_master *master)
         return -1;
     }
 
-    if (master->backend.ops && master->backend.ops->activate) {
-        return master->backend.ops->activate(&master->backend);
+    if (master->rt.backend.ops && master->rt.backend.ops->activate) {
+        return master->rt.backend.ops->activate(&master->rt.backend);
     }
 
     return 0;
@@ -489,8 +494,8 @@ int mo_ecat_master_backend_deactivate(struct mo_ecat_master *master)
         return -1;
     }
 
-    if (master->backend.ops && master->backend.ops->deactivate) {
-        return master->backend.ops->deactivate(&master->backend);
+    if (master->rt.backend.ops && master->rt.backend.ops->deactivate) {
+        return master->rt.backend.ops->deactivate(&master->rt.backend);
     }
 
     return 0;
@@ -514,12 +519,12 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
 
     memset(result, 0, sizeof(*result));
 
-    if (!master->backend.ops || !master->backend.ops->cycle_begin) {
+    if (!master->rt.backend.ops || !master->rt.backend.ops->cycle_begin) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    rc = master->backend.ops->cycle_begin(&master->backend, result);
+    rc = master->rt.backend.ops->cycle_begin(&master->rt.backend, result);
     master_handle_cycle_result(master, rc, result);
     pthread_mutex_unlock(&master->lock);
     return rc;
@@ -541,15 +546,15 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
         return -1;
     }
 
-    if (!master->backend.ops || !master->backend.ops->cycle_end) {
+    if (!master->rt.backend.ops || !master->rt.backend.ops->cycle_end) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    rc = master->backend.ops->cycle_end(&master->backend, result);
+    rc = master->rt.backend.ops->cycle_end(&master->rt.backend, result);
     master_handle_cycle_result(master, rc, result);
     if (rc == 0) {
-        master->last_result = *result;
+        master->cycle.last = *result;
     }
     pthread_mutex_unlock(&master->lock);
     return rc;
@@ -573,21 +578,21 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
         return -1;
     }
 
-    if (!master->backend.ops || !master->backend.ops->read_diagnostics) {
+    if (!master->rt.backend.ops || !master->rt.backend.ops->read_diagnostics) {
         pthread_mutex_unlock(&master->lock);
         return -1;
     }
 
-    rc = master->backend.ops->read_diagnostics(&master->backend,
-                                               master->diagnostics,
-                                               master->config.slave_count);
+    rc = master->rt.backend.ops->read_diagnostics(&master->rt.backend,
+                                               master->diag.states,
+                                               master->diag.count);
     if (rc < 0) {
         pthread_mutex_unlock(&master->lock);
         return rc;
     }
 
-    for (size_t i = 0; i < master->config.slave_count; ++i) {
-        master->slaves[i].state = master->diagnostics[i];
+    for (size_t i = 0; i < master->diag.count; ++i) {
+        master->diag.slaves[i].state = master->diag.states[i];
     }
 
     pthread_mutex_unlock(&master->lock);
@@ -618,7 +623,7 @@ size_t mo_ecat_master_get_slave_count(const struct mo_ecat_master *master)
     }
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-    count = master->config.slave_count;
+    count = master->diag.count;
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return count;
 }
@@ -633,11 +638,11 @@ const struct mo_ecat_slave *mo_ecat_master_get_slave(
     }
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-    if (index >= master->config.slave_count) {
+    if (index >= master->diag.count) {
         pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
         return NULL;
     }
-    slave = &master->slaves[index];
+    slave = &master->diag.slaves[index];
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return slave;
 }
@@ -651,7 +656,7 @@ size_t mo_ecat_master_get_pdo_ref_count(const struct mo_ecat_master *master)
     }
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-    count = master->pdo_ref_count;
+    count = master->pdo.count;
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return count;
 }
@@ -666,11 +671,11 @@ const struct mo_ecat_pdo_ref *mo_ecat_master_get_pdo_ref(
     }
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-    if (index >= master->pdo_ref_count) {
+    if (index >= master->pdo.count) {
         pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
         return NULL;
     }
-    ref = &master->pdo_refs[index];
+    ref = &master->pdo.refs[index];
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return ref;
 }
@@ -683,7 +688,7 @@ int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
     }
 
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-    *result = master->last_result;
+    *result = master->cycle.last;
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return 0;
 }
@@ -705,8 +710,8 @@ int mo_ecat_master_get_process_image(const struct mo_ecat_master *master,
         return -1;
     }
 
-    *memory = master->image.memory;
-    *size   = master->image.size;
+    *memory = master->rt.image.memory;
+    *size   = master->rt.image.size;
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return 0;
 }
@@ -723,13 +728,13 @@ const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
     pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 
     if (ref->direction != MO_ECAT_PDO_INPUT ||
-        ref->generation != master->image.generation ||
-        !pdo_ref_in_bounds(&master->image, ref)) {
+        ref->generation != master->rt.image.generation ||
+        !pdo_ref_in_bounds(&master->rt.image, ref)) {
         pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
         return NULL;
     }
 
-    p = &master->image.memory[ref->byte_offset];
+    p = &master->rt.image.memory[ref->byte_offset];
     pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
     return p;
 }
@@ -746,13 +751,13 @@ void *mo_ecat_pdo_output(struct mo_ecat_master *master,
     pthread_mutex_lock(&master->lock);
 
     if (ref->direction != MO_ECAT_PDO_OUTPUT ||
-        ref->generation != master->image.generation ||
-        !pdo_ref_in_bounds(&master->image, ref)) {
+        ref->generation != master->rt.image.generation ||
+        !pdo_ref_in_bounds(&master->rt.image, ref)) {
         pthread_mutex_unlock(&master->lock);
         return NULL;
     }
 
-    p = &master->image.memory[ref->byte_offset];
+    p = &master->rt.image.memory[ref->byte_offset];
     pthread_mutex_unlock(&master->lock);
     return p;
 }

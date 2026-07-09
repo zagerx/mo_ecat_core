@@ -17,12 +17,12 @@ static struct mo_ecat_master *master_from_sm(struct statemachine *sm)
 static int master_command_is(struct mo_ecat_master *master,
 			     enum mo_ecat_master_command command)
 {
-	return master && master->command_pending && master->command == command;
+	return master && master->cmd.pending && master->cmd.id == command;
 }
 
 static void master_reject_command(struct mo_ecat_master *master)
 {
-	if (master && master->command_pending) {
+	if (master && master->cmd.pending) {
 		mo_ecat_master_clear_command(master, -1);
 	}
 }
@@ -44,8 +44,8 @@ void mo_ecat_master_state_init(struct statemachine *sm)
 	case ENTER:
 		if (master) {
 			master->state = MO_ECAT_MASTER_STATE_INIT;
-			master->cycle_result_pending = 0;
-			master->cycle_abnormal = 0;
+			master->cycle.result_pending = 0;
+			master->cycle.abnormal = 0;
 		}
 		sm->count = 0;
 		sm->phase = CHECK_INITIALIZED;
@@ -87,15 +87,15 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 	case ENTER:
 		if (master) {
 			master->state = MO_ECAT_MASTER_STATE_IDLE;
-			master->image.active = 0;
-			master->consecutive_cycle_errors = 0;
+			master->rt.image.active = 0;
+			master->cycle.consecutive_errors = 0;
 		}
 		sm->count = 0;
 		sm->phase = WAIT_COMMAND;
 		break;
 	case WAIT_COMMAND:
 		sm->count++;
-		if (!master || !master->command_pending) {
+		if (!master || !master->cmd.pending) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_CONFIGURE)) {
@@ -107,8 +107,8 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 		}
 		break;
 	case EXEC_CONFIGURE:
-		rc = mo_ecat_master_prepare_config(master, master->pending_config,
-						   master->pending_backend);
+		rc = mo_ecat_master_prepare_config(master, master->cmd.pending_config,
+						   master->cmd.pending_backend);
 		if (rc == 0) {
 			rc = mo_ecat_master_backend_configure(master);
 		}
@@ -152,15 +152,15 @@ void mo_ecat_master_state_ready(struct statemachine *sm)
 	case ENTER:
 		if (master) {
 			master->state = MO_ECAT_MASTER_STATE_READY;
-			master->image.active = 0;
-			master->consecutive_cycle_errors = 0;
+			master->rt.image.active = 0;
+			master->cycle.consecutive_errors = 0;
 		}
 		sm->count = 0;
 		sm->phase = WAIT_COMMAND;
 		break;
 	case WAIT_COMMAND:
 		sm->count++;
-		if (!master || !master->command_pending) {
+		if (!master || !master->cmd.pending) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_ACTIVATE)) {
@@ -219,8 +219,8 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 	case ENTER:
 		if (master) {
 			master->state = MO_ECAT_MASTER_STATE_RUNNING;
-			master->image.active = 1;
-			master->consecutive_cycle_errors = 0;
+			master->rt.image.active = 1;
+			master->cycle.consecutive_errors = 0;
 		}
 		sm->count = 0;
 		sm->phase = RUNNING;
@@ -232,8 +232,8 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 		}
 		if (mo_ecat_master_take_cycle_result(master, &abnormal)) {
 			if (abnormal) {
-				master->consecutive_cycle_errors++;
-				if (master->consecutive_cycle_errors >=
+				master->cycle.consecutive_errors++;
+				if (master->cycle.consecutive_errors >=
 				    MO_ECAT_MASTER_FAULT_THRESHOLD) {
 					sm_transition(sm, mo_ecat_master_state_fault);
 				} else {
@@ -241,9 +241,9 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 				}
 				break;
 			}
-			master->consecutive_cycle_errors = 0;
+			master->cycle.consecutive_errors = 0;
 		}
-		if (!master->command_pending) {
+		if (!master->cmd.pending) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_DEACTIVATE)) {
@@ -308,7 +308,7 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 	case ENTER:
 		if (master) {
 			master->state = MO_ECAT_MASTER_STATE_DEGRADED;
-			master->image.active = 1;
+			master->rt.image.active = 1;
 		}
 		sm->count = 0;
 		sm->phase = RUNNING;
@@ -320,18 +320,18 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 		}
 		if (mo_ecat_master_take_cycle_result(master, &abnormal)) {
 			if (abnormal) {
-				master->consecutive_cycle_errors++;
-				if (master->consecutive_cycle_errors >=
+				master->cycle.consecutive_errors++;
+				if (master->cycle.consecutive_errors >=
 				    MO_ECAT_MASTER_FAULT_THRESHOLD) {
 					sm_transition(sm, mo_ecat_master_state_fault);
 				}
 				break;
 			}
-			master->consecutive_cycle_errors = 0;
+			master->cycle.consecutive_errors = 0;
 			sm_transition(sm, mo_ecat_master_state_running);
 			break;
 		}
-		if (!master->command_pending) {
+		if (!master->cmd.pending) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_DEACTIVATE)) {
@@ -392,14 +392,14 @@ void mo_ecat_master_state_fault(struct statemachine *sm)
 	case ENTER:
 		if (master) {
 			master->state = MO_ECAT_MASTER_STATE_FAULT;
-			master->image.active = 0;
+			master->rt.image.active = 0;
 		}
 		sm->count = 0;
 		sm->phase = WAIT_RESET;
 		break;
 	case WAIT_RESET:
 		sm->count++;
-		if (!master || !master->command_pending) {
+		if (!master || !master->cmd.pending) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_RESET)) {

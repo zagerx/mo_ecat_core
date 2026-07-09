@@ -8,10 +8,14 @@
 #include <pthread.h>
 
 #include "mo_ecat/mo_ecat_master.h"
+#include "mo_ecat/mo_ecat_master_state.h"
+#include "mo_ecat/mo_ecat_slave.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/soem_backend.h"
 
 static volatile int g_running = 1;
-static pthread_t g_master_thread;
+static pthread_t g_dispatch_thread;
+static pthread_t g_cycle_thread;
 
 static struct mo_ecat_master *g_master = NULL;
 
@@ -117,13 +121,33 @@ static void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
 	}
 }
 
-static void *master_thread_routine(void *arg)
+/**
+ * @brief 状态机调度线程
+ *
+ * 以固定周期推进主站状态机，处理命令和生命周期迁移。
+ */
+static void *dispatch_thread_routine(void *arg)
 {
 	(void)arg;
 
 	while (g_running) {
 		mo_ecat_master_dispatch(g_master);
+		usleep(1000);
+	}
 
+	return NULL;
+}
+
+/**
+ * @brief 周期收发线程
+ *
+ * 当主站处于 RUNNING 或 DEGRADED 时，执行 PDO 收发。
+ */
+static void *cycle_thread_routine(void *arg)
+{
+	(void)arg;
+
+	while (g_running) {
 		enum mo_ecat_master_state state = mo_ecat_master_get_state(g_master);
 		if (state == MO_ECAT_MASTER_STATE_RUNNING ||
 		    state == MO_ECAT_MASTER_STATE_DEGRADED) {
@@ -131,7 +155,6 @@ static void *master_thread_routine(void *arg)
 			mo_ecat_master_cycle_begin(g_master, &result);
 			mo_ecat_master_cycle_end(g_master, &result);
 		}
-
 		usleep(1000);
 	}
 
@@ -146,7 +169,7 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_handler);
 
 	printf("EtherCAT CLI test harness (decoupled backend)\n");
-	printf("Master thread runs dispatch + cycle automatically.\n");
+	printf("Dispatch thread and cycle thread run automatically.\n");
 	printf("Type 'help' for commands.\n");
 
 	struct mo_ecat_pdo_entry_config slave0_pdos[] = {
@@ -190,8 +213,16 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (pthread_create(&g_master_thread, NULL, master_thread_routine, NULL) != 0) {
-		fprintf(stderr, "Failed to create master thread\n");
+	if (pthread_create(&g_dispatch_thread, NULL, dispatch_thread_routine, NULL) != 0) {
+		fprintf(stderr, "Failed to create dispatch thread\n");
+		mo_ecat_master_destroy(g_master);
+		return -1;
+	}
+
+	if (pthread_create(&g_cycle_thread, NULL, cycle_thread_routine, NULL) != 0) {
+		fprintf(stderr, "Failed to create cycle thread\n");
+		g_running = 0;
+		pthread_join(g_dispatch_thread, NULL);
 		mo_ecat_master_destroy(g_master);
 		return -1;
 	}
@@ -269,7 +300,8 @@ int main(int argc, char *argv[])
 
 	printf("\nStopping...\n");
 	g_running = 0;
-	pthread_join(g_master_thread, NULL);
+	pthread_join(g_dispatch_thread, NULL);
+	pthread_join(g_cycle_thread, NULL);
 	mo_ecat_master_destroy(g_master);
 
 	return 0;
