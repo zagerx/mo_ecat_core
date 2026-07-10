@@ -33,6 +33,11 @@ void cmd_reset(void);
 void cmd_diag(void);
 
 /**
+ * @brief 处理 topology 命令
+ */
+void cmd_topology(void);
+
+/**
  * @brief 处理 pdo 命令
  * @param arg 索引字符串
  */

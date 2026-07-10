@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 struct mo_ecat_master;
+struct humanoid_topology;
 
 /**
  * @file print.h
@@ -30,6 +31,12 @@ void print_state(struct mo_ecat_master *master);
  * @brief 打印从站诊断信息
  */
 void print_diagnostics(struct mo_ecat_master *master);
+
+/**
+ * @brief 打印人形机器人逻辑拓扑
+ */
+void print_humanoid_topology(struct mo_ecat_master *master,
+                             const struct humanoid_topology *topology);
 
 /**
  * @brief 打印单个 PDO 引用信息

@@ -9,6 +9,7 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_slave.h"
 #include "mo_ecat/mo_ecat_pdo.h"
+#include "humanoid_topology.h"
 
 const char *state_name(enum mo_ecat_master_state state)
 {
@@ -82,6 +83,35 @@ void print_diagnostics(struct mo_ecat_master *master)
 	}
 }
 
+void print_humanoid_topology(struct mo_ecat_master *master,
+                             const struct humanoid_topology *topology)
+{
+	if (!master || !topology || topology->group_count == 0) {
+		printf("No humanoid topology has been built.\n");
+		return;
+	}
+
+	printf("Humanoid topology:\n");
+	for (size_t i = 0; i < topology->group_count; ++i) {
+		const struct humanoid_group *group = &topology->groups[i];
+
+		printf("  %s:\n", group->name);
+		for (size_t j = 0; j < group->joint_count; ++j) {
+			const struct humanoid_joint *joint =
+				&topology->joints[group->joint_start + j];
+			const struct mo_ecat_slave *slave =
+				mo_ecat_master_get_slave(master, joint->slave_index);
+
+			printf("    %s -> Slave[%zu]",
+			       joint->name, joint->slave_index);
+			if (slave && slave->name[0]) {
+				printf(" (%s)", slave->name);
+			}
+			printf("\n");
+		}
+	}
+}
+
 void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
 {
 	size_t count = mo_ecat_master_get_pdo_ref_count(master);
@@ -120,6 +150,7 @@ void print_help(void)
 	       "  discover          request bus discovery from IDLE\n"
 	       "  reset             release resources and return to IDLE\n"
 	       "  diag              print discovered slave information\n"
+	       "  topology          build and print humanoid logical topology\n"
 	       "  pdo <idx>         print PDO reference information\n"
 	       "  exit              quit\n");
 }

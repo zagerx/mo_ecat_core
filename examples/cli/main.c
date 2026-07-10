@@ -27,6 +27,7 @@
 struct mo_ecat_master *g_master = NULL;
 volatile int g_running = 1;
 struct mo_ecat_master_options g_options = {0};
+struct humanoid_topology g_humanoid_topology = {0};
 char g_ifname_buf[128] = {0};
 
 static void signal_handler(int sig)
@@ -115,6 +116,8 @@ int main(int argc, char *argv[])
 			cmd_reset();
 		} else if (strcmp(cmd, "diag") == 0) {
 			cmd_diag();
+		} else if (strcmp(cmd, "topology") == 0) {
+			cmd_topology();
 		} else if (strcmp(cmd, "pdo") == 0) {
 			cmd_pdo(arg);
 		} else if (strcmp(cmd, "exit") == 0 || strcmp(cmd, "quit") == 0) {
@@ -127,6 +130,7 @@ int main(int argc, char *argv[])
 	printf("\nStopping...\n");
 	g_running = 0;
 	pthread_join(dispatch_thread, NULL);
+	humanoid_topology_release(&g_humanoid_topology);
 	mo_ecat_master_destroy(g_master);
 
 	return 0;

@@ -32,6 +32,7 @@ void cmd_reset(void)
 {
 	int rc = mo_ecat_master_write_cmd(g_master,
 		MO_ECAT_MASTER_CMD_RESET);
+	humanoid_topology_release(&g_humanoid_topology);
 	if (rc == 0) {
 		printf("Reset requested.\n");
 	} else {
@@ -42,6 +43,19 @@ void cmd_reset(void)
 void cmd_diag(void)
 {
 	print_diagnostics(g_master);
+}
+
+void cmd_topology(void)
+{
+	const struct humanoid_config *config = humanoid_default_config();
+
+	humanoid_topology_release(&g_humanoid_topology);
+	if (humanoid_topology_build(g_master, config, &g_humanoid_topology) < 0) {
+		printf("Failed to build topology. Check DISCOVERED state and configuration.\n");
+		return;
+	}
+
+	print_humanoid_topology(g_master, &g_humanoid_topology);
 }
 
 void cmd_pdo(const char *arg)
