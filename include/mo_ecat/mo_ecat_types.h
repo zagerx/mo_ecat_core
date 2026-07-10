@@ -18,6 +18,7 @@ extern "C" {
 enum mo_ecat_master_state {
     MO_ECAT_MASTER_STATE_INIT,
     MO_ECAT_MASTER_STATE_IDLE,
+    MO_ECAT_MASTER_STATE_DISCOVERED,
     MO_ECAT_MASTER_STATE_READY,
     MO_ECAT_MASTER_STATE_RUNNING,
     MO_ECAT_MASTER_STATE_DEGRADED,
@@ -65,10 +66,20 @@ struct mo_ecat_dc_config {
 };
 
 /**
- * @brief 从站配置
+ * @brief 主站启动选项
+ *
+ * 启动与扫描阶段只需要网卡名称；从站 PDO、DC 等配置由后续的
+ * 用户配置阶段提供。
+ */
+struct mo_ecat_master_options {
+    char interface_name[MO_ECAT_MAX_IFNAME_LEN + 1];
+};
+
+/**
+ * @brief 用户从站配置
  *
  * 配置模型采用固定大小数组，避免指针嵌套和动态分配。
- * 调用者直接填充字段即可，核心层通过值拷贝持有配置。
+ * 调用者直接填充字段即可，后续可由配置文件解析结果生成。
  */
 struct mo_ecat_slave_config {
     uint16_t alias;
@@ -87,13 +98,11 @@ struct mo_ecat_slave_config {
 };
 
 /**
- * @brief 顶层配置
+ * @brief 用户配置
  *
  * 自包含的固定大小结构，可直接用 = 赋值或 memcpy 拷贝。
  */
-struct mo_ecat_config {
-    char interface_name[MO_ECAT_MAX_IFNAME_LEN + 1];
-
+struct mo_ecat_user_config {
     struct mo_ecat_slave_config slaves[MO_ECAT_MAX_SLAVES];
     size_t slave_count;
 };

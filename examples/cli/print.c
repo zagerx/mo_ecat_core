@@ -15,6 +15,7 @@ const char *state_name(enum mo_ecat_master_state state)
 	switch (state) {
 	case MO_ECAT_MASTER_STATE_INIT:     return "INIT";
 	case MO_ECAT_MASTER_STATE_IDLE:     return "IDLE";
+	case MO_ECAT_MASTER_STATE_DISCOVERED:return "DISCOVERED";
 	case MO_ECAT_MASTER_STATE_READY:    return "READY";
 	case MO_ECAT_MASTER_STATE_RUNNING:  return "RUNNING";
 	case MO_ECAT_MASTER_STATE_DEGRADED: return "DEGRADED";
@@ -97,7 +98,7 @@ void print_help(void)
 	printf("Commands:\n"
 	       "  help                show this help\n"
 	       "  state               print master state and last cycle result\n"
-	       "  config <ifname>     submit CONFIGURE command\n"
+	       "  discover            submit bus discovery command\n"
 	       "  activate            submit ACTIVATE command\n"
 	       "  deactivate          submit DEACTIVATE command\n"
 	       "  reset               submit RESET command\n"

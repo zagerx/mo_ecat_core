@@ -21,8 +21,8 @@ extern struct mo_ecat_master *g_master;
 /** 运行标志，控制后台线程退出 */
 extern volatile int g_running;
 
-/** 当前使用的顶层配置 */
-extern struct mo_ecat_config g_config;
+/** 主站启动选项 */
+extern struct mo_ecat_master_options g_options;
 
 /** 网口名持久缓冲，避免被后续输入覆盖 */
 extern char g_ifname_buf[128];

@@ -17,17 +17,10 @@ void cmd_state(void)
 	print_state(g_master);
 }
 
-void cmd_config(const char *ifname)
+void cmd_discover(void)
 {
-	const char *name = (ifname && ifname[0] != '\0') ? ifname : g_ifname_buf;
-
-	strncpy(g_ifname_buf, name, sizeof(g_ifname_buf) - 1);
-	g_ifname_buf[sizeof(g_ifname_buf) - 1] = '\0';
-	strncpy(g_config.interface_name, g_ifname_buf, sizeof(g_config.interface_name) - 1);
-	g_config.interface_name[sizeof(g_config.interface_name) - 1] = '\0';
-
-	int rc = mo_ecat_master_configure(g_master);
-	printf("configure('%s') submit: %d\n", g_ifname_buf, rc);
+	int rc = mo_ecat_master_start(g_master);
+	printf("discover('%s') submit: %d\n", g_options.interface_name, rc);
 }
 
 void cmd_activate(void)

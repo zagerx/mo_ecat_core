@@ -18,10 +18,9 @@ extern "C" {
 void cmd_state(void);
 
 /**
- * @brief 处理 config 命令
- * @param ifname 网口名，空字符串表示使用默认值
+ * @brief 处理 discover 命令
  */
-void cmd_config(const char *ifname);
+void cmd_discover(void);
 
 /**
  * @brief 处理 activate 命令

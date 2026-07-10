@@ -26,7 +26,7 @@
 /* 全局状态定义，其他模块通过 cli_state.h 引用 */
 struct mo_ecat_master *g_master = NULL;
 volatile int g_running = 1;
-struct mo_ecat_config g_config = {0};
+struct mo_ecat_master_options g_options = {0};
 char g_ifname_buf[128] = {0};
 
 static void signal_handler(int sig)
@@ -66,35 +66,22 @@ int main(int argc, char *argv[])
 	strncpy(g_ifname_buf, default_ifname, sizeof(g_ifname_buf) - 1);
 	g_ifname_buf[sizeof(g_ifname_buf) - 1] = '\0';
 
-	/* 初始化默认配置 */
-	strncpy(g_config.interface_name, g_ifname_buf, sizeof(g_config.interface_name) - 1);
-	g_config.interface_name[sizeof(g_config.interface_name) - 1] = '\0';
-
-	g_config.slaves[0].alias = 0;
-	g_config.slaves[0].position = 0;
-	g_config.slaves[0].vendor_id = 0;
-	g_config.slaves[0].product_code = 0;
-	g_config.slaves[0].revision_number = 0;
-	g_config.slaves[0].pdo_entries[0] =
-	    (struct mo_ecat_pdo_entry_config){0x7000, 0x01, 16, MO_ECAT_PDO_OUTPUT};
-	g_config.slaves[0].pdo_entries[1] =
-	    (struct mo_ecat_pdo_entry_config){0x6000, 0x01, 16, MO_ECAT_PDO_INPUT};
-	g_config.slaves[0].pdo_entry_count = 2;
-	g_config.slaves[0].dc_active = 0;
-	g_config.slave_count = 1;
+	strncpy(g_options.interface_name, g_ifname_buf,
+		sizeof(g_options.interface_name) - 1);
+	g_options.interface_name[sizeof(g_options.interface_name) - 1] = '\0';
 
 	printf("EtherCAT CLI test harness (decoupled backend)\n");
 	printf("Dispatch thread and cycle thread run automatically.\n");
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(&g_config);
+	g_master = mo_ecat_master_create(&g_options);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;
 	}
 
-	if (mo_ecat_master_configure(g_master) < 0) {
-		fprintf(stderr, "Failed to submit initial configure command\n");
+	if (mo_ecat_master_start(g_master) < 0) {
+		fprintf(stderr, "Failed to submit initial discover command\n");
 		mo_ecat_master_destroy(g_master);
 		return -1;
 	}
@@ -139,8 +126,8 @@ int main(int argc, char *argv[])
 			cmd_help();
 		} else if (strcmp(cmd, "state") == 0 || strcmp(cmd, "status") == 0) {
 			cmd_state();
-		} else if (strcmp(cmd, "config") == 0) {
-			cmd_config(arg);
+		} else if (strcmp(cmd, "discover") == 0) {
+			cmd_discover();
 		} else if (strcmp(cmd, "activate") == 0) {
 			cmd_activate();
 		} else if (strcmp(cmd, "deactivate") == 0) {

@@ -10,15 +10,18 @@ option(MO_ECAT_BUILD_EXAMPLES "Build mo_ecat examples" ON)
 add_subdirectory(third_party/SOEM)
 
 set(MO_ECAT_CORE_SOURCES
-    src/mo_ecat_master.c
-    src/mo_ecat_master_states.c
+    src/master.c
+    src/master_discovery.c
+    src/process_image.c
+    src/diagnostics.c
+    src/master_states.c
     src/common/statemachine/statemachine.c
 )
 
 option(MO_ECAT_BACKEND_SOEM "Use SOEM backend" ON)
 
 if(MO_ECAT_BACKEND_SOEM)
-    list(APPEND MO_ECAT_CORE_SOURCES src/backend/soem_backend.c)
+    list(APPEND MO_ECAT_CORE_SOURCES src/backend/soem.c)
 endif()
 
 if(NOT MO_ECAT_BACKEND_SOEM)

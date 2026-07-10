@@ -1,13 +1,13 @@
-#ifndef MO_ECAT_MASTER_PRIV_H
-#define MO_ECAT_MASTER_PRIV_H
+#ifndef MASTER_PRIV_H
+#define MASTER_PRIV_H
 
 #include <stddef.h>
 #include <pthread.h>
 
 #include "mo_ecat/mo_ecat_types.h"
-#include "mo_ecat_backend.h"
+#include "backend.h"
 #include "common/statemachine/statemachine.h"
-#include "mo_ecat_master_states.h"
+#include "master_states.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,22 +18,10 @@ extern "C" {
  */
 enum mo_ecat_master_command {
     MO_ECAT_MASTER_CMD_NONE,       /**< 无命令 */
-    MO_ECAT_MASTER_CMD_CONFIGURE,  /**< 配置总线 */
+    MO_ECAT_MASTER_CMD_DISCOVER,   /**< 扫描总线 */
     MO_ECAT_MASTER_CMD_ACTIVATE,   /**< 激活周期 */
     MO_ECAT_MASTER_CMD_DEACTIVATE, /**< 停用周期 */
     MO_ECAT_MASTER_CMD_RESET       /**< 复位到空闲 */
-};
-
-/**
- * @brief 单条命令槽
- *
- * 核心层一次只处理一条命令。调用者提交命令后，由后台 dispatch 线程
- * （或应用显式调用 dispatch）在合适的状态下执行。
- */
-struct mo_ecat_master_cmd {
-    enum mo_ecat_master_command id; /**< 当前命令 */
-    int pending;                    /**< 是否有未处理命令 */
-    int result;                     /**< 上条命令的处理结果 */
 };
 
 /**
@@ -71,17 +59,26 @@ struct mo_ecat_master_pdo {
 };
 
 /**
+ * @brief 配置期一次性分配的运行资源块
+ */
+struct mo_ecat_master_runtime_memory {
+    void *memory;                 /**< 从站和诊断状态共用内存块 */
+    size_t size;                  /**< 内存块大小 */
+};
+
+/**
  * @brief 主站对象（核心层内部定义）
  */
 struct mo_ecat_master {
     struct statemachine sm;                /**< 底层状态机 */
 
-    struct mo_ecat_master_cmd cmd;         /**< 命令槽 */
+    enum mo_ecat_master_command command;   /**< 当前请求命令 */
     struct mo_ecat_backend backend;        /**< 后端实例 */
-    const struct mo_ecat_config *config;   /**< 配置指针，由调用者保证生命周期 */
+    struct mo_ecat_master_options options; /**< 主站启动选项 */
     struct mo_ecat_process_image image;    /**< 过程数据映像 */
     struct mo_ecat_master_diagnostics diag;/**< 从站诊断 */
     struct mo_ecat_master_pdo pdo;         /**< PDO 引用 */
+    struct mo_ecat_master_runtime_memory runtime_memory; /**< 运行资源 */
     struct mo_ecat_master_cycle cycle;     /**< 周期运行状态 */
 
     pthread_mutex_t lock;                  /**< 保护本对象的互斥锁 */
@@ -89,17 +86,22 @@ struct mo_ecat_master {
 };
 
 /* 内部辅助函数，供状态机与核心模块使用 */
-int mo_ecat_master_prepare_config(struct mo_ecat_master *master);
-int mo_ecat_master_backend_configure(struct mo_ecat_master *master);
-int mo_ecat_master_backend_activate(struct mo_ecat_master *master);
-int mo_ecat_master_backend_deactivate(struct mo_ecat_master *master);
-void mo_ecat_master_release_resources(struct mo_ecat_master *master);
-void mo_ecat_master_clear_command(struct mo_ecat_master *master, int result);
-int mo_ecat_master_take_cycle_result(struct mo_ecat_master *master,
-                                     int *abnormal);
+enum mo_ecat_master_state
+master_state_from_sm(const struct mo_ecat_master *master);
+int master_state_allows_io(const struct mo_ecat_master *master);
+void master_request_command(struct mo_ecat_master *master,
+                            enum mo_ecat_master_command command);
+int master_backend_open(struct mo_ecat_master *master);
+int master_prepare_discovery(struct mo_ecat_master *master);
+int master_backend_activate(struct mo_ecat_master *master);
+int master_backend_deactivate(struct mo_ecat_master *master);
+void master_release_resources(struct mo_ecat_master *master);
+void master_clear_command(struct mo_ecat_master *master);
+int master_take_cycle_result(struct mo_ecat_master *master,
+                             int *abnormal);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MO_ECAT_MASTER_PRIV_H */
+#endif /* MASTER_PRIV_H */

@@ -28,7 +28,7 @@ struct mo_ecat_master;
  * @return 0 成功，非 0 失败
  */
 int mo_ecat_master_init(struct mo_ecat_master *master,
-                        const struct mo_ecat_config *config);
+                        const struct mo_ecat_master_options *options);
 
 /**
  * @brief 反初始化主站对象
@@ -38,19 +38,19 @@ int mo_ecat_master_init(struct mo_ecat_master *master,
 void mo_ecat_master_deinit(struct mo_ecat_master *master);
 
 /**
- * @brief 获取并初始化单主站对象
+ * @brief 创建并初始化单主站对象
  *
- * 单主站场景下，该函数返回核心库内部的静态主站实例，
- * 并调用 mo_ecat_master_init() 完成字段初始化和配置指针绑定。
- * 重复调用会失败并返回 NULL。
+ * 该函数为主站对象分配内存，并调用 mo_ecat_master_init() 完成
+ * 字段初始化和配置指针绑定。单主站场景下，重复调用会失败并返回 NULL。
  */
 struct mo_ecat_master *mo_ecat_master_create(
-    const struct mo_ecat_config *config);
+    const struct mo_ecat_master_options *options);
 
 /**
  * @brief 销毁主站对象
  *
- * 销毁前会自动释放后端资源并关闭后端。该函数不会释放 master 存储本身。
+ * 销毁前会自动释放后端资源并关闭后端，并释放由
+ * mo_ecat_master_create() 分配的主站对象内存。
  */
 void mo_ecat_master_destroy(struct mo_ecat_master *master);
 
@@ -63,17 +63,18 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master);
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 
 /**
- * @brief 提交配置命令
+ * @brief 提交总线发现命令
  *
- * 该函数只把 CONFIGURE 命令放入命令槽，实际配置工作由后续
- * mo_ecat_master_dispatch() 在 IDLE 状态执行。
+ * 该函数只把 DISCOVER 命令放入命令槽。后续由
+ * mo_ecat_master_dispatch() 在 IDLE 状态打开网卡并扫描总线。
  *
- * 核心层会创建并持有后端实例，调用者无需手动管理 backend 生命周期。
+ * 扫描成功后主站进入 DISCOVERED 状态，调用者可读取从站基本信息。
+ * PDO、DC 和过程映像由后续用户配置阶段建立。
  *
  * @param master 主站对象
  * @return 0 表示命令已接受，非 0 表示拒绝
  */
-int mo_ecat_master_configure(struct mo_ecat_master *master);
+int mo_ecat_master_start(struct mo_ecat_master *master);
 
 /**
  * @brief 提交激活命令

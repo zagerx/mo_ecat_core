@@ -1,11 +1,11 @@
 /**
- * @file mo_ecat_master_states.c
+ * @file master_states.c
  * @brief 主站生命周期状态函数
  */
 
 #include "common/statemachine/statemachine.h"
-#include "mo_ecat_master_states.h"
-#include "mo_ecat_master_priv.h"
+#include "master_states.h"
+#include "master_priv.h"
 
 #define MO_ECAT_MASTER_FAULT_THRESHOLD 3U
 
@@ -17,17 +17,17 @@ static struct mo_ecat_master *master_from_sm(struct statemachine *sm)
 static int master_command_is(struct mo_ecat_master *master,
 			     enum mo_ecat_master_command command)
 {
-	return master && master->cmd.pending && master->cmd.id == command;
+	return master && master->command == command;
 }
 
 static void master_reject_command(struct mo_ecat_master *master)
 {
-	if (master && master->cmd.pending) {
-		mo_ecat_master_clear_command(master, -1);
+	if (master && master->command != MO_ECAT_MASTER_CMD_NONE) {
+		master_clear_command(master);
 	}
 }
 
-void mo_ecat_master_state_init(struct statemachine *sm)
+void master_state_init(struct statemachine *sm)
 {
 	enum {
 		CHECK_INITIALIZED = USER_STATUS,
@@ -57,7 +57,7 @@ void mo_ecat_master_state_init(struct statemachine *sm)
 		 * 条件满足后调用 sm_transition()，真正 EXIT/ENTER 由下一次 dispatch 完成。
 		 */
 		if (master) {
-			sm_transition(sm, mo_ecat_master_state_idle);
+			sm_transition(sm, master_state_idle);
 		}
 		break;
 	case EXIT:
@@ -66,11 +66,11 @@ void mo_ecat_master_state_init(struct statemachine *sm)
 	}
 }
 
-void mo_ecat_master_state_idle(struct statemachine *sm)
+void master_state_idle(struct statemachine *sm)
 {
 	enum {
 		WAIT_COMMAND = USER_STATUS,
-		EXEC_CONFIGURE,
+		EXEC_DISCOVER,
 		WAIT_TRANSITION
 	};
 	struct mo_ecat_master *master;
@@ -93,33 +93,33 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 		break;
 	case WAIT_COMMAND:
 		sm->count++;
-		if (!master || !master->cmd.pending) {
+		if (!master || master->command == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
-		if (master_command_is(master, MO_ECAT_MASTER_CMD_CONFIGURE)) {
-			sm->phase = EXEC_CONFIGURE;
+		if (master_command_is(master, MO_ECAT_MASTER_CMD_DISCOVER)) {
+			sm->phase = EXEC_DISCOVER;
 		} else if (master_command_is(master, MO_ECAT_MASTER_CMD_RESET)) {
-			mo_ecat_master_clear_command(master, 0);
+			master_clear_command(master);
 		} else {
 			master_reject_command(master);
 		}
 		break;
-	case EXEC_CONFIGURE:
-		mo_ecat_master_release_resources(master);
-		rc = mo_ecat_backend_init(&master->backend);
+	case EXEC_DISCOVER:
+		master_release_resources(master);
+		rc = backend_init(&master->backend);
 		if (rc == 0) {
-			rc = mo_ecat_master_prepare_config(master);
+			rc = master_backend_open(master);
 		}
 		if (rc == 0) {
-			rc = mo_ecat_master_backend_configure(master);
+			rc = master_prepare_discovery(master);
 		}
 		if (rc < 0) {
-			mo_ecat_master_release_resources(master);
-			mo_ecat_master_clear_command(master, rc);
-			sm_transition(sm, mo_ecat_master_state_fault);
+			master_release_resources(master);
+			master_clear_command(master);
+			sm_transition(sm, master_state_fault);
 		} else {
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_ready);
+			master_clear_command(master);
+			sm_transition(sm, master_state_discovered);
 		}
 		sm->phase = WAIT_TRANSITION;
 		break;
@@ -132,7 +132,51 @@ void mo_ecat_master_state_idle(struct statemachine *sm)
 	}
 }
 
-void mo_ecat_master_state_ready(struct statemachine *sm)
+void master_state_discovered(struct statemachine *sm)
+{
+	enum {
+		WAIT_COMMAND = USER_STATUS,
+		WAIT_TRANSITION
+	};
+	struct mo_ecat_master *master;
+
+	if (!sm) {
+		return;
+	}
+
+	master = master_from_sm(sm);
+	switch (sm->phase) {
+	case ENTER:
+		if (master) {
+			master->image.active = 0;
+		}
+		sm->count = 0;
+		sm->phase = WAIT_COMMAND;
+		break;
+	case WAIT_COMMAND:
+		sm->count++;
+		if (!master || master->command == MO_ECAT_MASTER_CMD_NONE) {
+			break;
+		}
+		if (master_command_is(master, MO_ECAT_MASTER_CMD_RESET)) {
+			master_release_resources(master);
+			master_clear_command(master);
+			sm_transition(sm, master_state_idle);
+			sm->phase = WAIT_TRANSITION;
+		} else {
+			master_reject_command(master);
+		}
+		break;
+	case WAIT_TRANSITION:
+		sm->count++;
+		break;
+	case EXIT:
+	default:
+		break;
+	}
+}
+
+void master_state_ready(struct statemachine *sm)
 {
 	enum {
 		WAIT_COMMAND = USER_STATUS,
@@ -160,7 +204,7 @@ void mo_ecat_master_state_ready(struct statemachine *sm)
 		break;
 	case WAIT_COMMAND:
 		sm->count++;
-		if (!master || !master->cmd.pending) {
+		if (!master || master->command == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_ACTIVATE)) {
@@ -172,20 +216,20 @@ void mo_ecat_master_state_ready(struct statemachine *sm)
 		}
 		break;
 	case EXEC_ACTIVATE:
-		rc = mo_ecat_master_backend_activate(master);
+		rc = master_backend_activate(master);
 		if (rc < 0) {
-			mo_ecat_master_clear_command(master, rc);
-			sm_transition(sm, mo_ecat_master_state_fault);
+			master_clear_command(master);
+			sm_transition(sm, master_state_fault);
 		} else {
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_running);
+			master_clear_command(master);
+			sm_transition(sm, master_state_running);
 		}
 		sm->phase = WAIT_TRANSITION;
 		break;
 	case EXEC_RESET:
-		mo_ecat_master_release_resources(master);
-		mo_ecat_master_clear_command(master, 0);
-		sm_transition(sm, mo_ecat_master_state_idle);
+		master_release_resources(master);
+		master_clear_command(master);
+		sm_transition(sm, master_state_idle);
 		sm->phase = WAIT_TRANSITION;
 		break;
 	case WAIT_TRANSITION:
@@ -197,7 +241,7 @@ void mo_ecat_master_state_ready(struct statemachine *sm)
 	}
 }
 
-void mo_ecat_master_state_running(struct statemachine *sm)
+void master_state_running(struct statemachine *sm)
 {
 	enum {
 		RUNNING = USER_STATUS,
@@ -229,20 +273,20 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 		if (!master) {
 			break;
 		}
-		if (mo_ecat_master_take_cycle_result(master, &abnormal)) {
+		if (master_take_cycle_result(master, &abnormal)) {
 			if (abnormal) {
 				master->cycle.consecutive_errors++;
 				if (master->cycle.consecutive_errors >=
 				    MO_ECAT_MASTER_FAULT_THRESHOLD) {
-					sm_transition(sm, mo_ecat_master_state_fault);
+					sm_transition(sm, master_state_fault);
 				} else {
-					sm_transition(sm, mo_ecat_master_state_degraded);
+					sm_transition(sm, master_state_degraded);
 				}
 				break;
 			}
 			master->cycle.consecutive_errors = 0;
 		}
-		if (!master->cmd.pending) {
+		if (master->command == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_DEACTIVATE)) {
@@ -254,25 +298,25 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 		}
 		break;
 	case EXEC_DEACTIVATE:
-		rc = mo_ecat_master_backend_deactivate(master);
+		rc = master_backend_deactivate(master);
 		if (rc < 0) {
-			mo_ecat_master_clear_command(master, rc);
-			sm_transition(sm, mo_ecat_master_state_fault);
+			master_clear_command(master);
+			sm_transition(sm, master_state_fault);
 		} else {
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_ready);
+			master_clear_command(master);
+			sm_transition(sm, master_state_ready);
 		}
 		sm->phase = WAIT_TRANSITION;
 		break;
 	case EXEC_RESET:
-		rc = mo_ecat_master_backend_deactivate(master);
+		rc = master_backend_deactivate(master);
 		if (rc < 0) {
-			mo_ecat_master_clear_command(master, rc);
-			sm_transition(sm, mo_ecat_master_state_fault);
+			master_clear_command(master);
+			sm_transition(sm, master_state_fault);
 		} else {
-			mo_ecat_master_release_resources(master);
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_idle);
+			master_release_resources(master);
+			master_clear_command(master);
+			sm_transition(sm, master_state_idle);
 		}
 		sm->phase = WAIT_TRANSITION;
 		break;
@@ -285,7 +329,7 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 	}
 }
 
-void mo_ecat_master_state_degraded(struct statemachine *sm)
+void master_state_degraded(struct statemachine *sm)
 {
 	enum {
 		RUNNING = USER_STATUS,
@@ -316,20 +360,20 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 		if (!master) {
 			break;
 		}
-		if (mo_ecat_master_take_cycle_result(master, &abnormal)) {
+		if (master_take_cycle_result(master, &abnormal)) {
 			if (abnormal) {
 				master->cycle.consecutive_errors++;
 				if (master->cycle.consecutive_errors >=
 				    MO_ECAT_MASTER_FAULT_THRESHOLD) {
-					sm_transition(sm, mo_ecat_master_state_fault);
+					sm_transition(sm, master_state_fault);
 				}
 				break;
 			}
 			master->cycle.consecutive_errors = 0;
-			sm_transition(sm, mo_ecat_master_state_running);
+			sm_transition(sm, master_state_running);
 			break;
 		}
-		if (!master->cmd.pending) {
+		if (master->command == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_DEACTIVATE)) {
@@ -341,25 +385,25 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 		}
 		break;
 	case EXEC_DEACTIVATE:
-		rc = mo_ecat_master_backend_deactivate(master);
+		rc = master_backend_deactivate(master);
 		if (rc < 0) {
-			mo_ecat_master_clear_command(master, rc);
-			sm_transition(sm, mo_ecat_master_state_fault);
+			master_clear_command(master);
+			sm_transition(sm, master_state_fault);
 		} else {
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_ready);
+			master_clear_command(master);
+			sm_transition(sm, master_state_ready);
 		}
 		sm->phase = WAIT_TRANSITION;
 		break;
 	case EXEC_RESET:
-		rc = mo_ecat_master_backend_deactivate(master);
+		rc = master_backend_deactivate(master);
 		if (rc < 0) {
-			mo_ecat_master_clear_command(master, rc);
-			sm_transition(sm, mo_ecat_master_state_fault);
+			master_clear_command(master);
+			sm_transition(sm, master_state_fault);
 		} else {
-			mo_ecat_master_release_resources(master);
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_idle);
+			master_release_resources(master);
+			master_clear_command(master);
+			sm_transition(sm, master_state_idle);
 		}
 		sm->phase = WAIT_TRANSITION;
 		break;
@@ -372,7 +416,7 @@ void mo_ecat_master_state_degraded(struct statemachine *sm)
 	}
 }
 
-void mo_ecat_master_state_fault(struct statemachine *sm)
+void master_state_fault(struct statemachine *sm)
 {
 	enum {
 		WAIT_RESET = USER_STATUS,
@@ -396,13 +440,13 @@ void mo_ecat_master_state_fault(struct statemachine *sm)
 		break;
 	case WAIT_RESET:
 		sm->count++;
-		if (!master || !master->cmd.pending) {
+		if (!master || master->command == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
 		if (master_command_is(master, MO_ECAT_MASTER_CMD_RESET)) {
-			mo_ecat_master_release_resources(master);
-			mo_ecat_master_clear_command(master, 0);
-			sm_transition(sm, mo_ecat_master_state_idle);
+			master_release_resources(master);
+			master_clear_command(master);
+			sm_transition(sm, master_state_idle);
 			sm->phase = WAIT_TRANSITION;
 		} else {
 			master_reject_command(master);

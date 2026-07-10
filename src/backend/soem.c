@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "soem/soem.h"
-#include "mo_ecat_backend.h"
+#include "backend.h"
 
 #define MO_ECAT_SOEM_IOMAP_SIZE 2048
 
@@ -39,17 +39,17 @@ static enum mo_ecat_al_state soem_to_al_state(uint16_t soem_state)
 }
 
 static int soem_backend_open(struct mo_ecat_backend *backend,
-                             const struct mo_ecat_config *config)
+                             const struct mo_ecat_master_options *options)
 {
     struct soem_backend_ctx *ctx = soem_ctx(backend);
 
-    if (!ctx || !config || config->interface_name[0] == '\0') {
+    if (!ctx || !options || options->interface_name[0] == '\0') {
         return -1;
     }
 
-    if (!ecx_init(&ctx->context, config->interface_name)) {
+    if (!ecx_init(&ctx->context, options->interface_name)) {
         fprintf(stderr, "SOEM backend: ecx_init failed on %s\n",
-                config->interface_name);
+                options->interface_name);
         return -1;
     }
 
@@ -57,7 +57,27 @@ static int soem_backend_open(struct mo_ecat_backend *backend,
     return 0;
 }
 
-static int soem_validate_config(const struct mo_ecat_config *config,
+static int soem_backend_scan(struct mo_ecat_backend *backend,
+                             size_t *slave_count)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+    int count;
+
+    if (!ctx || !slave_count || !ctx->opened) {
+        return -1;
+    }
+
+    count = ecx_config_init(&ctx->context);
+    if (count <= 0) {
+        fprintf(stderr, "SOEM backend: ecx_config_init failed\n");
+        return -1;
+    }
+
+    *slave_count = (size_t)count;
+    return 0;
+}
+
+static int soem_validate_config(const struct mo_ecat_user_config *config,
                                 ecx_contextt *context)
 {
     if (!config || !context) {
@@ -92,7 +112,8 @@ static size_t bytes_for_bits(uint32_t bits)
     return (bits + 7U) / 8U;
 }
 
-static size_t soem_estimate_iomap_size_from_config(const struct mo_ecat_config *config)
+static size_t soem_estimate_iomap_size_from_config(
+    const struct mo_ecat_user_config *config)
 {
     size_t output_bytes = 0;
     size_t input_bytes = 0;
@@ -123,7 +144,7 @@ static size_t soem_estimate_iomap_size_from_config(const struct mo_ecat_config *
  * 这是简化实现：假设配置顺序与实际 PDO 映射顺序一致。
  */
 static int soem_fill_pdo_refs(ecx_contextt *context,
-                              const struct mo_ecat_config *config,
+                              const struct mo_ecat_user_config *config,
                               struct mo_ecat_pdo_ref *refs,
                               size_t pdo_ref_count,
                               uint8_t *iomap,
@@ -210,8 +231,23 @@ static void soem_fill_slave_info(struct mo_ecat_slave *slaves,
     }
 }
 
+static int soem_backend_read_discovered_slaves(
+    struct mo_ecat_backend *backend, struct mo_ecat_slave *slaves,
+    size_t slave_count)
+{
+    struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+    if (!ctx || (slave_count > 0 && !slaves) ||
+        slave_count != (size_t)ctx->context.slavecount) {
+        return -1;
+    }
+
+    soem_fill_slave_info(slaves, slave_count, &ctx->context);
+    return 0;
+}
+
 static int soem_backend_configure(struct mo_ecat_backend *backend,
-                                  const struct mo_ecat_config *config,
+                                  const struct mo_ecat_user_config *config,
                                   struct mo_ecat_process_image *image,
                                   struct mo_ecat_pdo_ref *pdo_refs,
                                   size_t pdo_ref_count,
@@ -220,7 +256,8 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
 {
     struct soem_backend_ctx *ctx = soem_ctx(backend);
 
-    if (!ctx || !config || !image || !slaves) {
+    if (!ctx || !config || !image ||
+        (slave_count > 0 && !slaves)) {
         return -1;
     }
 
@@ -232,18 +269,16 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
         return -1;
     }
 
-    /* 1. 扫描从站 */
-    if (ecx_config_init(&ctx->context) <= 0) {
-        fprintf(stderr, "SOEM backend: ecx_config_init failed\n");
-        return -1;
-    }
-
-    /* 2. 校验配置与实际总线是否一致 */
+    /* 扫描阶段已完成总线发现；此处校验配置与实际总线是否一致。 */
     if (soem_validate_config(config, &ctx->context) < 0) {
         return -1;
     }
 
-    /* 3. 执行 PDO 映射 */
+    if (slave_count != (size_t)ctx->context.slavecount) {
+        return -1;
+    }
+
+    /* 执行 PDO 映射。 */
     int mapped_size = ecx_config_map_group(&ctx->context, ctx->iomap, 0);
     if (mapped_size <= 0 || (size_t)mapped_size > MO_ECAT_SOEM_IOMAP_SIZE) {
         fprintf(stderr, "SOEM backend: map failed or exceeds fixed IOmap size\n");
@@ -414,6 +449,8 @@ static void soem_backend_close(struct mo_ecat_backend *backend)
 static const struct mo_ecat_backend_ops soem_ops = {
     .name = "soem",
     .open = soem_backend_open,
+    .scan = soem_backend_scan,
+    .read_discovered_slaves = soem_backend_read_discovered_slaves,
     .configure = soem_backend_configure,
     .activate = soem_backend_activate,
     .cycle_begin = soem_backend_cycle_begin,
@@ -423,7 +460,7 @@ static const struct mo_ecat_backend_ops soem_ops = {
     .close = soem_backend_close,
 };
 
-int mo_ecat_backend_init(struct mo_ecat_backend *backend)
+int backend_init(struct mo_ecat_backend *backend)
 {
     if (!backend) {
         return -1;

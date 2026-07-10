@@ -1,5 +1,5 @@
-#ifndef MO_ECAT_BACKEND_H
-#define MO_ECAT_BACKEND_H
+#ifndef BACKEND_H
+#define BACKEND_H
 
 #include <stddef.h>
 
@@ -29,10 +29,20 @@ struct mo_ecat_backend_ops {
     const char *name;
 
     int  (*open)(struct mo_ecat_backend *backend,
-                 const struct mo_ecat_config *config);
+                 const struct mo_ecat_master_options *options);
 
+    /** 扫描总线并返回实际从站数量。open() 成功后调用。 */
+    int  (*scan)(struct mo_ecat_backend *backend,
+                 size_t *slave_count);
+
+    /** 将 scan() 获得的从站基本信息写入核心层运行时数组。 */
+    int  (*read_discovered_slaves)(struct mo_ecat_backend *backend,
+                                   struct mo_ecat_slave *slaves,
+                                   size_t slave_count);
+
+    /** 完成 PDO 映射并回填运行时对象。scan() 成功后调用。 */
     int  (*configure)(struct mo_ecat_backend *backend,
-                      const struct mo_ecat_config *config,
+                      const struct mo_ecat_user_config *config,
                       struct mo_ecat_process_image *image,
                       struct mo_ecat_pdo_ref *pdo_refs,
                       size_t pdo_ref_count,
@@ -65,10 +75,10 @@ struct mo_ecat_backend {
 
 /* ==================== Backend 工厂 ==================== */
 
-int mo_ecat_backend_init(struct mo_ecat_backend *backend);
+int backend_init(struct mo_ecat_backend *backend);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MO_ECAT_BACKEND_H */
+#endif /* BACKEND_H */
