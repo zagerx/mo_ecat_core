@@ -17,13 +17,6 @@ extern "C" {
  */
 void *dispatch_thread_routine(void *arg);
 
-/**
- * @brief 周期收发线程
- *
- * 当主站处于 RUNNING 或 DEGRADED 时，执行 PDO 收发。
- */
-void *cycle_thread_routine(void *arg);
-
 #ifdef __cplusplus
 }
 #endif

@@ -12,6 +12,15 @@ extern "C" {
 struct mo_ecat_master;
 
 /**
+ * @brief 主站状态机请求命令
+ */
+enum mo_ecat_master_cmd {
+    MO_ECAT_MASTER_CMD_NONE,         /**< 无命令 */
+    MO_ECAT_MASTER_CMD_DISCOVER,     /**< 扫描总线 */
+    MO_ECAT_MASTER_CMD_RESET          /**< 复位到空闲 */
+};
+
+/**
  * @file mo_ecat_master.h
  * @brief 主站生命周期与调度接口
  *
@@ -57,45 +66,23 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master);
 /**
  * @brief 调度主站状态机
  *
- * 应由后台线程以固定周期调用。该函数会处理 pending 的状态迁移、
- * 命令执行以及周期结果消费。
+ * 应由后台线程以固定周期调用。该函数会处理状态迁移、命令执行以及
+ * 周期结果消费。
  */
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 
 /**
- * @brief 提交总线发现命令
+ * @brief 写入主站状态机命令
  *
- * 该函数只把 DISCOVER 命令放入命令槽。后续由
- * mo_ecat_master_dispatch() 在 IDLE 状态打开网卡并扫描总线。
- *
- * 扫描成功后主站进入 DISCOVERED 状态，调用者可读取从站基本信息。
- * PDO、DC 和过程映像由后续用户配置阶段建立。
+ * 该函数只写入一条状态机请求，不直接执行后端动作。新命令可以覆盖
+ * 尚未消费的旧命令；核心库不保证命令可靠投递，也不保存异步执行结果。
  *
  * @param master 主站对象
- * @return 0 表示命令已接受，非 0 表示拒绝
+ * @param cmd 请求命令；不允许写入 MO_ECAT_MASTER_CMD_NONE
+ * @return 0 表示命令已写入，非 0 表示参数无效
  */
-int mo_ecat_master_start(struct mo_ecat_master *master);
-
-/**
- * @brief 提交激活命令
- *
- * 仅在 READY 状态下有效。
- */
-int mo_ecat_master_activate(struct mo_ecat_master *master);
-
-/**
- * @brief 提交停用命令
- *
- * 仅在 RUNNING / DEGRADED 状态下有效。
- */
-int mo_ecat_master_deactivate(struct mo_ecat_master *master);
-
-/**
- * @brief 提交复位命令
- *
- * 释放后端资源并回到 IDLE 状态。
- */
-int mo_ecat_master_reset(struct mo_ecat_master *master);
+int mo_ecat_master_write_cmd(struct mo_ecat_master *master,
+                             enum mo_ecat_master_cmd cmd);
 
 /**
  * @brief 设置用户数据

@@ -77,7 +77,7 @@ static int allocate_discovery_memory(struct mo_ecat_master *master,
     return 0;
 }
 
-void master_clear_command(struct mo_ecat_master *master)
+void master_clear_cmd(struct mo_ecat_master *master)
 {
     if (!master) {
         return;
@@ -106,9 +106,6 @@ void master_release_resources(struct mo_ecat_master *master)
     master->pdo.count = 0;
     master->runtime_memory.memory = NULL;
     master->runtime_memory.size = 0;
-    master->cycle.result_pending = 0;
-    master->cycle.abnormal = 0;
-    master->cycle.consecutive_errors = 0;
 }
 
 int master_backend_open(struct mo_ecat_master *master)
@@ -156,30 +153,4 @@ int master_prepare_discovery(struct mo_ecat_master *master)
 fail:
     master_release_resources(master);
     return -1;
-}
-
-int master_backend_activate(struct mo_ecat_master *master)
-{
-    if (!master) {
-        return -1;
-    }
-
-    if (master->backend.ops && master->backend.ops->activate) {
-        return master->backend.ops->activate(&master->backend);
-    }
-
-    return 0;
-}
-
-int master_backend_deactivate(struct mo_ecat_master *master)
-{
-    if (!master) {
-        return -1;
-    }
-
-    if (master->backend.ops && master->backend.ops->deactivate) {
-        return master->backend.ops->deactivate(&master->backend);
-    }
-
-    return 0;
 }

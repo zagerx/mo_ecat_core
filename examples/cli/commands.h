@@ -23,16 +23,6 @@ void cmd_state(void);
 void cmd_discover(void);
 
 /**
- * @brief 处理 activate 命令
- */
-void cmd_activate(void);
-
-/**
- * @brief 处理 deactivate 命令
- */
-void cmd_deactivate(void);
-
-/**
  * @brief 处理 reset 命令
  */
 void cmd_reset(void);

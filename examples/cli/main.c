@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 	g_options.interface_name[sizeof(g_options.interface_name) - 1] = '\0';
 
 	printf("EtherCAT CLI test harness (decoupled backend)\n");
-	printf("Dispatch thread and cycle thread run automatically.\n");
+	printf("Dispatch thread runs automatically.\n");
 	printf("Type 'help' for commands.\n");
 
 	g_master = mo_ecat_master_create(&g_options);
@@ -80,25 +80,16 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (mo_ecat_master_start(g_master) < 0) {
+	if (mo_ecat_master_write_cmd(g_master,
+		MO_ECAT_MASTER_CMD_DISCOVER) < 0) {
 		fprintf(stderr, "Failed to submit initial discover command\n");
 		mo_ecat_master_destroy(g_master);
 		return -1;
 	}
 
 	pthread_t dispatch_thread;
-	pthread_t cycle_thread;
-
 	if (pthread_create(&dispatch_thread, NULL, dispatch_thread_routine, NULL) != 0) {
 		fprintf(stderr, "Failed to create dispatch thread\n");
-		mo_ecat_master_destroy(g_master);
-		return -1;
-	}
-
-	if (pthread_create(&cycle_thread, NULL, cycle_thread_routine, NULL) != 0) {
-		fprintf(stderr, "Failed to create cycle thread\n");
-		g_running = 0;
-		pthread_join(dispatch_thread, NULL);
 		mo_ecat_master_destroy(g_master);
 		return -1;
 	}
@@ -128,10 +119,6 @@ int main(int argc, char *argv[])
 			cmd_state();
 		} else if (strcmp(cmd, "discover") == 0) {
 			cmd_discover();
-		} else if (strcmp(cmd, "activate") == 0) {
-			cmd_activate();
-		} else if (strcmp(cmd, "deactivate") == 0) {
-			cmd_deactivate();
 		} else if (strcmp(cmd, "reset") == 0) {
 			cmd_reset();
 		} else if (strcmp(cmd, "diag") == 0) {
@@ -148,7 +135,6 @@ int main(int argc, char *argv[])
 	printf("\nStopping...\n");
 	g_running = 0;
 	pthread_join(dispatch_thread, NULL);
-	pthread_join(cycle_thread, NULL);
 	mo_ecat_master_destroy(g_master);
 
 	return 0;

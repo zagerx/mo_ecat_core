@@ -1,5 +1,5 @@
 /**
- * @file diagnostics.c
+ * @file mo_ecat_slave.c
  * @brief 主站从站诊断接口
  */
 
@@ -51,9 +51,6 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
     pthread_mutex_lock(&master->lock);
     state = master_state_from_sm(master);
     if (state != MO_ECAT_MASTER_STATE_DISCOVERED &&
-        state != MO_ECAT_MASTER_STATE_READY &&
-        state != MO_ECAT_MASTER_STATE_RUNNING &&
-        state != MO_ECAT_MASTER_STATE_DEGRADED &&
         state != MO_ECAT_MASTER_STATE_FAULT) {
         pthread_mutex_unlock(&master->lock);
         return -1;

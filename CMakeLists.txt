@@ -10,10 +10,10 @@ option(MO_ECAT_BUILD_EXAMPLES "Build mo_ecat examples" ON)
 add_subdirectory(third_party/SOEM)
 
 set(MO_ECAT_CORE_SOURCES
-    src/master.c
+    src/mo_ecat_master.c
     src/master_discovery.c
-    src/process_image.c
-    src/diagnostics.c
+    src/mo_ecat_pdo.c
+    src/mo_ecat_slave.c
     src/master_states.c
     src/common/statemachine/statemachine.c
 )

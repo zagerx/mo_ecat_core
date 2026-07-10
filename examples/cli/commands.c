@@ -19,25 +19,15 @@ void cmd_state(void)
 
 void cmd_discover(void)
 {
-	int rc = mo_ecat_master_start(g_master);
+	int rc = mo_ecat_master_write_cmd(g_master,
+		MO_ECAT_MASTER_CMD_DISCOVER);
 	printf("discover('%s') submit: %d\n", g_options.interface_name, rc);
-}
-
-void cmd_activate(void)
-{
-	int rc = mo_ecat_master_activate(g_master);
-	printf("activate submit: %d\n", rc);
-}
-
-void cmd_deactivate(void)
-{
-	int rc = mo_ecat_master_deactivate(g_master);
-	printf("deactivate submit: %d\n", rc);
 }
 
 void cmd_reset(void)
 {
-	int rc = mo_ecat_master_reset(g_master);
+	int rc = mo_ecat_master_write_cmd(g_master,
+		MO_ECAT_MASTER_CMD_RESET);
 	printf("reset submit: %d\n", rc);
 }
 
