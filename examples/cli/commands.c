@@ -21,14 +21,22 @@ void cmd_discover(void)
 {
 	int rc = mo_ecat_master_write_cmd(g_master,
 		MO_ECAT_MASTER_CMD_DISCOVER);
-	printf("discover('%s') submit: %d\n", g_options.interface_name, rc);
+	if (rc == 0) {
+		printf("Discovery requested on %s.\n", g_options.interface_name);
+	} else {
+		printf("Failed to request discovery.\n");
+	}
 }
 
 void cmd_reset(void)
 {
 	int rc = mo_ecat_master_write_cmd(g_master,
 		MO_ECAT_MASTER_CMD_RESET);
-	printf("reset submit: %d\n", rc);
+	if (rc == 0) {
+		printf("Reset requested.\n");
+	} else {
+		printf("Failed to request reset.\n");
+	}
 }
 
 void cmd_diag(void)
@@ -52,5 +60,5 @@ void cmd_help(void)
 
 void cmd_unknown(const char *cmd)
 {
-	printf("unknown command: %s\n", cmd);
+	printf("Unknown command '%s'. Type 'help' for available commands.\n", cmd);
 }

@@ -21,41 +21,63 @@ const char *state_name(enum mo_ecat_master_state state)
 	}
 }
 
+static const char *al_state_name(enum mo_ecat_al_state state)
+{
+	switch (state) {
+	case MO_ECAT_AL_STATE_INIT:      return "INIT";
+	case MO_ECAT_AL_STATE_PRE_OP:    return "PRE_OP";
+	case MO_ECAT_AL_STATE_SAFE_OP:   return "SAFE_OP";
+	case MO_ECAT_AL_STATE_OP:        return "OP";
+	case MO_ECAT_AL_STATE_BOOTSTRAP: return "BOOTSTRAP";
+	default:                         return "UNKNOWN";
+	}
+}
+
+static const char *yes_no(int value)
+{
+	return value ? "yes" : "no";
+}
+
 void print_state(struct mo_ecat_master *master)
 {
-	struct mo_ecat_cycle_result result = {0};
-	(void)mo_ecat_master_get_cycle_result(master, &result);
-
 	enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
 
-	printf("state: %s (%d) | slaves: %zu | WKC: %u/%u | DC: %lld | diag_required: %d\n",
-	       state_name(state), state,
-	       mo_ecat_master_get_slave_count(master),
-	       result.actual_wkc, result.expected_wkc,
-	       (long long)result.dc_time_ns,
-	       result.diagnostics_required);
+	printf("Master state : %s\n", state_name(state));
+	printf("Slave count  : %zu\n", mo_ecat_master_get_slave_count(master));
 }
 
 void print_diagnostics(struct mo_ecat_master *master)
 {
 	int rc = mo_ecat_master_read_diagnostics(master);
 	if (rc < 0) {
-		printf("read_diagnostics failed: %d\n", rc);
+		printf("Diagnostics unavailable (state: %s). Run 'discover' first.\n",
+		       state_name(mo_ecat_master_get_state(master)));
 		return;
 	}
 
 	size_t count = mo_ecat_master_get_slave_count(master);
+	if (count == 0) {
+		printf("No slaves discovered.\n");
+		return;
+	}
+
+	printf("Discovered slaves: %zu\n", count);
 	for (size_t i = 0; i < count; ++i) {
 		const struct mo_ecat_slave *slave = mo_ecat_master_get_slave(master, i);
 		if (!slave) {
 			continue;
 		}
-		printf("  Slave[%zu]: %s, al_state=%d, online=%d, op=%d, err=%d, code=0x%04X\n",
-		       i, slave->name,
-		       slave->state.al_state,
-		       slave->state.online,
-		       slave->state.operational,
-		       slave->state.error,
+		printf("  [%zu] %s\n", i,
+		       slave->name[0] ? slave->name : "<unnamed>");
+		printf("       position=%u alias=%u dc=%s\n",
+		       slave->position, slave->alias, yes_no(slave->has_dc));
+		printf("       vendor=0x%08X product=0x%08X revision=0x%08X\n",
+		       slave->vendor_id, slave->product_code, slave->revision_number);
+		printf("       al=%s online=%s operational=%s error=%s code=0x%04X\n",
+		       al_state_name(slave->state.al_state),
+		       yes_no(slave->state.online),
+		       yes_no(slave->state.operational),
+		       yes_no(slave->state.error),
 		       slave->state.al_status_code);
 	}
 }
@@ -93,11 +115,11 @@ void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
 void print_help(void)
 {
 	printf("Commands:\n"
-	       "  help                show this help\n"
-	       "  state               print master state and last cycle result\n"
-	       "  discover            submit bus discovery command\n"
-	       "  reset               submit RESET command\n"
-	       "  diag                call read_diagnostics() and print slave states\n"
-	       "  pdo <idx>           print PDO ref info\n"
-	       "  exit                quit\n");
+	       "  help              show this help\n"
+	       "  state             show master state and slave count\n"
+	       "  discover          request bus discovery from IDLE\n"
+	       "  reset             release resources and return to IDLE\n"
+	       "  diag              print discovered slave information\n"
+	       "  pdo <idx>         print PDO reference information\n"
+	       "  exit              quit\n");
 }

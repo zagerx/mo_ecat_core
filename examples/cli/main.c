@@ -69,19 +69,13 @@ int main(int argc, char *argv[])
 	strncpy(g_options.interface_name, g_ifname_buf, sizeof(g_options.interface_name) - 1);
 	g_options.interface_name[sizeof(g_options.interface_name) - 1] = '\0';
 
-	printf("EtherCAT CLI test harness (decoupled backend)\n");
-	printf("Dispatch thread runs automatically.\n");
+	printf("mo_ecat CLI\n");
+	printf("Interface: %s\n", g_options.interface_name);
 	printf("Type 'help' for commands.\n");
 
 	g_master = mo_ecat_master_create(&g_options);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
-		return -1;
-	}
-
-	if (mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_DISCOVER) < 0) {
-		fprintf(stderr, "Failed to submit initial discover command\n");
-		mo_ecat_master_destroy(g_master);
 		return -1;
 	}
 
