@@ -81,6 +81,7 @@ void master_write_cmd(struct mo_ecat_master *master,
 int master_backend_open(struct mo_ecat_master *master);
 int master_scan(struct mo_ecat_master *master, size_t *slave_count);
 int master_build_topology(struct mo_ecat_master *master, size_t slave_count);
+int master_read_pdo_entries(struct mo_ecat_master *master);
 void master_release_resources(struct mo_ecat_master *master);
 void master_clear_cmd(struct mo_ecat_master *master);
 

@@ -107,6 +107,15 @@ void print_diagnostics(struct mo_ecat_master *master)
 			printf("[%zu]=0x%02X ", fmmu, slave->fmmu[fmmu].function);
 		}
 		printf("\n");
+		printf("       default PDO entries: %zu\n", slave->pdo_entry_count);
+		for (size_t pdo = 0; pdo < slave->pdo_entry_count; ++pdo) {
+			const struct mo_ecat_pdo_entry_info *entry =
+				&slave->pdo_entries[pdo];
+			printf("         %s PDO=0x%04X object=0x%04X:%02X bits=%u\n",
+			       entry->direction == MO_ECAT_PDO_OUTPUT ? "OUT" : "IN",
+			       entry->pdo_index, entry->index, entry->subindex,
+			       entry->bit_length);
+		}
 	}
 }
 

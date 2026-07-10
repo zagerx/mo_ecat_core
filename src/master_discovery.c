@@ -142,3 +142,14 @@ int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 	}
 	return 0;
 }
+
+int master_read_pdo_entries(struct mo_ecat_master *master)
+{
+	if (!master || !master->backend.ops || !master->backend.ops->read_pdo_entries ||
+	    (master->diag.count > 0 && !master->diag.slaves)) {
+		return -1;
+	}
+
+	return master->backend.ops->read_pdo_entries(&master->backend,
+						     master->diag.slaves, master->diag.count);
+}

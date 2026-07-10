@@ -40,6 +40,14 @@ struct mo_ecat_backend_ops {
                                    struct mo_ecat_slave *slaves,
                                    size_t slave_count);
 
+    /**
+     * 读取扫描到的从站默认 PDO 映射描述。
+     * 该操作只读取 PDO 分配与映射对象，不建立过程数据映像。
+     */
+    int  (*read_pdo_entries)(struct mo_ecat_backend *backend,
+                             struct mo_ecat_slave *slaves,
+                             size_t slave_count);
+
     /** 完成 PDO 映射并回填运行时对象。scan() 成功后调用。 */
     int  (*configure)(struct mo_ecat_backend *backend,
                       const struct mo_ecat_user_config *config,

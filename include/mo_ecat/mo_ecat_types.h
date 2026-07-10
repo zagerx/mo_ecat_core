@@ -128,6 +128,21 @@ struct mo_ecat_pdo_ref {
 };
 
 /**
+ * @brief 从站默认 PDO 映射项
+ *
+ * 在扫描后的 PDO 信息读取阶段，从从站的 PDO 分配对象中读取。
+ * 这是从站当前声明的映射描述，不包含过程数据映像中的字节偏移；
+ * 后者仅在后续完成过程数据映像配置后才会产生。
+ */
+struct mo_ecat_pdo_entry_info {
+    uint16_t pdo_index;  /**< PDO 映射对象索引，例如 0x1600 / 0x1A00 */
+    uint16_t index;      /**< 被映射对象索引 */
+    uint8_t  subindex;   /**< 被映射对象子索引 */
+    uint8_t  bit_length; /**< 映射位宽 */
+    enum mo_ecat_pdo_direction direction; /**< 主站视角的数据方向 */
+};
+
+/**
  * @brief 从站邮箱参数
  *
  * 由 SOEM 扫描阶段从 SII/EEPROM 读取，供后续邮箱通信（CoE/SDO 等）使用。
@@ -183,6 +198,9 @@ struct mo_ecat_slave {
 
     struct mo_ecat_sync_manager sm[MO_ECAT_MAX_SM]; /**< Sync Manager 配置 */
     struct mo_ecat_fmmu fmmu[MO_ECAT_MAX_FMMU];     /**< FMMU 功能分配 */
+
+    struct mo_ecat_pdo_entry_info pdo_entries[MO_ECAT_MAX_PDO_ENTRIES];
+    size_t pdo_entry_count; /**< 当前从站默认 PDO 映射项数量 */
 };
 
 struct mo_ecat_cycle_result {

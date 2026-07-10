@@ -30,6 +30,10 @@ void master_state_init(struct statemachine *sm)
 
 void master_state_idle(struct statemachine *sm)
 {
+	enum {
+		SCAN = USER_STATUS,
+		CONFIG_PDO,
+	};
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
 	size_t slave_count;
@@ -45,9 +49,9 @@ void master_state_idle(struct statemachine *sm)
 		if (master) {
 			master->image.active = 0;
 		}
-		sm->phase = USER_STATUS;
+		sm->phase = SCAN;
 		break;
-	case USER_STATUS:
+	case SCAN:
 		cmd = master_read_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;
@@ -73,9 +77,22 @@ void master_state_idle(struct statemachine *sm)
 		if (result < 0) {
 			master_release_resources(master);
 			sm_transition(sm, master_state_fault);
-		} else {
-			sm_transition(sm, master_state_discovered);
+			break;
 		}
+		sm->phase = CONFIG_PDO;
+		break;
+	case CONFIG_PDO:
+		/*
+		 * 扫描阶段只保存从站身份与基础通信能力；这里读取从站默认
+		 * PDO 映射描述。此时不创建过程数据映像，也不请求 OP 状态。
+		 */
+		result = master_read_pdo_entries(master);
+		if (result < 0) {
+			master_release_resources(master);
+			sm_transition(sm, master_state_fault);
+			break;
+		}
+		sm_transition(sm, master_state_discovered);
 		break;
 	case EXIT:
 	default:

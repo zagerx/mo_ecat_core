@@ -270,6 +270,107 @@ static int soem_backend_read_discovered_slaves(struct mo_ecat_backend *backend,
 	return 0;
 }
 
+static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
+				    uint16_t assignment_index,
+				    enum mo_ecat_pdo_direction direction,
+				    struct mo_ecat_slave *slave)
+{
+	uint8_t pdo_count = 0;
+	int size = sizeof(pdo_count);
+	int wkc;
+
+	wkc = ecx_SDOread(context, slave_number, assignment_index, 0, FALSE, &size,
+			  &pdo_count, EC_TIMEOUTRXM);
+	if (wkc <= 0) {
+		return -1;
+	}
+
+	for (uint8_t pdo_subindex = 1; pdo_subindex <= pdo_count; ++pdo_subindex) {
+		uint16_t pdo_index = 0;
+		uint8_t entry_count = 0;
+
+		size = sizeof(pdo_index);
+		wkc = ecx_SDOread(context, slave_number, assignment_index, pdo_subindex,
+				  FALSE, &size, &pdo_index, EC_TIMEOUTRXM);
+		if (wkc <= 0) {
+			return -1;
+		}
+		pdo_index = etohs(pdo_index);
+		if (pdo_index == 0) {
+			continue;
+		}
+
+		size = sizeof(entry_count);
+		wkc = ecx_SDOread(context, slave_number, pdo_index, 0, FALSE, &size,
+				  &entry_count, EC_TIMEOUTRXM);
+		if (wkc <= 0) {
+			return -1;
+		}
+
+		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count;
+		     ++entry_subindex) {
+			uint32_t mapping = 0;
+			struct mo_ecat_pdo_entry_info *entry;
+
+			if (slave->pdo_entry_count >= MO_ECAT_MAX_PDO_ENTRIES) {
+				return -1;
+			}
+
+			size = sizeof(mapping);
+			wkc = ecx_SDOread(context, slave_number, pdo_index, entry_subindex,
+					  FALSE, &size, &mapping, EC_TIMEOUTRXM);
+			if (wkc <= 0) {
+				return -1;
+			}
+
+			mapping = etohl(mapping);
+			entry = &slave->pdo_entries[slave->pdo_entry_count++];
+			entry->pdo_index = pdo_index;
+			entry->index = (uint16_t)(mapping >> 16);
+			entry->subindex = (uint8_t)(mapping >> 8);
+			entry->bit_length = (uint8_t)mapping;
+			entry->direction = direction;
+		}
+	}
+
+	return 0;
+}
+
+static int soem_backend_read_pdo_entries(struct mo_ecat_backend *backend,
+					  struct mo_ecat_slave *slaves, size_t slave_count)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+	if (!ctx || (slave_count > 0 && !slaves) ||
+	    slave_count != (size_t)ctx->context.slavecount) {
+		return -1;
+	}
+
+	for (size_t i = 0; i < slave_count; ++i) {
+		struct mo_ecat_slave *slave = &slaves[i];
+
+		slave->pdo_entry_count = 0;
+		/* 非 CoE 从站没有标准 SDO PDO 分配对象，保留为空即可。 */
+		if (!slave->has_coe) {
+			continue;
+		}
+		/* ecx_config_init() 已请求 PRE_OP；确认完成迁移后再进行 SDO 读取。 */
+		if ((ecx_statecheck(&ctx->context, (uint16_t)(i + 1), EC_STATE_PRE_OP,
+				    EC_TIMEOUTSTATE) & 0x0f) != EC_STATE_PRE_OP) {
+			return -1;
+		}
+
+		if (soem_read_pdo_assignment(&ctx->context, (uint16_t)(i + 1), 0x1c12,
+					     MO_ECAT_PDO_OUTPUT, slave) < 0 ||
+		    soem_read_pdo_assignment(&ctx->context, (uint16_t)(i + 1), 0x1c13,
+					     MO_ECAT_PDO_INPUT, slave) < 0) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
 static int soem_backend_configure(struct mo_ecat_backend *backend,
 				  const struct mo_ecat_user_config *config,
 				  struct mo_ecat_process_image *image,
@@ -471,6 +572,7 @@ static const struct mo_ecat_backend_ops soem_ops = {
 	.open = soem_backend_open,
 	.scan = soem_backend_scan,
 	.read_discovered_slaves = soem_backend_read_discovered_slaves,
+	.read_pdo_entries = soem_backend_read_pdo_entries,
 	.configure = soem_backend_configure,
 	.activate = soem_backend_activate,
 	.cycle_begin = soem_backend_cycle_begin,
