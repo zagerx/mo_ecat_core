@@ -1,11 +1,11 @@
 /**
- * @file humanoid_topology.c
- * @brief 人形机器人逻辑拓扑构建预留实现
+ * @file robot.c
+ * @brief 人形机器人运行时对象构建
  *
- * 后续在这里完成扫描从站与 humanoid_config 的匹配和校验。
+ * 后续在这里完成扫描从站与 robot_config 的匹配和校验。
  */
 
-#include "humanoid_topology.h"
+#include "robot.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +34,7 @@ static const char *group_name(enum humanoid_group_id group)
 }
 
 static int slave_matches(const struct mo_ecat_slave *slave,
-			 const struct humanoid_slave_match *match)
+			 const struct robot_slave_match *match)
 {
 	return slave && match && slave->alias == match->alias &&
 	       slave->position == match->position &&
@@ -43,7 +43,7 @@ static int slave_matches(const struct mo_ecat_slave *slave,
 }
 
 static int find_slave(struct mo_ecat_master *master,
-		      const struct humanoid_slave_match *match,
+		      const struct robot_slave_match *match,
 		      size_t *slave_index)
 {
 	size_t count;
@@ -76,12 +76,12 @@ static int find_slave(struct mo_ecat_master *master,
 	return 0;
 }
 
-static int slave_is_assigned(const struct humanoid_topology *topology,
+static int slave_is_assigned(const struct robot *robot,
 			     size_t joint_count,
 			     size_t slave_index)
 {
 	for (size_t i = 0; i < joint_count; ++i) {
-		if (topology->joints[i].slave_index == slave_index) {
+		if (robot->joints[i].slave_index == slave_index) {
 			return 1;
 		}
 	}
@@ -89,25 +89,25 @@ static int slave_is_assigned(const struct humanoid_topology *topology,
 	return 0;
 }
 
-void humanoid_topology_release(struct humanoid_topology *topology)
+void robot_release(struct robot *robot)
 {
-	if (!topology) {
+	if (!robot) {
 		return;
 	}
 
-	free(topology->joints);
-	free(topology->groups);
-	memset(topology, 0, sizeof(*topology));
+	free(robot->joints);
+	free(robot->groups);
+	memset(robot, 0, sizeof(*robot));
 }
 
-int humanoid_topology_build(struct mo_ecat_master *master,
-			    const struct humanoid_config *config,
-			    struct humanoid_topology *topology)
+int robot_build(struct mo_ecat_master *master,
+		const struct robot_config *config,
+		struct robot *robot)
 {
 	size_t joint_index = 0;
 	size_t group_index = 0;
 
-	if (!master || !config || !topology || !config->joints ||
+	if (!master || !config || !robot || !config->name || !config->joints ||
 	    config->joint_count == 0 ||
 	    mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_DISCOVERED) {
 		return -1;
@@ -119,10 +119,10 @@ int humanoid_topology_build(struct mo_ecat_master *master,
 		}
 	}
 
-	humanoid_topology_release(topology);
-	topology->joints = calloc(config->joint_count, sizeof(*topology->joints));
-	topology->groups = calloc(HUMANOID_GROUP_COUNT, sizeof(*topology->groups));
-	if (!topology->joints || !topology->groups) {
+	robot_release(robot);
+	robot->joints = calloc(config->joint_count, sizeof(*robot->joints));
+	robot->groups = calloc(HUMANOID_GROUP_COUNT, sizeof(*robot->groups));
+	if (!robot->joints || !robot->groups) {
 		goto fail;
 	}
 
@@ -131,7 +131,7 @@ int humanoid_topology_build(struct mo_ecat_master *master,
 		size_t group_start = joint_index;
 
 		for (size_t i = 0; i < config->joint_count; ++i) {
-			const struct humanoid_joint_config *joint_config =
+			const struct robot_joint_config *joint_config =
 				&config->joints[i];
 			size_t slave_index;
 
@@ -139,11 +139,11 @@ int humanoid_topology_build(struct mo_ecat_master *master,
 				continue;
 			}
 			if (find_slave(master, &joint_config->match, &slave_index) < 0 ||
-			    slave_is_assigned(topology, joint_index, slave_index)) {
+			    slave_is_assigned(robot, joint_index, slave_index)) {
 				goto fail;
 			}
 
-			topology->joints[joint_index++] = (struct humanoid_joint){
+			robot->joints[joint_index++] = (struct robot_joint){
 				.name = joint_config->joint_name,
 				.group = group,
 				.slave_index = slave_index,
@@ -152,7 +152,7 @@ int humanoid_topology_build(struct mo_ecat_master *master,
 		}
 
 		if (joint_index != group_start) {
-			topology->groups[group_index++] = (struct humanoid_group){
+			robot->groups[group_index++] = (struct robot_group){
 				.id = group,
 				.name = group_name(group),
 				.joint_start = group_start,
@@ -165,11 +165,13 @@ int humanoid_topology_build(struct mo_ecat_master *master,
 		goto fail;
 	}
 
-	topology->joint_count = joint_index;
-	topology->group_count = group_index;
+	robot->name = config->name;
+	robot->master = master;
+	robot->joint_count = joint_index;
+	robot->group_count = group_index;
 	return 0;
 
 fail:
-	humanoid_topology_release(topology);
+	robot_release(robot);
 	return -1;
 }

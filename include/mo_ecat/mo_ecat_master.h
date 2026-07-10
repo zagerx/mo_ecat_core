@@ -1,15 +1,18 @@
 #ifndef MO_ECAT_MASTER_H
 #define MO_ECAT_MASTER_H
 
-#include <stddef.h>
-
-#include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat/mo_ecat_common.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct mo_ecat_master;
+
+/** 主站启动选项。 */
+struct mo_ecat_master_options {
+    char interface_name[MO_ECAT_MAX_IFNAME_LEN + 1];
+};
 
 /**
  * @brief 主站状态机请求命令

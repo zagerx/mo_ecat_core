@@ -20,14 +20,13 @@
 #include "cli_state.h"
 #include "threads.h"
 #include "commands.h"
-#include "mo_ecat/mo_ecat_types.h"
 #include "mo_ecat/mo_ecat_master.h"
 
 /* 全局状态定义，其他模块通过 cli_state.h 引用 */
 struct mo_ecat_master *g_master = NULL;
 volatile int g_running = 1;
 struct mo_ecat_master_options g_options = {0};
-struct humanoid_topology g_humanoid_topology = {0};
+struct robot g_humanoid = {0};
 char g_ifname_buf[128] = {0};
 
 static void signal_handler(int sig)
@@ -130,7 +129,7 @@ int main(int argc, char *argv[])
 	printf("\nStopping...\n");
 	g_running = 0;
 	pthread_join(dispatch_thread, NULL);
-	humanoid_topology_release(&g_humanoid_topology);
+	robot_release(&g_humanoid);
 	mo_ecat_master_destroy(g_master);
 
 	return 0;

@@ -1,13 +1,32 @@
 #ifndef MO_ECAT_MASTER_STATE_H
 #define MO_ECAT_MASTER_STATE_H
 
-#include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat/mo_ecat_common.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct mo_ecat_master;
+
+/** 主站生命周期状态。 */
+enum mo_ecat_master_state {
+    MO_ECAT_MASTER_STATE_INIT,
+    MO_ECAT_MASTER_STATE_IDLE,
+    MO_ECAT_MASTER_STATE_DISCOVERED,
+    MO_ECAT_MASTER_STATE_FAULT
+};
+
+/** 最近一次周期通信结果。 */
+struct mo_ecat_cycle_result {
+    int backend_error;
+    int link_up;
+    uint32_t expected_wkc;
+    uint32_t actual_wkc;
+    int64_t dc_time_ns;
+    int dc_time_valid;
+    int diagnostics_required;
+};
 
 /**
  * @file mo_ecat_master_state.h

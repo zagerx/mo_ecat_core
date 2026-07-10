@@ -3,14 +3,16 @@
 
 #include <stddef.h>
 
-#include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat/mo_ecat_master_state.h"
+#include "mo_ecat/mo_ecat_pdo.h"
+#include "mo_ecat/mo_ecat_slave.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct mo_ecat_master;
-struct humanoid_topology;
+struct robot;
 
 /**
  * @file print.h
@@ -33,10 +35,9 @@ void print_state(struct mo_ecat_master *master);
 void print_diagnostics(struct mo_ecat_master *master);
 
 /**
- * @brief 打印人形机器人逻辑拓扑
+ * @brief 打印人形机器人实例
  */
-void print_humanoid_topology(struct mo_ecat_master *master,
-                             const struct humanoid_topology *topology);
+void print_robot(const struct robot *robot);
 
 /**
  * @brief 打印单个 PDO 引用信息

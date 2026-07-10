@@ -1,16 +1,26 @@
 #ifndef MO_ECAT_PDO_H
 #define MO_ECAT_PDO_H
 
-#include <stddef.h>
-#include <stdint.h>
-
-#include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat/mo_ecat_common.h"
+#include "mo_ecat/mo_ecat_master_state.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct mo_ecat_master;
+
+/** PDO 在过程数据映像中的引用。 */
+struct mo_ecat_pdo_ref {
+    size_t slave_index;
+    uint16_t pdo_index;
+    uint16_t entry_index;
+    uint32_t byte_offset;
+    uint8_t bit_offset;
+    uint8_t bit_length;
+    enum mo_ecat_pdo_direction direction;
+    uint32_t generation;
+};
 
 /**
  * @file mo_ecat_pdo.h

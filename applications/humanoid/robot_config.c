@@ -1,13 +1,13 @@
 /**
- * @file humanoid_config.c
+ * @file robot_config.c
  * @brief 人形机器人配置文件解析预留实现
  *
- * 后续在这里将 YAML/JSON 等配置文件转换为 humanoid_config。
+ * 后续在这里将 YAML/JSON 等配置文件转换为 robot_config。
  */
 
-#include "humanoid_config.h"
+#include "robot_config.h"
 
-static const struct humanoid_joint_config s_default_joints[] = {
+static const struct robot_joint_config s_default_joints[] = {
 	{
 		.joint_name = "left_shoulder_pitch",
 		.group = HUMANOID_GROUP_LEFT_ARM,
@@ -21,12 +21,13 @@ static const struct humanoid_joint_config s_default_joints[] = {
 	},
 };
 
-static const struct humanoid_config s_default_config = {
+static const struct robot_config s_default_config = {
+	.name = "humanoid",
 	.joints = s_default_joints,
 	.joint_count = sizeof(s_default_joints) / sizeof(s_default_joints[0]),
 };
 
-const struct humanoid_config *humanoid_default_config(void)
+const struct robot_config *robot_default_config(void)
 {
 	return &s_default_config;
 }

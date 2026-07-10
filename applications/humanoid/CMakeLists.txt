@@ -1,6 +1,6 @@
 add_library(mo_humanoid STATIC
-	humanoid_config.c
-	humanoid_topology.c
+	robot_config.c
+	robot.c
 )
 
 target_include_directories(mo_humanoid

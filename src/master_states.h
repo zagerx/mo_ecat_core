@@ -2,7 +2,6 @@
 #define MASTER_STATES_H
 
 #include "common/statemachine/statemachine.h"
-#include "mo_ecat/mo_ecat_types.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -3,7 +3,12 @@
 
 #include <stddef.h>
 
-#include "mo_ecat/mo_ecat_types.h"
+#include "mo_ecat/mo_ecat_master.h"
+#include "mo_ecat/mo_ecat_master_state.h"
+#include "mo_ecat/mo_ecat_pdo.h"
+#include "mo_ecat/mo_ecat_slave.h"
+#include "master_config.h"
+#include "process_image.h"
 
 #ifdef __cplusplus
 extern "C" {
