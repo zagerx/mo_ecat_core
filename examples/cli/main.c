@@ -66,8 +66,7 @@ int main(int argc, char *argv[])
 	strncpy(g_ifname_buf, default_ifname, sizeof(g_ifname_buf) - 1);
 	g_ifname_buf[sizeof(g_ifname_buf) - 1] = '\0';
 
-	strncpy(g_options.interface_name, g_ifname_buf,
-		sizeof(g_options.interface_name) - 1);
+	strncpy(g_options.interface_name, g_ifname_buf, sizeof(g_options.interface_name) - 1);
 	g_options.interface_name[sizeof(g_options.interface_name) - 1] = '\0';
 
 	printf("EtherCAT CLI test harness (decoupled backend)\n");
@@ -80,8 +79,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (mo_ecat_master_write_cmd(g_master,
-		MO_ECAT_MASTER_CMD_DISCOVER) < 0) {
+	if (mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_DISCOVER) < 0) {
 		fprintf(stderr, "Failed to submit initial discover command\n");
 		mo_ecat_master_destroy(g_master);
 		return -1;

@@ -79,7 +79,8 @@ enum mo_ecat_master_cmd master_read_cmd(const struct mo_ecat_master *master);
 void master_write_cmd(struct mo_ecat_master *master,
                       enum mo_ecat_master_cmd cmd);
 int master_backend_open(struct mo_ecat_master *master);
-int master_prepare_discovery(struct mo_ecat_master *master);
+int master_scan(struct mo_ecat_master *master, size_t *slave_count);
+int master_build_topology(struct mo_ecat_master *master, size_t slave_count);
 void master_release_resources(struct mo_ecat_master *master);
 void master_clear_cmd(struct mo_ecat_master *master);
 

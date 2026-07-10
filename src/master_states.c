@@ -7,11 +7,6 @@
 #include "master_states.h"
 #include "master_priv.h"
 
-static struct mo_ecat_master *master_from_sm(struct statemachine *sm)
-{
-	return sm ? (struct mo_ecat_master *)sm->data : NULL;
-}
-
 void master_state_init(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
@@ -20,7 +15,7 @@ void master_state_init(struct statemachine *sm)
 		return;
 	}
 
-	master = master_from_sm(sm);
+	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
@@ -37,13 +32,14 @@ void master_state_idle(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
+	size_t slave_count;
 	int result;
 
 	if (!sm) {
 		return;
 	}
 
-	master = master_from_sm(sm);
+	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
@@ -67,7 +63,10 @@ void master_state_idle(struct statemachine *sm)
 			result = master_backend_open(master);
 		}
 		if (result == 0) {
-			result = master_prepare_discovery(master);
+			result = master_scan(master, &slave_count);
+		}
+		if (result == 0) {
+			result = master_build_topology(master, slave_count);
 		}
 
 		master_clear_cmd(master);
@@ -93,7 +92,7 @@ void master_state_discovered(struct statemachine *sm)
 		return;
 	}
 
-	master = master_from_sm(sm);
+	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
@@ -127,7 +126,7 @@ void master_state_fault(struct statemachine *sm)
 		return;
 	}
 
-	master = master_from_sm(sm);
+	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
