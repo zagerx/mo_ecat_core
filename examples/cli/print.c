@@ -80,6 +80,33 @@ void print_diagnostics(struct mo_ecat_master *master)
 		       yes_no(slave->state.operational),
 		       yes_no(slave->state.error),
 		       slave->state.al_status_code);
+		printf("       mailbox proto=0x%04X wr=0x%04X/%u rd=0x%04X/%u\n",
+		       slave->mailbox.protocol,
+		       slave->mailbox.write_address,
+		       slave->mailbox.write_size,
+		       slave->mailbox.read_address,
+		       slave->mailbox.read_size);
+		printf("       protocols: CoE=%s FoE=%s EoE=%s SoE=%s\n",
+		       yes_no(slave->has_coe),
+		       yes_no(slave->has_foe),
+		       yes_no(slave->has_eoe),
+		       yes_no(slave->has_soe));
+		for (size_t sm = 0; sm < MO_ECAT_MAX_SM; ++sm) {
+			if (slave->sm[sm].length == 0) {
+				continue;
+			}
+			printf("       SM[%zu]: addr=0x%04X len=%u flags=0x%08X type=%u\n",
+			       sm,
+			       slave->sm[sm].start_address,
+			       slave->sm[sm].length,
+			       slave->sm[sm].flags,
+			       slave->sm[sm].type);
+		}
+		printf("       FMMU: ");
+		for (size_t fmmu = 0; fmmu < MO_ECAT_MAX_FMMU; ++fmmu) {
+			printf("[%zu]=0x%02X ", fmmu, slave->fmmu[fmmu].function);
+		}
+		printf("\n");
 	}
 }
 

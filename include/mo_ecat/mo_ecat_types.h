@@ -12,6 +12,8 @@ extern "C" {
 #define MO_ECAT_MAX_IFNAME_LEN   64
 #define MO_ECAT_MAX_SLAVES       16
 #define MO_ECAT_MAX_PDO_ENTRIES  32
+#define MO_ECAT_MAX_SM           8
+#define MO_ECAT_MAX_FMMU         4
 
 /* ==================== 主站生命周期状态 ==================== */
 
@@ -125,6 +127,40 @@ struct mo_ecat_pdo_ref {
     uint32_t generation;
 };
 
+/**
+ * @brief 从站邮箱参数
+ *
+ * 由 SOEM 扫描阶段从 SII/EEPROM 读取，供后续邮箱通信（CoE/SDO 等）使用。
+ */
+struct mo_ecat_slave_mailbox {
+    uint16_t protocol;      /**< 支持的邮箱协议位图（SOEM mbx_proto） */
+    uint16_t write_address; /**< 邮箱写起始地址（mbx_wo） */
+    uint16_t write_size;    /**< 邮箱写长度（mbx_l） */
+    uint16_t read_address;  /**< 邮箱读起始地址（mbx_ro） */
+    uint16_t read_size;     /**< 邮箱读长度（mbx_rl） */
+};
+
+/**
+ * @brief Sync Manager 配置
+ *
+ * 由 SOEM 扫描阶段从 SII 读取，后续 PDO 映射和邮箱通信会用到。
+ */
+struct mo_ecat_sync_manager {
+    uint16_t start_address; /**< SM 物理起始地址 */
+    uint16_t length;        /**< SM 长度 */
+    uint32_t flags;         /**< SM 标志（方向、激活等） */
+    uint8_t  type;          /**< SM 类型（邮箱输入/输出、PDO 输入/输出等） */
+};
+
+/**
+ * @brief FMMU 功能分配
+ *
+ * 由 SOEM 扫描阶段从 SII 读取，0xff 表示未分配。
+ */
+struct mo_ecat_fmmu {
+    uint8_t function; /**< FMMU 功能码 */
+};
+
 struct mo_ecat_slave {
     uint16_t position;
     uint16_t alias;
@@ -138,6 +174,15 @@ struct mo_ecat_slave {
     uint32_t propagation_delay_ns;
 
     struct mo_ecat_slave_state state;
+
+    struct mo_ecat_slave_mailbox mailbox; /**< 邮箱参数 */
+    int      has_coe;  /**< 支持 CoE（CANopen over EtherCAT） */
+    int      has_foe;  /**< 支持 FoE（File over EtherCAT） */
+    int      has_eoe;  /**< 支持 EoE（Ethernet over EtherCAT） */
+    int      has_soe;  /**< 支持 SoE（Servo over EtherCAT） */
+
+    struct mo_ecat_sync_manager sm[MO_ECAT_MAX_SM]; /**< Sync Manager 配置 */
+    struct mo_ecat_fmmu fmmu[MO_ECAT_MAX_FMMU];     /**< FMMU 功能分配 */
 };
 
 struct mo_ecat_cycle_result {

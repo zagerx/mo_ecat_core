@@ -227,6 +227,32 @@ static void soem_fill_slave_info(struct mo_ecat_slave *slaves, size_t slave_coun
 		slave->name[MO_ECAT_MAX_NAME_LEN] = '\0';
 
 		slave->state.al_state = soem_to_al_state(soem_slave->state);
+
+		/* 邮箱参数与协议能力 */
+		slave->mailbox.protocol = soem_slave->mbx_proto;
+		slave->mailbox.write_address = soem_slave->mbx_wo;
+		slave->mailbox.write_size = soem_slave->mbx_l;
+		slave->mailbox.read_address = soem_slave->mbx_ro;
+		slave->mailbox.read_size = soem_slave->mbx_rl;
+
+		slave->has_coe = (soem_slave->mbx_proto & ECT_MBXPROT_COE) ? 1 : 0;
+		slave->has_foe = (soem_slave->mbx_proto & ECT_MBXPROT_FOE) ? 1 : 0;
+		slave->has_eoe = (soem_slave->mbx_proto & ECT_MBXPROT_EOE) ? 1 : 0;
+		slave->has_soe = (soem_slave->mbx_proto & ECT_MBXPROT_SOE) ? 1 : 0;
+
+		/* Sync Manager 配置 */
+		for (int sm_idx = 0; sm_idx < EC_MAXSM; ++sm_idx) {
+			slave->sm[sm_idx].start_address = soem_slave->SM[sm_idx].StartAddr;
+			slave->sm[sm_idx].length = soem_slave->SM[sm_idx].SMlength;
+			slave->sm[sm_idx].flags = soem_slave->SM[sm_idx].SMflags;
+			slave->sm[sm_idx].type = soem_slave->SMtype[sm_idx];
+		}
+
+		/* FMMU 功能分配 */
+		slave->fmmu[0].function = soem_slave->FMMU0func;
+		slave->fmmu[1].function = soem_slave->FMMU1func;
+		slave->fmmu[2].function = soem_slave->FMMU2func;
+		slave->fmmu[3].function = soem_slave->FMMU3func;
 	}
 }
 
