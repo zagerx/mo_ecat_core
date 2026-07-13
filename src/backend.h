@@ -7,7 +7,6 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_slave.h"
-#include "master_config.h"
 #include "process_image.h"
 
 #ifdef __cplusplus
@@ -55,7 +54,6 @@ struct mo_ecat_backend_ops {
 
     /** 完成 PDO 映射并回填运行时对象。scan() 成功后调用。 */
     int  (*configure)(struct mo_ecat_backend *backend,
-                      const struct mo_ecat_user_config *config,
                       struct mo_ecat_process_image *image,
                       struct mo_ecat_pdo_ref *pdo_refs,
                       size_t pdo_ref_count,

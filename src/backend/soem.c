@@ -81,28 +81,22 @@ static int soem_backend_scan(struct mo_ecat_backend *backend, size_t *slave_coun
 	return 0;
 }
 
-static int soem_validate_config(const struct mo_ecat_user_config *config, ecx_contextt *context)
+static size_t soem_count_pdo_refs(const struct mo_ecat_slave *slaves, size_t slave_count)
 {
-	if (!config || !context) {
-		return -1;
+	size_t count = 0;
+
+	for (size_t i = 0; i < slave_count; ++i) {
+		count += slaves[i].pdo_entry_count;
 	}
 
-	if (config->slave_count != (size_t)context->slavecount) {
-		fprintf(stderr, "SOEM backend: slave count mismatch: config=%zu, bus=%d\n",
-			config->slave_count, context->slavecount);
-		return -1;
-	}
+	return count;
+}
 
-	for (size_t i = 0; i < config->slave_count; ++i) {
-		const struct mo_ecat_slave_config *cfg = &config->slaves[i];
-		const ec_slavet *soem_slave = &context->slavelist[i + 1];
-
-		if (cfg->vendor_id != 0 && cfg->vendor_id != soem_slave->eep_man) {
-			fprintf(stderr, "SOEM backend: vendor_id mismatch at slave %zu\n", i);
-			return -1;
-		}
-		if (cfg->product_code != 0 && cfg->product_code != soem_slave->eep_id) {
-			fprintf(stderr, "SOEM backend: product_code mismatch at slave %zu\n", i);
+static int soem_check_dc_support(const struct mo_ecat_slave *slaves, size_t slave_count)
+{
+	for (size_t i = 0; i < slave_count; ++i) {
+		if (!slaves[i].has_dc) {
+			fprintf(stderr, "SOEM backend: slave %zu does not support DC\n", i);
 			return -1;
 		}
 	}
@@ -110,66 +104,39 @@ static int soem_validate_config(const struct mo_ecat_user_config *config, ecx_co
 	return 0;
 }
 
-static size_t bytes_for_bits(uint32_t bits)
-{
-	return (bits + 7U) / 8U;
-}
-
-static size_t soem_estimate_iomap_size_from_config(const struct mo_ecat_user_config *config)
-{
-	size_t output_bytes = 0;
-	size_t input_bytes = 0;
-
-	for (size_t i = 0; i < config->slave_count; ++i) {
-		uint32_t output_bits = 0;
-		uint32_t input_bits = 0;
-
-		for (size_t j = 0; j < config->slaves[i].pdo_entry_count; ++j) {
-			const struct mo_ecat_pdo_entry_config *entry =
-				&config->slaves[i].pdo_entries[j];
-			if (entry->direction == MO_ECAT_PDO_OUTPUT) {
-				output_bits += entry->bit_length;
-			} else {
-				input_bits += entry->bit_length;
-			}
-		}
-
-		output_bytes += bytes_for_bits(output_bits);
-		input_bytes += bytes_for_bits(input_bits);
-	}
-
-	return output_bytes + input_bytes;
-}
-
-/*
- * 根据配置中的 pdo_entries 顺序，在 slave 的输入/输出区域内顺序分配 offset。
- * 这是简化实现：假设配置顺序与实际 PDO 映射顺序一致。
- */
-static int soem_fill_pdo_refs(ecx_contextt *context, const struct mo_ecat_user_config *config,
-			      struct mo_ecat_pdo_ref *refs, size_t pdo_ref_count, uint8_t *iomap,
-			      size_t iomap_size)
+static int soem_fill_pdo_refs(ecx_contextt *context, struct mo_ecat_slave *slaves,
+			      size_t slave_count, struct mo_ecat_pdo_ref *refs,
+			      size_t pdo_ref_count, uint8_t *iomap, size_t iomap_size,
+			      uint32_t generation)
 {
 	size_t idx = 0;
 
-	for (size_t i = 0; i < config->slave_count; ++i) {
-		const struct mo_ecat_slave_config *slave_cfg = &config->slaves[i];
+	for (size_t i = 0; i < slave_count; ++i) {
+		struct mo_ecat_slave *slave = &slaves[i];
 		const ec_slavet *soem_slave = &context->slavelist[i + 1];
 
 		uint32_t out_bit = 0;
 		uint32_t in_bit = 0;
-		uint32_t output_bits = soem_slave->Obits;
-		uint32_t input_bits = soem_slave->Ibits;
 
-		for (size_t j = 0; j < slave_cfg->pdo_entry_count; ++j) {
+		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
+			const struct mo_ecat_pdo_entry_info *entry = &slave->pdo_entries[j];
+
 			if (idx >= pdo_ref_count) {
 				return -1;
 			}
 
 			struct mo_ecat_pdo_ref *ref = &refs[idx++];
+			ref->slave_index = i;
+			ref->index = entry->index;
+			ref->subindex = entry->subindex;
+			ref->bit_length = entry->bit_length;
+			ref->direction = entry->direction;
+			ref->generation = generation;
+
 			uint32_t *used_bits =
 				(ref->direction == MO_ECAT_PDO_OUTPUT) ? &out_bit : &in_bit;
 			uint32_t available_bits =
-				(ref->direction == MO_ECAT_PDO_OUTPUT) ? output_bits : input_bits;
+				(ref->direction == MO_ECAT_PDO_OUTPUT) ? soem_slave->Obits : soem_slave->Ibits;
 
 			if (ref->direction == MO_ECAT_PDO_OUTPUT) {
 				if (!soem_slave->outputs ||
@@ -372,32 +339,34 @@ static int soem_backend_read_pdo_entries(struct mo_ecat_backend *backend,
 }
 
 static int soem_backend_configure(struct mo_ecat_backend *backend,
-				  const struct mo_ecat_user_config *config,
 				  struct mo_ecat_process_image *image,
 				  struct mo_ecat_pdo_ref *pdo_refs, size_t pdo_ref_count,
 				  struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 
-	if (!ctx || !config || !image || (slave_count > 0 && !slaves)) {
-		return -1;
-	}
-
-	size_t estimated_size = soem_estimate_iomap_size_from_config(config);
-	if (estimated_size > MO_ECAT_SOEM_IOMAP_SIZE) {
-		fprintf(stderr,
-			"SOEM backend: configured PDO size estimate %zu exceeds fixed IOmap size "
-			"%zu\n",
-			estimated_size, (size_t)MO_ECAT_SOEM_IOMAP_SIZE);
-		return -1;
-	}
-
-	/* 扫描阶段已完成总线发现；此处校验配置与实际总线是否一致。 */
-	if (soem_validate_config(config, &ctx->context) < 0) {
+	if (!ctx || !image || (slave_count > 0 && !slaves)) {
 		return -1;
 	}
 
 	if (slave_count != (size_t)ctx->context.slavecount) {
+		return -1;
+	}
+
+	/* 所有从站必须支持 DC。 */
+	if (soem_check_dc_support(slaves, slave_count) < 0) {
+		return -1;
+	}
+
+	/* 配置 DC 时钟分布。 */
+	if (!ecx_configdc(&ctx->context)) {
+		fprintf(stderr, "SOEM backend: ecx_configdc failed\n");
+		return -1;
+	}
+
+	size_t expected_ref_count = soem_count_pdo_refs(slaves, slave_count);
+	if (pdo_refs && pdo_ref_count != expected_ref_count) {
+		fprintf(stderr, "SOEM backend: pdo_ref_count mismatch\n");
 		return -1;
 	}
 
@@ -408,29 +377,26 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
 		return -1;
 	}
 
-	/* 5. 回填过程数据域 */
+	/* 回填过程数据域 */
 	image->memory = ctx->iomap;
 	image->size = (size_t)mapped_size;
 	image->generation++;
 	image->active = 0;
 
-	/* 6. 计算期望 WKC */
+	/* 计算期望 WKC */
 	ctx->expected_wkc = (uint32_t)ctx->context.grouplist[0].outputsWKC * 2U +
 			    ctx->context.grouplist[0].inputsWKC;
 
-	/* 7. 填充从站静态信息 */
+	/* 填充从站静态信息 */
 	soem_fill_slave_info(slaves, slave_count, &ctx->context);
 
-	/* 8. 填充 PDO 引用 offset */
+	/* 填充 PDO 引用 offset */
 	if (pdo_refs && pdo_ref_count > 0) {
-		if (soem_fill_pdo_refs(&ctx->context, config, pdo_refs, pdo_ref_count, ctx->iomap,
-				       image->size) < 0) {
-			fprintf(stderr,
-				"SOEM backend: configured PDO entries do not match mapped IO\n");
+		if (soem_fill_pdo_refs(&ctx->context, slaves, slave_count, pdo_refs,
+				       pdo_ref_count, ctx->iomap, image->size,
+				       image->generation) < 0) {
+			fprintf(stderr, "SOEM backend: failed to fill PDO refs\n");
 			return -1;
-		}
-		for (size_t i = 0; i < pdo_ref_count; ++i) {
-			pdo_refs[i].generation = image->generation;
 		}
 	}
 

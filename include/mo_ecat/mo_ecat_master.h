@@ -20,7 +20,23 @@ struct mo_ecat_master_options {
 enum mo_ecat_master_cmd {
     MO_ECAT_MASTER_CMD_NONE,         /**< 无命令 */
     MO_ECAT_MASTER_CMD_DISCOVER,     /**< 扫描总线 */
+    MO_ECAT_MASTER_CMD_CONFIGURE,    /**< 配置 PDO/DC/IOmap */
+    MO_ECAT_MASTER_CMD_ACTIVATE,     /**< 激活周期运行 */
+    MO_ECAT_MASTER_CMD_DEACTIVATE,   /**< 停止周期运行 */
     MO_ECAT_MASTER_CMD_RESET          /**< 复位到空闲 */
+};
+
+/**
+ * @brief 主站最近一次进入 FAULT 的原因
+ */
+enum mo_ecat_master_error {
+    MO_ECAT_MASTER_ERROR_NONE,
+    MO_ECAT_MASTER_ERROR_DISCOVER_FAILED,
+    MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_FAILED,
+    MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED,
+    MO_ECAT_MASTER_ERROR_CONFIGURE_IOMAP_FAILED,
+    MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED,
+    MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };
 
 /**
@@ -86,6 +102,14 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master);
  */
 int mo_ecat_master_write_cmd(struct mo_ecat_master *master,
                              enum mo_ecat_master_cmd cmd);
+
+/**
+ * @brief 获取主站最近一次进入 FAULT 的原因
+ *
+ * 该返回值只在状态为 FAULT 时具有诊断意义；命令未被接受时不会更新。
+ */
+enum mo_ecat_master_error mo_ecat_master_get_last_error(
+    const struct mo_ecat_master *master);
 
 /**
  * @brief 设置用户数据

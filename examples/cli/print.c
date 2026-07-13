@@ -158,9 +158,9 @@ void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
 	const struct mo_ecat_pdo_ref *ref = mo_ecat_master_get_pdo_ref(master, idx);
 	const char *dir = (ref->direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
 
-	printf("PDO[%zu]: slave=%zu, pdo=0x%04X, entry=%u, "
+	printf("PDO[%zu]: slave=%zu, index=0x%04X, subindex=%u, "
 	       "dir=%s, offset=%u.%u, bits=%u, gen=%u\n",
-	       idx, ref->slave_index, ref->pdo_index, ref->entry_index,
+	       idx, ref->slave_index, ref->index, ref->subindex,
 	       dir, ref->byte_offset, ref->bit_offset, ref->bit_length,
 	       ref->generation);
 

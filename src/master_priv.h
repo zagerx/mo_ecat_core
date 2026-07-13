@@ -63,6 +63,7 @@ struct mo_ecat_master {
     struct statemachine sm;                /**< 底层状态机 */
 
     enum mo_ecat_master_cmd command;       /**< 当前请求命令 */
+    enum mo_ecat_master_error last_error;  /**< 最近一次 FAULT 原因 */
     struct mo_ecat_backend backend;        /**< 后端实例 */
     struct mo_ecat_master_options options; /**< 主站启动选项 */
     struct mo_ecat_process_image image;    /**< 过程数据映像 */
@@ -85,6 +86,9 @@ int master_backend_open(struct mo_ecat_master *master);
 int master_scan(struct mo_ecat_master *master, size_t *slave_count);
 int master_build_topology(struct mo_ecat_master *master, size_t slave_count);
 int master_read_pdo_entries(struct mo_ecat_master *master);
+int master_configure(struct mo_ecat_master *master);
+int master_activate(struct mo_ecat_master *master);
+int master_deactivate(struct mo_ecat_master *master);
 void master_release_resources(struct mo_ecat_master *master);
 void master_clear_cmd(struct mo_ecat_master *master);
 

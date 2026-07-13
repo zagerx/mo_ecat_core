@@ -13,11 +13,11 @@ struct mo_ecat_master;
 /** PDO 在过程数据映像中的引用。 */
 struct mo_ecat_pdo_ref {
     size_t slave_index;
-    uint16_t pdo_index;
-    uint16_t entry_index;
+    uint16_t index;
+    uint8_t subindex;
+    uint8_t bit_length;
     uint32_t byte_offset;
     uint8_t bit_offset;
-    uint8_t bit_length;
     enum mo_ecat_pdo_direction direction;
     uint32_t generation;
 };

@@ -27,6 +27,12 @@ enum mo_ecat_master_state master_state_from_sm(const struct mo_ecat_master *mast
 	if (current_state == master_state_discovered) {
 		return MO_ECAT_MASTER_STATE_DISCOVERED;
 	}
+	if (current_state == master_state_ready) {
+		return MO_ECAT_MASTER_STATE_READY;
+	}
+	if (current_state == master_state_running) {
+		return MO_ECAT_MASTER_STATE_RUNNING;
+	}
 	if (current_state == master_state_fault) {
 		return MO_ECAT_MASTER_STATE_FAULT;
 	}
@@ -123,6 +129,20 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_
 	master_write_cmd(master, cmd);
 	pthread_mutex_unlock(&master->lock);
 	return 0;
+}
+
+enum mo_ecat_master_error mo_ecat_master_get_last_error(const struct mo_ecat_master *master)
+{
+	enum mo_ecat_master_error error;
+
+	if (!master) {
+		return MO_ECAT_MASTER_ERROR_NONE;
+	}
+
+	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+	error = master->last_error;
+	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+	return error;
 }
 
 void mo_ecat_master_dispatch(struct mo_ecat_master *master)

@@ -88,6 +88,7 @@ void master_release_resources(struct mo_ecat_master *master)
 		master->backend.ops->close(&master->backend);
 	}
 
+	free(master->pdo.refs);
 	free(master->runtime_memory.memory);
 	memset(&master->backend, 0, sizeof(master->backend));
 	memset(&master->image, 0, sizeof(master->image));
@@ -111,8 +112,7 @@ int master_backend_open(struct mo_ecat_master *master)
 
 int master_scan(struct mo_ecat_master *master, size_t *slave_count)
 {
-	if (!master || !slave_count || !master->backend.ops ||
-	    !master->backend.ops->scan) {
+	if (!master || !slave_count || !master->backend.ops || !master->backend.ops->scan) {
 		return -1;
 	}
 
@@ -121,7 +121,11 @@ int master_scan(struct mo_ecat_master *master, size_t *slave_count)
 
 int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 {
-	if (!master || allocate_discovery_memory(master, slave_count) < 0) {
+	if (!master || !master->backend.ops) {
+		return -1;
+	}
+
+	if (slave_count > 0 && allocate_discovery_memory(master, slave_count) < 0) {
 		return -1;
 	}
 
@@ -152,4 +156,73 @@ int master_read_pdo_entries(struct mo_ecat_master *master)
 
 	return master->backend.ops->read_pdo_entries(&master->backend,
 						     master->diag.slaves, master->diag.count);
+}
+
+static size_t master_count_pdo_refs(const struct mo_ecat_master *master)
+{
+	size_t count = 0;
+
+	for (size_t i = 0; i < master->diag.count; ++i) {
+		count += master->diag.slaves[i].pdo_entry_count;
+	}
+
+	return count;
+}
+
+int master_configure(struct mo_ecat_master *master)
+{
+	size_t pdo_ref_count;
+	struct mo_ecat_pdo_ref *refs = NULL;
+
+	if (!master || !master->backend.ops || !master->backend.ops->configure) {
+		return -1;
+	}
+
+	pdo_ref_count = master_count_pdo_refs(master);
+	if (pdo_ref_count > 0) {
+		refs = calloc(pdo_ref_count, sizeof(*refs));
+		if (!refs) {
+			return -1;
+		}
+	}
+
+	if (master->backend.ops->configure(&master->backend, &master->image, refs,
+					   pdo_ref_count, master->diag.slaves,
+					   master->diag.count) < 0) {
+		free(refs);
+		return -1;
+	}
+
+	free(master->pdo.refs);
+	master->pdo.refs = refs;
+	master->pdo.count = pdo_ref_count;
+	return 0;
+}
+
+int master_activate(struct mo_ecat_master *master)
+{
+	if (!master || !master->backend.ops || !master->backend.ops->activate) {
+		return -1;
+	}
+
+	if (master->backend.ops->activate(&master->backend) < 0) {
+		return -1;
+	}
+
+	master->image.active = 1;
+	return 0;
+}
+
+int master_deactivate(struct mo_ecat_master *master)
+{
+	if (!master || !master->backend.ops || !master->backend.ops->deactivate) {
+		return -1;
+	}
+
+	if (master->backend.ops->deactivate(&master->backend) < 0) {
+		return -1;
+	}
+
+	master->image.active = 0;
+	return 0;
 }
