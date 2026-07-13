@@ -121,7 +121,7 @@ int master_scan(struct mo_ecat_master *master, size_t *slave_count)
 
 int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 {
-	if (!master || !master->backend.ops) {
+	if (!master || !master->backend.ops || !master->backend.translation_ops) {
 		return -1;
 	}
 
@@ -130,8 +130,8 @@ int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 	}
 
 	master->diag.count = slave_count;
-	if (slave_count > 0 && (!master->backend.ops->read_discovered_slaves ||
-				master->backend.ops->read_discovered_slaves(
+	if (slave_count > 0 && (!master->backend.translation_ops->read_discovered_slaves ||
+				master->backend.translation_ops->read_discovered_slaves(
 					&master->backend, master->diag.slaves, slave_count) < 0)) {
 		return -1;
 	}
@@ -149,13 +149,15 @@ int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 
 int master_read_pdo_entries(struct mo_ecat_master *master)
 {
-	if (!master || !master->backend.ops || !master->backend.ops->read_pdo_entries ||
+	if (!master || !master->backend.ops || !master->backend.translation_ops ||
+	    !master->backend.translation_ops->read_pdo_entries ||
 	    (master->diag.count > 0 && !master->diag.slaves)) {
 		return -1;
 	}
 
-	return master->backend.ops->read_pdo_entries(&master->backend,
-						     master->diag.slaves, master->diag.count);
+	return master->backend.translation_ops->read_pdo_entries(&master->backend,
+							 master->diag.slaves,
+							 master->diag.count);
 }
 
 static size_t master_count_pdo_refs(const struct mo_ecat_master *master)
@@ -195,7 +197,8 @@ int master_configure(struct mo_ecat_master *master)
 	size_t pdo_ref_count;
 	struct mo_ecat_pdo_ref *refs = NULL;
 
-	if (!master || !master->backend.ops || !master->backend.ops->configure) {
+	if (!master || !master->backend.ops || !master->backend.ops->configure ||
+	    !master->backend.translation_ops) {
 		return -1;
 	}
 
@@ -213,26 +216,31 @@ int master_configure(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	if (!master->backend.ops->get_process_image ||
-	    master->backend.ops->get_process_image(&master->backend,
-						   &master->process.image) < 0) {
+	if (!master->backend.translation_ops ||
+	    !master->backend.translation_ops->get_process_image ||
+	    master->backend.translation_ops->get_process_image(&master->backend,
+							       &master->process.image) < 0) {
 		free(refs);
 		return -1;
 	}
 	master->process.image.generation++;
 
 	if (pdo_ref_count > 0) {
-		if (!master->backend.ops->fill_pdo_refs ||
-		    master->backend.ops->fill_pdo_refs(&master->backend, refs, pdo_ref_count,
-						       master->process.image.generation) < 0) {
+		if (!master->backend.translation_ops ||
+		    !master->backend.translation_ops->fill_pdo_refs ||
+		    master->backend.translation_ops->fill_pdo_refs(&master->backend, refs,
+									 pdo_ref_count,
+									 master->process.image.generation) < 0) {
 			free(refs);
 			return -1;
 		}
 	}
 
-	if (master->backend.ops->fill_slave_info) {
-		master->backend.ops->fill_slave_info(&master->backend, master->diag.slaves,
-						     master->diag.count);
+	if (master->backend.translation_ops &&
+	    master->backend.translation_ops->fill_slave_info) {
+		master->backend.translation_ops->fill_slave_info(&master->backend,
+								 master->diag.slaves,
+								 master->diag.count);
 	}
 
 	free(master->process.pdo_refs.refs);
