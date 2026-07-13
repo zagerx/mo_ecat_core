@@ -39,7 +39,6 @@ enum robot_group_id {
  * 不使用运行期 slave_index，避免总线拓扑变化后配置绑定到错误从站。
  */
 struct robot_slave_identity {
-	uint16_t alias;        /**< EtherCAT alias 地址 */
 	uint16_t position;     /**< 物理总线位置 */
 	uint32_t vendor_id;    /**< 厂商 ID */
 	uint32_t product_code; /**< 产品码 */

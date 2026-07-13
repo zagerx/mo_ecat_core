@@ -82,23 +82,51 @@ size_t mo_ecat_master_get_pdo_ref_count(const struct mo_ecat_master *master)
 	return count;
 }
 
-const struct mo_ecat_pdo_ref *mo_ecat_master_get_pdo_ref(const struct mo_ecat_master *master,
-							 size_t index)
+int mo_ecat_master_get_pdo_ref(const struct mo_ecat_master *master,
+			       size_t index, struct mo_ecat_pdo_ref *ref)
 {
-	const struct mo_ecat_pdo_ref *reference;
-
-	if (!master) {
-		return NULL;
+	if (!master || !ref) {
+		return -1;
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 	if (index >= master->pdo.count) {
 		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
-		return NULL;
+		return -1;
 	}
-	reference = &master->pdo.refs[index];
+
+	*ref = master->pdo.refs[index];
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
-	return reference;
+	return 0;
+}
+
+int mo_ecat_master_get_process_image_view(const struct mo_ecat_master *master,
+					  struct mo_ecat_process_image_view *view)
+{
+	enum mo_ecat_master_state state;
+
+	if (!master || !view) {
+		return -1;
+	}
+
+	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
+	state = master_state_from_sm(master);
+	if (state != MO_ECAT_MASTER_STATE_READY &&
+	    state != MO_ECAT_MASTER_STATE_RUNNING) {
+		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+		return -1;
+	}
+
+	if (!master->image.memory || master->image.size == 0) {
+		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+		return -1;
+	}
+
+	view->memory = master->image.memory;
+	view->size = master->image.size;
+	view->generation = master->image.generation;
+	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+	return 0;
 }
 
 int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
@@ -110,25 +138,6 @@ int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 	*result = master->cycle.last;
-	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
-	return 0;
-}
-
-int mo_ecat_master_get_process_image(const struct mo_ecat_master *master, const uint8_t **memory,
-				     size_t *size)
-{
-	if (!master || !memory || !size) {
-		return -1;
-	}
-
-	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	if (!master->image.memory || master->image.size == 0) {
-		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
-		return -1;
-	}
-
-	*memory = master->image.memory;
-	*size = master->image.size;
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return 0;
 }

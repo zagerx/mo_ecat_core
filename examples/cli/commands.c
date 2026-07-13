@@ -11,6 +11,9 @@
 #include "cli_state.h"
 #include "print.h"
 #include "mo_ecat/mo_ecat_master.h"
+#include "mo_ecat/mo_ecat_master_state.h"
+#include "mo_ecat_master_cfg.h"
+#include "robot_cfg.h"
 
 void cmd_state(void)
 {
@@ -21,9 +24,39 @@ void cmd_discover(void)
 {
 	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_DISCOVER);
 	if (rc == 0) {
-		printf("Discovery requested on %s.\n", g_options.interface_name);
+		printf("Discovery requested on %s.\n", g_master_options.interface_name);
 	} else {
 		printf("Failed to request discovery.\n");
+	}
+}
+
+void cmd_configure(void)
+{
+	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_CONFIGURE);
+	if (rc == 0) {
+		printf("Configure requested.\n");
+	} else {
+		printf("Failed to request configure.\n");
+	}
+}
+
+void cmd_activate(void)
+{
+	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_ACTIVATE);
+	if (rc == 0) {
+		printf("Activate requested.\n");
+	} else {
+		printf("Failed to request activate.\n");
+	}
+}
+
+void cmd_deactivate(void)
+{
+	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_DEACTIVATE);
+	if (rc == 0) {
+		printf("Deactivate requested.\n");
+	} else {
+		printf("Failed to request deactivate.\n");
 	}
 }
 
@@ -45,7 +78,7 @@ void cmd_diag(void)
 
 void cmd_topology(void)
 {
-	const struct robot_config *config = robot_default_config();
+	const struct robot_config *config = &g_robot_config;
 
 	robot_release(&g_robot);
 	if (robot_build(&g_robot, g_master, config) < 0) {

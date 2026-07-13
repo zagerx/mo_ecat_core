@@ -21,4 +21,4 @@ add_executable(ecat_cli
     commands.c
 )
 
-target_link_libraries(ecat_cli PRIVATE mo_ecat_core mo_robot)
+target_link_libraries(ecat_cli PRIVATE mo_ecat_core mo_robot mo_ecat_config)

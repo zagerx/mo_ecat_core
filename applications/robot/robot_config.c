@@ -13,7 +13,6 @@ static const struct robot_joint_config s_default_joints[] = {
 		.group = ROBOT_GROUP_LEFT_ARM,
 		.identity =
 			{
-				.alias = 0,
 				.position = 1,
 				.vendor_id = 0x00000766,
 				.product_code = 0x00002001,

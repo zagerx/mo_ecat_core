@@ -84,20 +84,41 @@ struct mo_ecat_slave {
 };
 
 /**
+ * @brief 从站信息的公开只读视图
+ *
+ * 由 mo_ecat_master_get_slave_info() 复制返回，避免向应用层暴露内部数组指针。
+ */
+struct mo_ecat_slave_info {
+    uint16_t position;
+    uint16_t alias;
+    uint32_t vendor_id;
+    uint32_t product_code;
+    uint32_t revision_number;
+    char name[MO_ECAT_MAX_NAME_LEN + 1];
+    int has_dc;
+    size_t pdo_entry_count;
+};
+
+/**
  * @file mo_ecat_slave.h
  * @brief 从站信息与诊断接口
  */
 
 /**
- * @brief 获取已配置从站数量
+ * @brief 获取已发现从站数量
  */
 size_t mo_ecat_master_get_slave_count(const struct mo_ecat_master *master);
 
 /**
- * @brief 获取指定从站信息
+ * @brief 获取指定从站信息的只读副本
+ *
+ * 调用方提供 info 缓冲区，核心在锁保护下复制数据。返回的指针不指向内部数组，
+ * 因此在调用返回后即使发生状态迁移也不会悬空。
+ *
+ * @return 0 成功，非 0 失败
  */
-const struct mo_ecat_slave *mo_ecat_master_get_slave(
-    const struct mo_ecat_master *master, size_t index);
+int mo_ecat_master_get_slave_info(const struct mo_ecat_master *master,
+                                  size_t index, struct mo_ecat_slave_info *info);
 
 /**
  * @brief 读取从站诊断信息

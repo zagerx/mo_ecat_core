@@ -32,11 +32,12 @@ static const char *group_name(enum robot_group_id group)
 	}
 }
 
-static int slave_matches(const struct mo_ecat_slave *slave,
+static int slave_matches(const struct mo_ecat_slave_info *slave,
 			 const struct robot_slave_identity *identity)
 {
-	return slave && identity && slave->alias == identity->alias &&
-	       slave->position == identity->position && slave->vendor_id == identity->vendor_id &&
+	return slave && identity &&
+	       slave->position == identity->position &&
+	       slave->vendor_id == identity->vendor_id &&
 	       slave->product_code == identity->product_code;
 }
 
@@ -53,9 +54,12 @@ static int find_slave(struct mo_ecat_master *master, const struct robot_slave_id
 
 	count = mo_ecat_master_get_slave_count(master);
 	for (size_t i = 0; i < count; ++i) {
-		const struct mo_ecat_slave *slave = mo_ecat_master_get_slave(master, i);
+		struct mo_ecat_slave_info slave;
 
-		if (!slave_matches(slave, identity)) {
+		if (mo_ecat_master_get_slave_info(master, i, &slave) < 0) {
+			continue;
+		}
+		if (!slave_matches(&slave, identity)) {
 			continue;
 		}
 		if (found) {

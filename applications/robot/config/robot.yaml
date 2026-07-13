@@ -1,12 +1,14 @@
 # 人形机器人配置模板。
-# EtherCAT 核心库不解析本文件；后续由应用层解析器在总线扫描完成后
-# 生成 struct robot_config。
+# EtherCAT 核心库不解析本文件；由应用层代码生成器在构建期转换为
+# struct robot_config。
 
-joints:
-  - name: left_shoulder_pitch
-    group: left_arm
-    match:
-      alias: 0
-      position: 1
-      vendor_id: 0x00000766
-      product_code: 0x00002001
+version: "1.0"
+robot:
+  name: "humanoid"
+  joints:
+    - joint_name: "left_shoulder_pitch"
+      group: "left_arm"
+      identity:
+        position: 1
+        vendor_id: 0x00000766
+        product_code: 0x00002001
