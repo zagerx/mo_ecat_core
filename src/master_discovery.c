@@ -107,7 +107,7 @@ int master_backend_open(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	return master->backend.ops->open(&master->backend, &master->config);
+	return master->backend.ops->open(&master->backend, master->config);
 }
 
 int master_scan(struct mo_ecat_master *master, size_t *slave_count)
@@ -169,6 +169,27 @@ static size_t master_count_pdo_refs(const struct mo_ecat_master *master)
 	return count;
 }
 
+static void master_build_pdo_refs(const struct mo_ecat_master *master,
+				  struct mo_ecat_pdo_ref *refs)
+{
+	size_t idx = 0;
+
+	for (size_t i = 0; i < master->diag.count; ++i) {
+		const struct mo_ecat_slave *slave = &master->diag.slaves[i];
+
+		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
+			const struct mo_ecat_pdo_entry_info *entry = &slave->pdo_entries[j];
+			struct mo_ecat_pdo_ref *ref = &refs[idx++];
+
+			ref->slave_index = i;
+			ref->index = entry->index;
+			ref->subindex = entry->subindex;
+			ref->bit_length = entry->bit_length;
+			ref->direction = entry->direction;
+		}
+	}
+}
+
 int master_configure(struct mo_ecat_master *master)
 {
 	size_t pdo_ref_count;
@@ -184,13 +205,34 @@ int master_configure(struct mo_ecat_master *master)
 		if (!refs) {
 			return -1;
 		}
+		master_build_pdo_refs(master, refs);
 	}
 
-	if (master->backend.ops->configure(&master->backend, &master->process.image, refs,
-					   pdo_ref_count, master->diag.slaves,
-					   master->diag.count) < 0) {
+	if (master->backend.ops->configure(&master->backend) < 0) {
 		free(refs);
 		return -1;
+	}
+
+	if (!master->backend.ops->get_process_image ||
+	    master->backend.ops->get_process_image(&master->backend,
+						   &master->process.image) < 0) {
+		free(refs);
+		return -1;
+	}
+	master->process.image.generation++;
+
+	if (pdo_ref_count > 0) {
+		if (!master->backend.ops->fill_pdo_refs ||
+		    master->backend.ops->fill_pdo_refs(&master->backend, refs, pdo_ref_count,
+						       master->process.image.generation) < 0) {
+			free(refs);
+			return -1;
+		}
+	}
+
+	if (master->backend.ops->fill_slave_info) {
+		master->backend.ops->fill_slave_info(&master->backend, master->diag.slaves,
+						     master->diag.count);
 	}
 
 	free(master->process.pdo_refs.refs);

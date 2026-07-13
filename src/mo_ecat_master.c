@@ -67,7 +67,7 @@ int mo_ecat_master_init(struct mo_ecat_master *master, const struct mo_ecat_mast
 		return -1;
 	}
 
-	master->config = *config;
+	master->config = config;
 	statemachine_init(&master->sm, master, master_state_init);
 	return 0;
 }

@@ -52,13 +52,26 @@ struct mo_ecat_backend_ops {
                              struct mo_ecat_slave *slaves,
                              size_t slave_count);
 
-    /** 完成 PDO 映射并回填运行时对象。scan() 成功后调用。 */
-    int  (*configure)(struct mo_ecat_backend *backend,
-                      struct mo_ecat_process_image *image,
-                      struct mo_ecat_pdo_ref *pdo_refs,
-                      size_t pdo_ref_count,
-                      struct mo_ecat_slave *slaves,
-                      size_t slave_count);
+    /** 完成 PDO 映射，只更新适配层内部状态，不直接填充核心层对象。 */
+    int  (*configure)(struct mo_ecat_backend *backend);
+
+    /** 将适配层已映射好的过程映像信息绑定到核心层对象。 */
+    int  (*get_process_image)(struct mo_ecat_backend *backend,
+                              struct mo_ecat_process_image *image);
+
+    /**
+     * 根据适配层映射结果，填充核心层 PDO 引用数组的 offset 等字段。
+     * refs 由核心层根据 slaves[].pdo_entries 预先构造好基础信息。
+     */
+    int  (*fill_pdo_refs)(struct mo_ecat_backend *backend,
+                          struct mo_ecat_pdo_ref *refs,
+                          size_t ref_count,
+                          uint32_t generation);
+
+    /** 将适配层最新从站静态信息回填到核心层从站数组。 */
+    int  (*fill_slave_info)(struct mo_ecat_backend *backend,
+                            struct mo_ecat_slave *slaves,
+                            size_t slave_count);
 
     int  (*activate)(struct mo_ecat_backend *backend);
 

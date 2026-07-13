@@ -15,8 +15,10 @@
 struct soem_backend_ctx {
 	ecx_contextt context;
 	uint8_t iomap[MO_ECAT_SOEM_IOMAP_SIZE];
+	size_t mapped_size;
 	uint32_t expected_wkc;
 	int opened;
+	int configured;
 };
 
 static struct soem_backend_ctx s_soem_ctx;
@@ -79,24 +81,18 @@ static int soem_backend_scan(struct mo_ecat_backend *backend, size_t *slave_coun
 
 	*slave_count = (size_t)count;
 	return 0;
-}
-
-static size_t soem_count_pdo_refs(const struct mo_ecat_slave *slaves, size_t slave_count)
-{
-	size_t count = 0;
-
-	for (size_t i = 0; i < slave_count; ++i) {
-		count += slaves[i].pdo_entry_count;
-	}
-
 	return count;
 }
 
-static int soem_check_dc_support(const struct mo_ecat_slave *slaves, size_t slave_count)
+static int soem_check_dc_support(ecx_contextt *context)
 {
-	for (size_t i = 0; i < slave_count; ++i) {
-		if (!slaves[i].has_dc) {
-			fprintf(stderr, "SOEM backend: slave %zu does not support DC\n", i);
+	if (!context) {
+		return -1;
+	}
+
+	for (int i = 1; i <= context->slavecount; ++i) {
+		if (!context->slavelist[i].hasdc) {
+			fprintf(stderr, "SOEM backend: slave %d does not support DC\n", i);
 			return -1;
 		}
 	}
@@ -104,69 +100,6 @@ static int soem_check_dc_support(const struct mo_ecat_slave *slaves, size_t slav
 	return 0;
 }
 
-static int soem_fill_pdo_refs(ecx_contextt *context, struct mo_ecat_slave *slaves,
-			      size_t slave_count, struct mo_ecat_pdo_ref *refs,
-			      size_t pdo_ref_count, uint8_t *iomap, size_t iomap_size,
-			      uint32_t generation)
-{
-	size_t idx = 0;
-
-	for (size_t i = 0; i < slave_count; ++i) {
-		struct mo_ecat_slave *slave = &slaves[i];
-		const ec_slavet *soem_slave = &context->slavelist[i + 1];
-
-		uint32_t out_bit = 0;
-		uint32_t in_bit = 0;
-
-		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
-			const struct mo_ecat_pdo_entry_info *entry = &slave->pdo_entries[j];
-
-			if (idx >= pdo_ref_count) {
-				return -1;
-			}
-
-			struct mo_ecat_pdo_ref *ref = &refs[idx++];
-			ref->slave_index = i;
-			ref->index = entry->index;
-			ref->subindex = entry->subindex;
-			ref->bit_length = entry->bit_length;
-			ref->direction = entry->direction;
-			ref->generation = generation;
-
-			uint32_t *used_bits =
-				(ref->direction == MO_ECAT_PDO_OUTPUT) ? &out_bit : &in_bit;
-			uint32_t available_bits =
-				(ref->direction == MO_ECAT_PDO_OUTPUT) ? soem_slave->Obits : soem_slave->Ibits;
-
-			if (ref->direction == MO_ECAT_PDO_OUTPUT) {
-				if (!soem_slave->outputs ||
-				    (*used_bits + ref->bit_length) > available_bits) {
-					return -1;
-				}
-				ref->byte_offset =
-					(uint32_t)(soem_slave->outputs - iomap) + (*used_bits / 8);
-			} else {
-				if (!soem_slave->inputs ||
-				    (*used_bits + ref->bit_length) > available_bits) {
-					return -1;
-				}
-				ref->byte_offset =
-					(uint32_t)(soem_slave->inputs - iomap) + (*used_bits / 8);
-			}
-
-			ref->bit_offset = (uint8_t)(*used_bits % 8);
-			*used_bits += ref->bit_length;
-
-			size_t start_bit = (size_t)ref->byte_offset * 8U + ref->bit_offset;
-			size_t end_bit = start_bit + ref->bit_length;
-			if (end_bit < start_bit || end_bit > iomap_size * 8U) {
-				return -1;
-			}
-		}
-	}
-
-	return idx == pdo_ref_count ? 0 : -1;
-}
 
 static void soem_set_backend_error_once(struct mo_ecat_cycle_result *result, int error)
 {
@@ -338,23 +271,17 @@ static int soem_backend_read_pdo_entries(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_configure(struct mo_ecat_backend *backend,
-				  struct mo_ecat_process_image *image,
-				  struct mo_ecat_pdo_ref *pdo_refs, size_t pdo_ref_count,
-				  struct mo_ecat_slave *slaves, size_t slave_count)
+static int soem_backend_configure(struct mo_ecat_backend *backend)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
+	int mapped_size;
 
-	if (!ctx || !image || (slave_count > 0 && !slaves)) {
-		return -1;
-	}
-
-	if (slave_count != (size_t)ctx->context.slavecount) {
+	if (!ctx || !ctx->opened) {
 		return -1;
 	}
 
 	/* 所有从站必须支持 DC。 */
-	if (soem_check_dc_support(slaves, slave_count) < 0) {
+	if (soem_check_dc_support(&ctx->context) < 0) {
 		return -1;
 	}
 
@@ -364,45 +291,132 @@ static int soem_backend_configure(struct mo_ecat_backend *backend,
 		return -1;
 	}
 
-	size_t expected_ref_count = soem_count_pdo_refs(slaves, slave_count);
-	if (pdo_refs && pdo_ref_count != expected_ref_count) {
-		fprintf(stderr, "SOEM backend: pdo_ref_count mismatch\n");
-		return -1;
-	}
-
 	/* 执行 PDO 映射。 */
-	int mapped_size = ecx_config_map_group(&ctx->context, ctx->iomap, 0);
+	mapped_size = ecx_config_map_group(&ctx->context, ctx->iomap, 0);
 	if (mapped_size <= 0 || (size_t)mapped_size > MO_ECAT_SOEM_IOMAP_SIZE) {
 		fprintf(stderr, "SOEM backend: map failed or exceeds fixed IOmap size\n");
 		return -1;
 	}
 
-	/* 回填过程数据域 */
-	image->memory = ctx->iomap;
-	image->size = (size_t)mapped_size;
-	image->generation++;
-	image->active = 0;
+	ctx->mapped_size = (size_t)mapped_size;
 
 	/* 计算期望 WKC */
 	ctx->expected_wkc = (uint32_t)ctx->context.grouplist[0].outputsWKC * 2U +
 			    ctx->context.grouplist[0].inputsWKC;
 
-	/* 填充从站静态信息 */
-	soem_fill_slave_info(slaves, slave_count, &ctx->context);
-
-	/* 填充 PDO 引用 offset */
-	if (pdo_refs && pdo_ref_count > 0) {
-		if (soem_fill_pdo_refs(&ctx->context, slaves, slave_count, pdo_refs,
-				       pdo_ref_count, ctx->iomap, image->size,
-				       image->generation) < 0) {
-			fprintf(stderr, "SOEM backend: failed to fill PDO refs\n");
-			return -1;
-		}
-	}
+	ctx->configured = 1;
 
 	printf("SOEM backend: %d slaves, IOmap %d bytes, expected WKC %u\n",
 	       ctx->context.slavecount, mapped_size, ctx->expected_wkc);
 
+	return 0;
+}
+
+static int soem_backend_get_process_image(struct mo_ecat_backend *backend,
+					  struct mo_ecat_process_image *image)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+	if (!ctx || !ctx->configured || !image) {
+		return -1;
+	}
+
+	image->memory = ctx->iomap;
+	image->size = ctx->mapped_size;
+	image->active = 0;
+	return 0;
+}
+
+static int soem_backend_fill_pdo_refs(struct mo_ecat_backend *backend,
+				      struct mo_ecat_pdo_ref *refs,
+				      size_t ref_count,
+				      uint32_t generation)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+	int slavecount;
+	uint32_t *used_out_bits = NULL;
+	uint32_t *used_in_bits = NULL;
+	int result = -1;
+
+	if (!ctx || !ctx->configured || (ref_count > 0 && !refs)) {
+		return -1;
+	}
+
+	slavecount = ctx->context.slavecount;
+	if (slavecount < 0) {
+		return -1;
+	}
+
+	if (slavecount > 0) {
+		used_out_bits = calloc((size_t)slavecount, sizeof(*used_out_bits));
+		used_in_bits = calloc((size_t)slavecount, sizeof(*used_in_bits));
+		if (!used_out_bits || !used_in_bits) {
+			goto cleanup;
+		}
+	}
+
+	for (size_t i = 0; i < ref_count; ++i) {
+		struct mo_ecat_pdo_ref *ref = &refs[i];
+		const ec_slavet *soem_slave;
+		uint32_t *used_bits;
+		uint32_t available_bits;
+		const uint8_t *base;
+		size_t start_bit;
+		size_t end_bit;
+
+		if (ref->slave_index >= (size_t)slavecount) {
+			goto cleanup;
+		}
+		soem_slave = &ctx->context.slavelist[ref->slave_index + 1];
+
+		if (ref->direction == MO_ECAT_PDO_OUTPUT) {
+			used_bits = &used_out_bits[ref->slave_index];
+			available_bits = soem_slave->Obits;
+			base = soem_slave->outputs;
+		} else {
+			used_bits = &used_in_bits[ref->slave_index];
+			available_bits = soem_slave->Ibits;
+			base = soem_slave->inputs;
+		}
+
+		if (!base || (*used_bits + ref->bit_length) > available_bits) {
+			goto cleanup;
+		}
+
+		ref->generation = generation;
+		ref->byte_offset = (uint32_t)(base - ctx->iomap) + (*used_bits / 8);
+		ref->bit_offset = (uint8_t)(*used_bits % 8);
+
+		start_bit = (size_t)ref->byte_offset * 8U + ref->bit_offset;
+		end_bit = start_bit + ref->bit_length;
+		if (end_bit < start_bit || end_bit > ctx->mapped_size * 8U) {
+			goto cleanup;
+		}
+
+		*used_bits += ref->bit_length;
+	}
+
+	result = 0;
+
+cleanup:
+	free(used_out_bits);
+	free(used_in_bits);
+	return result;
+}
+
+static int soem_backend_fill_slave_info(struct mo_ecat_backend *backend,
+					struct mo_ecat_slave *slaves,
+					size_t slave_count)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+	if (!ctx || !ctx->configured ||
+	    slave_count != (size_t)ctx->context.slavecount ||
+	    (slave_count > 0 && !slaves)) {
+		return -1;
+	}
+
+	soem_fill_slave_info(slaves, slave_count, &ctx->context);
 	return 0;
 }
 
@@ -540,6 +554,9 @@ static const struct mo_ecat_backend_ops soem_ops = {
 	.read_discovered_slaves = soem_backend_read_discovered_slaves,
 	.read_pdo_entries = soem_backend_read_pdo_entries,
 	.configure = soem_backend_configure,
+	.get_process_image = soem_backend_get_process_image,
+	.fill_pdo_refs = soem_backend_fill_pdo_refs,
+	.fill_slave_info = soem_backend_fill_slave_info,
 	.activate = soem_backend_activate,
 	.cycle_begin = soem_backend_cycle_begin,
 	.cycle_end = soem_backend_cycle_end,

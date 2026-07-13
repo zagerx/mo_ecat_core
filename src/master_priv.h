@@ -57,7 +57,7 @@ struct mo_ecat_master_pdo_refs {
  * 在 RESET/重新配置时同时失效。
  */
 struct mo_ecat_master_process_data {
-	struct mo_ecat_process_image image;    /**< 过程数据映像 */
+	struct mo_ecat_process_image image;      /**< 过程数据映像 */
 	struct mo_ecat_master_pdo_refs pdo_refs; /**< PDO 引用表 */
 };
 
@@ -67,10 +67,10 @@ struct mo_ecat_master_process_data {
 struct mo_ecat_master {
 	struct statemachine sm; /**< 底层状态机 */
 
-	enum mo_ecat_master_cmd command;       /**< 当前请求命令 */
-	enum mo_ecat_master_error error_code;  /**< 当前故障码 */
-	struct mo_ecat_backend backend;        /**< 后端实例 */
-	struct mo_ecat_master_config config; /**< 主站配置 */
+	enum mo_ecat_master_cmd command;            /**< 当前请求命令 */
+	enum mo_ecat_master_error error_code;       /**< 当前故障码 */
+	struct mo_ecat_backend backend;             /**< 后端实例 */
+	const struct mo_ecat_master_config *config; /**< 主站配置指针，指向外部配置，生命周期由调用者保证 */
 	struct mo_ecat_master_process_data process; /**< 过程数据（映像 + PDO 引用） */
 	struct mo_ecat_master_diagnostics diag;     /**< 从站诊断 */
 	struct mo_ecat_master_cycle cycle;          /**< 周期运行状态 */
