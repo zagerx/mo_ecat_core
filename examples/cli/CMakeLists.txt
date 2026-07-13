@@ -19,6 +19,11 @@ add_executable(ecat_cli
     threads.c
     print.c
     commands.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../config/mo_ecat_master_cfg.c
+)
+
+target_include_directories(ecat_cli PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../config
 )
 
 target_link_libraries(ecat_cli PRIVATE mo_ecat_core mo_robot)

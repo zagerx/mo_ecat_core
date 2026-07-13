@@ -21,13 +21,12 @@
 #include "threads.h"
 #include "commands.h"
 #include "mo_ecat/mo_ecat_master.h"
+#include "mo_ecat_master_cfg.h"
 
 /* 全局状态定义，其他模块通过 cli_state.h 引用 */
 struct mo_ecat_master *g_master = NULL;
 volatile int g_running = 1;
-struct mo_ecat_master_options g_options = {0};
 struct robot g_robot = {0};
-char g_ifname_buf[128] = {0};
 
 static void signal_handler(int sig)
 {
@@ -57,23 +56,17 @@ static void parse_line(char *line, char *cmd, size_t cmd_size, char *arg, size_t
 
 int main(int argc, char *argv[])
 {
-	const char *default_ifname = (argc > 1) ? argv[1] : "eth0";
+	(void)argc;
+	(void)argv;
 
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 
-	/* 初始化默认网口名 */
-	strncpy(g_ifname_buf, default_ifname, sizeof(g_ifname_buf) - 1);
-	g_ifname_buf[sizeof(g_ifname_buf) - 1] = '\0';
-
-	strncpy(g_options.interface_name, g_ifname_buf, sizeof(g_options.interface_name) - 1);
-	g_options.interface_name[sizeof(g_options.interface_name) - 1] = '\0';
-
 	printf("mo_ecat CLI\n");
-	printf("Interface: %s\n", g_options.interface_name);
+	printf("Interface: %s\n", g_master_options.interface_name);
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(&g_options);
+	g_master = mo_ecat_master_create(&g_master_options);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;

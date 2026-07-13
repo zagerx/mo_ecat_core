@@ -21,14 +21,8 @@ extern struct mo_ecat_master *g_master;
 /** 运行标志，控制后台线程退出 */
 extern volatile int g_running;
 
-/** 主站启动选项 */
-extern struct mo_ecat_master_options g_options;
-
 /** 当前构建的机器人实例 */
 extern struct robot g_robot;
-
-/** 网口名持久缓冲，避免被后续输入覆盖 */
-extern char g_ifname_buf[128];
 
 #ifdef __cplusplus
 }
