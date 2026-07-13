@@ -471,9 +471,9 @@ static int write_master_files(const char *interface,
     fprintf(h, "#ifndef MO_ECAT_MASTER_CFG_H\n");
     fprintf(h, "#define MO_ECAT_MASTER_CFG_H\n");
     fprintf(h, "\n");
-    fprintf(h, "#include \"mo_ecat/mo_ecat_master.h\"\n");
+    fprintf(h, "#include \"mo_ecat/mo_ecat_master_config.h\"\n");
     fprintf(h, "\n");
-    fprintf(h, "extern const struct mo_ecat_master_options g_master_options;\n");
+    fprintf(h, "extern const struct mo_ecat_master_config g_master_config;\n");
     fprintf(h, "\n");
     fprintf(h, "#endif /* MO_ECAT_MASTER_CFG_H */\n");
 
@@ -482,7 +482,7 @@ static int write_master_files(const char *interface,
     fprintf(c, "\n");
     fprintf(c, "#include \"mo_ecat_master_cfg.h\"\n");
     fprintf(c, "\n");
-    fprintf(c, "const struct mo_ecat_master_options g_master_options = {\n");
+    fprintf(c, "const struct mo_ecat_master_config g_master_config = {\n");
     fprintf(c, "    .interface_name = \"%s\",\n", interface);
     fprintf(c, "};\n");
 

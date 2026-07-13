@@ -2,6 +2,7 @@
 #define MO_ECAT_MASTER_H
 
 #include "mo_ecat/mo_ecat_common.h"
+#include "mo_ecat/mo_ecat_master_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,17 +10,12 @@ extern "C" {
 
 struct mo_ecat_master;
 
-/** 主站启动选项。 */
-struct mo_ecat_master_options {
-    char interface_name[MO_ECAT_MAX_IFNAME_LEN + 1];
-};
-
 /**
  * @brief 主站状态机请求命令
  */
 enum mo_ecat_master_cmd {
     MO_ECAT_MASTER_CMD_NONE,         /**< 无命令 */
-    MO_ECAT_MASTER_CMD_DISCOVER,     /**< 扫描总线 */
+    MO_ECAT_MASTER_CMD_SCAN,         /**< 扫描总线 */
     MO_ECAT_MASTER_CMD_CONFIGURE,    /**< 配置 PDO/DC/IOmap */
     MO_ECAT_MASTER_CMD_ACTIVATE,     /**< 激活周期运行 */
     MO_ECAT_MASTER_CMD_DEACTIVATE,   /**< 停止周期运行 */
@@ -50,13 +46,13 @@ enum mo_ecat_master_error {
 /**
  * @brief 初始化主站对象
  *
- * 该函数只初始化对象字段、绑定配置指针并初始化内部状态机，
+ * 该函数只初始化对象字段、绑定配置并初始化内部状态机，
  * 不打开后端、不配置总线。config 由调用者保证生命周期。
  *
  * @return 0 成功，非 0 失败
  */
 int mo_ecat_master_init(struct mo_ecat_master *master,
-                        const struct mo_ecat_master_options *options);
+                        const struct mo_ecat_master_config *config);
 
 /**
  * @brief 反初始化主站对象
@@ -72,7 +68,7 @@ void mo_ecat_master_deinit(struct mo_ecat_master *master);
  * 字段初始化和配置指针绑定。单主站场景下，重复调用会失败并返回 NULL。
  */
 struct mo_ecat_master *mo_ecat_master_create(
-    const struct mo_ecat_master_options *options);
+    const struct mo_ecat_master_config *config);
 
 /**
  * @brief 销毁主站对象
@@ -108,7 +104,7 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master,
  *
  * 该返回值只在状态为 FAULT 时具有诊断意义；命令未被接受时不会更新。
  */
-enum mo_ecat_master_error mo_ecat_master_get_last_error(
+enum mo_ecat_master_error mo_ecat_master_get_error_code(
     const struct mo_ecat_master *master);
 
 /**

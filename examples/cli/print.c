@@ -41,7 +41,7 @@ void print_diagnostics(struct mo_ecat_master *master)
 {
 	int rc = mo_ecat_master_read_diagnostics(master);
 	if (rc < 0) {
-		printf("Diagnostics unavailable (state: %s). Run 'discover' first.\n",
+		printf("Diagnostics unavailable (state: %s). Run 'scan' first.\n",
 		       state_name(mo_ecat_master_get_state(master)));
 		return;
 	}
@@ -137,7 +137,7 @@ void print_help(void)
 	printf("Commands:\n"
 	       "  help              show this help\n"
 	       "  state             show master state and slave count\n"
-	       "  discover          request bus discovery from IDLE\n"
+	       "  scan              request bus scan from IDLE\n"
 	       "  configure         configure bus after DISCOVERED\n"
 	       "  activate          activate bus after READY\n"
 	       "  deactivate        stop cyclic operation from RUNNING\n"

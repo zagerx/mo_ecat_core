@@ -7,11 +7,13 @@
 #include "master_states.h"
 #include "master_priv.h"
 
+static void master_state_configure(struct statemachine *sm);
+
 static void master_set_fault(struct mo_ecat_master *master,
 			     enum mo_ecat_master_error error)
 {
 	if (master) {
-		master->last_error = error;
+		master->error_code = error;
 	}
 }
 
@@ -55,7 +57,7 @@ void master_state_idle(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->image.active = 0;
+			master->process.image.active = 0;
 		}
 		sm->phase = SCAN;
 		break;
@@ -64,7 +66,7 @@ void master_state_idle(struct statemachine *sm)
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
-		if (cmd != MO_ECAT_MASTER_CMD_DISCOVER) {
+		if (cmd != MO_ECAT_MASTER_CMD_SCAN) {
 			master_clear_cmd(master);
 			break;
 		}
@@ -119,7 +121,7 @@ void master_state_discovered(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->image.active = 0;
+			master->process.image.active = 0;
 		}
 		sm->phase = USER_STATUS;
 		break;
@@ -142,7 +144,7 @@ void master_state_discovered(struct statemachine *sm)
 	}
 }
 
-void master_state_configure(struct statemachine *sm)
+static void master_state_configure(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
 	int result;
@@ -183,7 +185,7 @@ void master_state_ready(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->image.active = 0;
+			master->process.image.active = 0;
 		}
 		sm->phase = USER_STATUS;
 		break;
@@ -259,7 +261,7 @@ void master_state_fault(struct statemachine *sm)
 	switch (sm->phase) {
 	case ENTER:
 		if (master) {
-			master->image.active = 0;
+			master->process.image.active = 0;
 		}
 		sm->phase = USER_STATUS;
 		break;

@@ -63,10 +63,10 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_handler);
 
 	printf("mo_ecat CLI\n");
-	printf("Interface: %s\n", g_master_options.interface_name);
+	printf("Interface: %s\n", g_master_config.interface_name);
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(&g_master_options);
+	g_master = mo_ecat_master_create(&g_master_config);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;
@@ -102,8 +102,8 @@ int main(int argc, char *argv[])
 			cmd_help();
 		} else if (strcmp(cmd, "state") == 0 || strcmp(cmd, "status") == 0) {
 			cmd_state();
-		} else if (strcmp(cmd, "discover") == 0) {
-			cmd_discover();
+		} else if (strcmp(cmd, "scan") == 0) {
+			cmd_scan();
 		} else if (strcmp(cmd, "configure") == 0) {
 			cmd_configure();
 		} else if (strcmp(cmd, "activate") == 0) {

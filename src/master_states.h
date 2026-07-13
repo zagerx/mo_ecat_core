@@ -10,7 +10,6 @@ extern "C" {
 void master_state_init(struct statemachine *sm);
 void master_state_idle(struct statemachine *sm);
 void master_state_discovered(struct statemachine *sm);
-void master_state_configure(struct statemachine *sm);
 void master_state_ready(struct statemachine *sm);
 void master_state_running(struct statemachine *sm);
 void master_state_fault(struct statemachine *sm);

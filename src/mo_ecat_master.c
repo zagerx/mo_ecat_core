@@ -56,9 +56,9 @@ void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd
 	}
 }
 
-int mo_ecat_master_init(struct mo_ecat_master *master, const struct mo_ecat_master_options *options)
+int mo_ecat_master_init(struct mo_ecat_master *master, const struct mo_ecat_master_config *config)
 {
-	if (!master || !options || options->interface_name[0] == '\0') {
+	if (!master || !config || config->interface_name[0] == '\0') {
 		return -1;
 	}
 
@@ -67,7 +67,7 @@ int mo_ecat_master_init(struct mo_ecat_master *master, const struct mo_ecat_mast
 		return -1;
 	}
 
-	master->options = *options;
+	master->config = *config;
 	statemachine_init(&master->sm, master, master_state_init);
 	return 0;
 }
@@ -86,7 +86,7 @@ void mo_ecat_master_deinit(struct mo_ecat_master *master)
 	memset(master, 0, sizeof(*master));
 }
 
-struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_options *options)
+struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config)
 {
 	struct mo_ecat_master *master;
 
@@ -99,7 +99,7 @@ struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_options
 		return NULL;
 	}
 
-	if (mo_ecat_master_init(master, options) < 0) {
+	if (mo_ecat_master_init(master, config) < 0) {
 		free(master);
 		return NULL;
 	}
@@ -131,7 +131,7 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_
 	return 0;
 }
 
-enum mo_ecat_master_error mo_ecat_master_get_last_error(const struct mo_ecat_master *master)
+enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_master *master)
 {
 	enum mo_ecat_master_error error;
 
@@ -140,7 +140,7 @@ enum mo_ecat_master_error mo_ecat_master_get_last_error(const struct mo_ecat_mas
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	error = master->last_error;
+	error = master->error_code;
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return error;
 }

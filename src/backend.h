@@ -33,7 +33,7 @@ struct mo_ecat_backend_ops {
     const char *name;
 
     int  (*open)(struct mo_ecat_backend *backend,
-                 const struct mo_ecat_master_options *options);
+                 const struct mo_ecat_master_config *config);
 
     /** 扫描总线并返回实际从站数量。open() 成功后调用。 */
     int  (*scan)(struct mo_ecat_backend *backend,

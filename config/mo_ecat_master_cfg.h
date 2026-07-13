@@ -4,8 +4,8 @@
 #ifndef MO_ECAT_MASTER_CFG_H
 #define MO_ECAT_MASTER_CFG_H
 
-#include "mo_ecat/mo_ecat_master.h"
+#include "mo_ecat/mo_ecat_master_config.h"
 
-extern const struct mo_ecat_master_options g_master_options;
+extern const struct mo_ecat_master_config g_master_config;
 
 #endif /* MO_ECAT_MASTER_CFG_H */

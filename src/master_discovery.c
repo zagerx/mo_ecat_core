@@ -57,14 +57,14 @@ static int allocate_discovery_memory(struct mo_ecat_master *master, size_t slave
 		return 0;
 	}
 
-	master->runtime_memory.memory = calloc(1, total_size);
-	if (!master->runtime_memory.memory) {
+	master->diag.memory = calloc(1, total_size);
+	if (!master->diag.memory) {
 		return -1;
 	}
-	master->runtime_memory.size = total_size;
-	master->diag.slaves = aligned_region(master->runtime_memory.memory, &offset,
+	master->diag.size = total_size;
+	master->diag.slaves = aligned_region(master->diag.memory, &offset,
 					     _Alignof(struct mo_ecat_slave), slave_size);
-	master->diag.states = aligned_region(master->runtime_memory.memory, &offset,
+	master->diag.states = aligned_region(master->diag.memory, &offset,
 					     _Alignof(struct mo_ecat_slave_state), state_size);
 	return 0;
 }
@@ -88,17 +88,17 @@ void master_release_resources(struct mo_ecat_master *master)
 		master->backend.ops->close(&master->backend);
 	}
 
-	free(master->pdo.refs);
-	free(master->runtime_memory.memory);
+	free(master->process.pdo_refs.refs);
+	free(master->diag.memory);
 	memset(&master->backend, 0, sizeof(master->backend));
-	memset(&master->image, 0, sizeof(master->image));
+	memset(&master->process.image, 0, sizeof(master->process.image));
 	master->diag.slaves = NULL;
 	master->diag.states = NULL;
 	master->diag.count = 0;
-	master->pdo.refs = NULL;
-	master->pdo.count = 0;
-	master->runtime_memory.memory = NULL;
-	master->runtime_memory.size = 0;
+	master->diag.memory = NULL;
+	master->diag.size = 0;
+	master->process.pdo_refs.refs = NULL;
+	master->process.pdo_refs.count = 0;
 }
 
 int master_backend_open(struct mo_ecat_master *master)
@@ -107,7 +107,7 @@ int master_backend_open(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	return master->backend.ops->open(&master->backend, &master->options);
+	return master->backend.ops->open(&master->backend, &master->config);
 }
 
 int master_scan(struct mo_ecat_master *master, size_t *slave_count)
@@ -186,16 +186,16 @@ int master_configure(struct mo_ecat_master *master)
 		}
 	}
 
-	if (master->backend.ops->configure(&master->backend, &master->image, refs,
+	if (master->backend.ops->configure(&master->backend, &master->process.image, refs,
 					   pdo_ref_count, master->diag.slaves,
 					   master->diag.count) < 0) {
 		free(refs);
 		return -1;
 	}
 
-	free(master->pdo.refs);
-	master->pdo.refs = refs;
-	master->pdo.count = pdo_ref_count;
+	free(master->process.pdo_refs.refs);
+	master->process.pdo_refs.refs = refs;
+	master->process.pdo_refs.count = pdo_ref_count;
 	return 0;
 }
 
@@ -209,7 +209,7 @@ int master_activate(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	master->image.active = 1;
+	master->process.image.active = 1;
 	return 0;
 }
 
@@ -223,6 +223,6 @@ int master_deactivate(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	master->image.active = 0;
+	master->process.image.active = 0;
 	return 0;
 }

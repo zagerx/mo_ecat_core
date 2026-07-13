@@ -45,16 +45,16 @@ static enum mo_ecat_al_state soem_to_al_state(uint16_t soem_state)
 }
 
 static int soem_backend_open(struct mo_ecat_backend *backend,
-			     const struct mo_ecat_master_options *options)
+			     const struct mo_ecat_master_config *config)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 
-	if (!ctx || !options || options->interface_name[0] == '\0') {
+	if (!ctx || !config || config->interface_name[0] == '\0') {
 		return -1;
 	}
 
-	if (!ecx_init(&ctx->context, options->interface_name)) {
-		fprintf(stderr, "SOEM backend: ecx_init failed on %s\n", options->interface_name);
+	if (!ecx_init(&ctx->context, config->interface_name)) {
+		fprintf(stderr, "SOEM backend: ecx_init failed on %s\n", config->interface_name);
 		return -1;
 	}
 

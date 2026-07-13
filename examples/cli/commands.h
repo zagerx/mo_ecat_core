@@ -18,9 +18,9 @@ extern "C" {
 void cmd_state(void);
 
 /**
- * @brief 处理 discover 命令
+ * @brief 处理 scan 命令
  */
-void cmd_discover(void);
+void cmd_scan(void);
 
 /**
  * @brief 处理 configure 命令

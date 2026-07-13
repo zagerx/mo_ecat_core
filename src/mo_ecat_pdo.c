@@ -35,7 +35,7 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cyc
 	}
 
 	pthread_mutex_lock(&master->lock);
-	if (!master->image.active || !master->backend.ops || !master->backend.ops->cycle_begin) {
+	if (!master->process.image.active || !master->backend.ops || !master->backend.ops->cycle_begin) {
 		pthread_mutex_unlock(&master->lock);
 		return -1;
 	}
@@ -55,7 +55,7 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle
 	}
 
 	pthread_mutex_lock(&master->lock);
-	if (!master->image.active || !master->backend.ops || !master->backend.ops->cycle_end) {
+	if (!master->process.image.active || !master->backend.ops || !master->backend.ops->cycle_end) {
 		pthread_mutex_unlock(&master->lock);
 		return -1;
 	}
@@ -77,7 +77,7 @@ size_t mo_ecat_master_get_pdo_ref_count(const struct mo_ecat_master *master)
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	count = master->pdo.count;
+	count = master->process.pdo_refs.count;
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return count;
 }
@@ -90,12 +90,12 @@ int mo_ecat_master_get_pdo_ref(const struct mo_ecat_master *master,
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	if (index >= master->pdo.count) {
+	if (index >= master->process.pdo_refs.count) {
 		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 		return -1;
 	}
 
-	*ref = master->pdo.refs[index];
+	*ref = master->process.pdo_refs.refs[index];
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return 0;
 }
@@ -117,14 +117,14 @@ int mo_ecat_master_get_process_image_view(const struct mo_ecat_master *master,
 		return -1;
 	}
 
-	if (!master->image.memory || master->image.size == 0) {
+	if (!master->process.image.memory || master->process.image.size == 0) {
 		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 		return -1;
 	}
 
-	view->memory = master->image.memory;
-	view->size = master->image.size;
-	view->generation = master->image.generation;
+	view->memory = master->process.image.memory;
+	view->size = master->process.image.size;
+	view->generation = master->process.image.generation;
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return 0;
 }
@@ -153,13 +153,13 @@ const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 	if (reference->direction != MO_ECAT_PDO_INPUT ||
-	    reference->generation != master->image.generation ||
-	    !pdo_ref_in_bounds(&master->image, reference)) {
+	    reference->generation != master->process.image.generation ||
+	    !pdo_ref_in_bounds(&master->process.image, reference)) {
 		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 		return NULL;
 	}
 
-	data = &master->image.memory[reference->byte_offset];
+	data = &master->process.image.memory[reference->byte_offset];
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return data;
 }
@@ -174,13 +174,13 @@ void *mo_ecat_pdo_output(struct mo_ecat_master *master, const struct mo_ecat_pdo
 
 	pthread_mutex_lock(&master->lock);
 	if (reference->direction != MO_ECAT_PDO_OUTPUT ||
-	    reference->generation != master->image.generation ||
-	    !pdo_ref_in_bounds(&master->image, reference)) {
+	    reference->generation != master->process.image.generation ||
+	    !pdo_ref_in_bounds(&master->process.image, reference)) {
 		pthread_mutex_unlock(&master->lock);
 		return NULL;
 	}
 
-	data = &master->image.memory[reference->byte_offset];
+	data = &master->process.image.memory[reference->byte_offset];
 	pthread_mutex_unlock(&master->lock);
 	return data;
 }

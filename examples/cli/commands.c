@@ -19,13 +19,13 @@ void cmd_state(void)
 	print_state(g_master);
 }
 
-void cmd_discover(void)
+void cmd_scan(void)
 {
-	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_DISCOVER);
+	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_SCAN);
 	if (rc == 0) {
-		printf("Discovery requested on %s.\n", g_master_options.interface_name);
+		printf("Scan requested on %s.\n", g_master_config.interface_name);
 	} else {
-		printf("Failed to request discovery.\n");
+		printf("Failed to request scan.\n");
 	}
 }
 
