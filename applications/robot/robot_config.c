@@ -1,6 +1,6 @@
 /**
  * @file robot_config.c
- * @brief 人形机器人配置文件解析预留实现
+ * @brief 机器人配置文件解析预留实现
  *
  * 后续在这里将 YAML/JSON 等配置文件转换为 robot_config。
  */
@@ -10,8 +10,8 @@
 static const struct robot_joint_config s_default_joints[] = {
 	{
 		.joint_name = "left_shoulder_pitch",
-		.group = HUMANOID_GROUP_LEFT_ARM,
-		.match =
+		.group = ROBOT_GROUP_LEFT_ARM,
+		.identity =
 			{
 				.alias = 0,
 				.position = 1,
@@ -22,7 +22,7 @@ static const struct robot_joint_config s_default_joints[] = {
 };
 
 static const struct robot_config s_default_config = {
-	.name = "humanoid",
+	.name = "robot",
 	.joints = s_default_joints,
 	.joint_count = sizeof(s_default_joints) / sizeof(s_default_joints[0]),
 };

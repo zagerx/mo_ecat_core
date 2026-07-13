@@ -19,8 +19,7 @@ void cmd_state(void)
 
 void cmd_discover(void)
 {
-	int rc = mo_ecat_master_write_cmd(g_master,
-		MO_ECAT_MASTER_CMD_DISCOVER);
+	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_DISCOVER);
 	if (rc == 0) {
 		printf("Discovery requested on %s.\n", g_options.interface_name);
 	} else {
@@ -30,9 +29,8 @@ void cmd_discover(void)
 
 void cmd_reset(void)
 {
-	int rc = mo_ecat_master_write_cmd(g_master,
-		MO_ECAT_MASTER_CMD_RESET);
-	robot_release(&g_humanoid);
+	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_RESET);
+	robot_release(&g_robot);
 	if (rc == 0) {
 		printf("Reset requested.\n");
 	} else {
@@ -49,13 +47,13 @@ void cmd_topology(void)
 {
 	const struct robot_config *config = robot_default_config();
 
-	robot_release(&g_humanoid);
-	if (robot_build(g_master, config, &g_humanoid) < 0) {
+	robot_release(&g_robot);
+	if (robot_build(&g_robot, g_master, config) < 0) {
 		printf("Failed to build robot. Check DISCOVERED state and configuration.\n");
 		return;
 	}
 
-	print_robot(&g_humanoid);
+	print_robot(&g_robot);
 }
 
 void cmd_pdo(const char *arg)

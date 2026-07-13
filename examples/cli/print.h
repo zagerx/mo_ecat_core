@@ -35,7 +35,7 @@ void print_state(struct mo_ecat_master *master);
 void print_diagnostics(struct mo_ecat_master *master);
 
 /**
- * @brief 打印人形机器人实例
+ * @brief 打印机器人实例
  */
 void print_robot(const struct robot *robot);
 

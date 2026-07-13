@@ -122,7 +122,7 @@ void print_diagnostics(struct mo_ecat_master *master)
 void print_robot(const struct robot *robot)
 {
 	if (!robot || !robot->master || robot->group_count == 0) {
-		printf("No humanoid robot has been built.\n");
+		printf("No robot has been built.\n");
 		return;
 	}
 
@@ -185,7 +185,7 @@ void print_help(void)
 	       "  discover          request bus discovery from IDLE\n"
 	       "  reset             release resources and return to IDLE\n"
 	       "  diag              print discovered slave information\n"
-	       "  topology          build and print humanoid robot\n"
+	       "  topology          build and print robot\n"
 	       "  pdo <idx>         print PDO reference information\n"
 	       "  exit              quit\n");
 }

@@ -26,7 +26,7 @@
 struct mo_ecat_master *g_master = NULL;
 volatile int g_running = 1;
 struct mo_ecat_master_options g_options = {0};
-struct robot g_humanoid = {0};
+struct robot g_robot = {0};
 char g_ifname_buf[128] = {0};
 
 static void signal_handler(int sig)
@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
 	printf("\nStopping...\n");
 	g_running = 0;
 	pthread_join(dispatch_thread, NULL);
-	robot_release(&g_humanoid);
+	robot_release(&g_robot);
 	mo_ecat_master_destroy(g_master);
 
 	return 0;
