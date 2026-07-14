@@ -7,7 +7,7 @@
 #include "master_states.h"
 #include "master_priv.h"
 
-static void master_state_configure(struct statemachine *sm);
+static void master_state_configuring(struct statemachine *sm);
 
 static void master_set_fault(struct mo_ecat_master *master,
 			     enum mo_ecat_master_error error)
@@ -134,7 +134,7 @@ void master_state_discovered(struct statemachine *sm)
 			master_release_resources(master);
 			sm_transition(sm, master_state_idle);
 		} else if (cmd == MO_ECAT_MASTER_CMD_CONFIGURE) {
-			sm_transition(sm, master_state_configure);
+			sm_transition(sm, master_state_configuring);
 		}
 		master_clear_cmd(master);
 		break;
@@ -144,7 +144,7 @@ void master_state_discovered(struct statemachine *sm)
 	}
 }
 
-static void master_state_configure(struct statemachine *sm)
+static void master_state_configuring(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
 	int result;

@@ -81,8 +81,7 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master);
 /**
  * @brief 调度主站状态机
  *
- * 应由后台线程以固定周期调用。该函数会处理状态迁移、命令执行以及
- * 周期结果消费。
+ * 应由后台线程以固定周期调用。该函数会处理状态迁移和命令执行。
  */
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 

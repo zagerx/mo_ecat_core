@@ -9,7 +9,7 @@
 #include "master_priv.h"
 
 static int pdo_ref_in_bounds(const struct mo_ecat_process_image *image,
-			     const struct mo_ecat_pdo_ref *reference)
+			     const struct mo_ecat_slave_pdo_ref *reference)
 {
 	size_t image_bits;
 	size_t start_bit;
@@ -26,7 +26,7 @@ static int pdo_ref_in_bounds(const struct mo_ecat_process_image *image,
 	return end_bit >= start_bit && end_bit <= image_bits;
 }
 
-int mo_ecat_master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
+int mo_ecat_master_cycle_result_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
 {
 	int backend_result;
 
@@ -46,7 +46,7 @@ int mo_ecat_master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cyc
 	return backend_result;
 }
 
-int mo_ecat_master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
+int mo_ecat_master_cycle_result_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
 {
 	int backend_result;
 
@@ -62,7 +62,7 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle
 
 	backend_result = master->backend.ops->cycle_end(&master->backend, result);
 	if (backend_result == 0) {
-		master->cycle.last = *result;
+		master->cycle_result.last = *result;
 	}
 	pthread_mutex_unlock(&master->lock);
 	return backend_result;
@@ -83,7 +83,7 @@ size_t mo_ecat_master_get_pdo_ref_count(const struct mo_ecat_master *master)
 }
 
 int mo_ecat_master_get_pdo_ref(const struct mo_ecat_master *master,
-			       size_t index, struct mo_ecat_pdo_ref *ref)
+			       size_t index, struct mo_ecat_slave_pdo_ref *ref)
 {
 	if (!master || !ref) {
 		return -1;
@@ -137,13 +137,13 @@ int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	*result = master->cycle.last;
+	*result = master->cycle_result.last;
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return 0;
 }
 
 const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
-			      const struct mo_ecat_pdo_ref *reference)
+			      const struct mo_ecat_slave_pdo_ref *reference)
 {
 	const void *data;
 
@@ -164,7 +164,7 @@ const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
 	return data;
 }
 
-void *mo_ecat_pdo_output(struct mo_ecat_master *master, const struct mo_ecat_pdo_ref *reference)
+void *mo_ecat_pdo_output(struct mo_ecat_master *master, const struct mo_ecat_slave_pdo_ref *reference)
 {
 	void *data;
 

@@ -18,26 +18,20 @@ extern "C" {
 #endif
 
 /**
- * @brief 周期运行状态
- *
- * 保存最近一次周期结果以及连续异常计数，用于核心层判断
- * 记录最近一次周期结果。
+ * @brief 最近一次周期结果
  */
-struct mo_ecat_master_cycle {
+struct mo_ecat_master_cycle_result {
 	struct mo_ecat_cycle_result last; /**< 最近一次周期结果 */
 };
 
 /**
- * @brief 从站诊断信息
+ * @brief 从站表
  *
- * 从站静态信息与最近一次诊断状态。
+ * 保存已发现从站信息，运行时状态由后端直接更新到 slaves[].state。
  */
-struct mo_ecat_master_diagnostics {
-	struct mo_ecat_slave *slaves;       /**< 从站信息数组 */
-	struct mo_ecat_slave_state *states; /**< 从站状态数组 */
-	size_t count;                       /**< 从站数量 */
-	void *memory;                       /**< slaves/states 共用内存块 */
-	size_t size;                        /**< 内存块字节数 */
+struct mo_ecat_master_slave_table {
+	struct mo_ecat_slave *slaves; /**< 从站信息数组 */
+	size_t count;                 /**< 从站数量 */
 };
 
 /**
@@ -46,7 +40,7 @@ struct mo_ecat_master_diagnostics {
  * 由配置展开得到的扁平 PDO 引用数组，后端负责填写 offset。
  */
 struct mo_ecat_master_pdo_refs {
-	struct mo_ecat_pdo_ref *refs; /**< PDO 引用数组 */
+	struct mo_ecat_slave_pdo_ref *refs; /**< PDO 引用数组 */
 	size_t count;                 /**< PDO 引用数量 */
 };
 
@@ -72,8 +66,8 @@ struct mo_ecat_master {
 	struct mo_ecat_backend backend;             /**< 后端实例 */
 	const struct mo_ecat_master_config *config; /**< 主站配置指针，指向外部配置，生命周期由调用者保证 */
 	struct mo_ecat_master_process_data process; /**< 过程数据（映像 + PDO 引用） */
-	struct mo_ecat_master_diagnostics diag;     /**< 从站诊断 */
-	struct mo_ecat_master_cycle cycle;          /**< 周期运行状态 */
+	struct mo_ecat_master_slave_table slave_table; /**< 从站表 */
+	struct mo_ecat_master_cycle_result cycle_result; /**< 最近一次周期结果 */
 
 	pthread_mutex_t lock; /**< 保护本对象的互斥锁 */
 	void *user_data;      /**< 用户私有数据 */

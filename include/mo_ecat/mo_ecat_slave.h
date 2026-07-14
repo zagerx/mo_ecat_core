@@ -13,7 +13,7 @@ struct mo_ecat_master;
 #define MO_ECAT_MAX_SM          8
 #define MO_ECAT_MAX_FMMU        4
 
-enum mo_ecat_al_state {
+enum mo_ecat_slave_al_state {
     MO_ECAT_AL_STATE_INIT,
     MO_ECAT_AL_STATE_PRE_OP,
     MO_ECAT_AL_STATE_SAFE_OP,
@@ -23,7 +23,7 @@ enum mo_ecat_al_state {
 };
 
 struct mo_ecat_slave_state {
-    enum mo_ecat_al_state al_state;
+    enum mo_ecat_slave_al_state al_state;
     int error;
     uint16_t al_status_code;
     int online;
@@ -31,10 +31,10 @@ struct mo_ecat_slave_state {
 };
 
 /** 从站默认 PDO 映射项。 */
-struct mo_ecat_pdo_entry_info {
+struct mo_ecat_slave_pdo_entry {
     uint16_t pdo_index;
-    uint16_t index;
-    uint8_t subindex;
+    uint16_t object_index;
+    uint8_t object_subindex;
     uint8_t bit_length;
     enum mo_ecat_pdo_direction direction;
 };
@@ -49,7 +49,7 @@ struct mo_ecat_slave_mailbox {
 };
 
 /** 从站 Sync Manager 信息。 */
-struct mo_ecat_sync_manager {
+struct mo_ecat_slave_sync_manager {
     uint16_t start_address;
     uint16_t length;
     uint32_t flags;
@@ -57,7 +57,7 @@ struct mo_ecat_sync_manager {
 };
 
 /** 从站 FMMU 功能分配。 */
-struct mo_ecat_fmmu {
+struct mo_ecat_slave_fmmu {
     uint8_t function;
 };
 
@@ -77,9 +77,9 @@ struct mo_ecat_slave {
     int has_foe;
     int has_eoe;
     int has_soe;
-    struct mo_ecat_sync_manager sm[MO_ECAT_MAX_SM];
-    struct mo_ecat_fmmu fmmu[MO_ECAT_MAX_FMMU];
-    struct mo_ecat_pdo_entry_info pdo_entries[MO_ECAT_MAX_PDO_ENTRIES];
+    struct mo_ecat_slave_sync_manager sm[MO_ECAT_MAX_SM];
+    struct mo_ecat_slave_fmmu fmmu[MO_ECAT_MAX_FMMU];
+    struct mo_ecat_slave_pdo_entry pdo_entries[MO_ECAT_MAX_PDO_ENTRIES];
     size_t pdo_entry_count;
 };
 
@@ -97,6 +97,7 @@ struct mo_ecat_slave_info {
     char name[MO_ECAT_MAX_NAME_LEN + 1];
     int has_dc;
     size_t pdo_entry_count;
+    struct mo_ecat_slave_state state; /**< 从站运行时诊断状态 */
 };
 
 /**

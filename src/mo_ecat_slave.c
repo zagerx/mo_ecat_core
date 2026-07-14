@@ -17,7 +17,7 @@ size_t mo_ecat_master_get_slave_count(const struct mo_ecat_master *master)
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	count = master->diag.count;
+	count = master->slave_table.count;
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return count;
 }
@@ -32,12 +32,12 @@ int mo_ecat_master_get_slave_info(const struct mo_ecat_master *master,
 	}
 
 	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	if (index >= master->diag.count) {
+	if (index >= master->slave_table.count) {
 		pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 		return -1;
 	}
 
-	slave = &master->diag.slaves[index];
+	slave = &master->slave_table.slaves[index];
 	memset(info, 0, sizeof(*info));
 	info->position = slave->position;
 	info->alias = slave->alias;
@@ -48,6 +48,7 @@ int mo_ecat_master_get_slave_info(const struct mo_ecat_master *master,
 	info->name[sizeof(info->name) - 1] = '\0';
 	info->has_dc = slave->has_dc;
 	info->pdo_entry_count = slave->pdo_entry_count;
+	info->state = slave->state;
 
 	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return 0;
@@ -72,19 +73,14 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	if (!master->backend.ops || !master->backend.ops->read_diagnostics) {
+	if (!master->backend.ops || !master->backend.ops->read_slave_states) {
 		pthread_mutex_unlock(&master->lock);
 		return -1;
 	}
 
-	result = master->backend.ops->read_diagnostics(&master->backend,
-						       master->diag.states,
-						       master->diag.count);
-	if (result == 0) {
-		for (size_t i = 0; i < master->diag.count; ++i) {
-			master->diag.slaves[i].state = master->diag.states[i];
-		}
-	}
+	result = master->backend.ops->read_slave_states(&master->backend,
+							master->slave_table.slaves,
+							master->slave_table.count);
 
 	pthread_mutex_unlock(&master->lock);
 	return result;

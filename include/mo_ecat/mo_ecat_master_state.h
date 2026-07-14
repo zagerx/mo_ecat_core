@@ -21,7 +21,6 @@ enum mo_ecat_master_state {
 
 /** 最近一次周期通信结果。 */
 struct mo_ecat_cycle_result {
-    int backend_error;
     int link_up;
     uint32_t expected_wkc;
     uint32_t actual_wkc;
@@ -44,7 +43,7 @@ enum mo_ecat_master_state mo_ecat_master_get_state(
 /**
  * @brief 获取最近一次周期结果
  *
- * 结果由后台线程在 cycle_end() 成功后更新。
+ * 结果由 mo_ecat_master_cycle_end() 成功后更新。
  */
 int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
                                     struct mo_ecat_cycle_result *result);

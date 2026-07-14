@@ -11,10 +11,10 @@ extern "C" {
 struct mo_ecat_master;
 
 /** PDO 在过程数据映像中的引用。 */
-struct mo_ecat_pdo_ref {
+struct mo_ecat_slave_pdo_ref {
     size_t slave_index;
-    uint16_t index;
-    uint8_t subindex;
+    uint16_t object_index;
+    uint8_t object_subindex;
     uint8_t bit_length;
     uint32_t byte_offset;
     uint8_t bit_offset;
@@ -49,7 +49,7 @@ struct mo_ecat_process_image_view {
  * @return 0 成功，非 0 失败
  */
 int mo_ecat_master_get_pdo_ref(const struct mo_ecat_master *master,
-                               size_t index, struct mo_ecat_pdo_ref *ref);
+                               size_t index, struct mo_ecat_slave_pdo_ref *ref);
 
 /**
  * @brief 获取过程数据映像的公开只读视图
@@ -79,13 +79,13 @@ int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
  * @brief 获取输入 PDO 在过程数据中的地址
  */
 const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
-                              const struct mo_ecat_pdo_ref *ref);
+                              const struct mo_ecat_slave_pdo_ref *ref);
 
 /**
  * @brief 获取输出 PDO 在过程数据中的地址
  */
 void *mo_ecat_pdo_output(struct mo_ecat_master *master,
-                         const struct mo_ecat_pdo_ref *ref);
+                         const struct mo_ecat_slave_pdo_ref *ref);
 
 #ifdef __cplusplus
 }

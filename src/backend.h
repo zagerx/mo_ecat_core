@@ -24,7 +24,7 @@ struct mo_ecat_backend;          /* 前向声明，用于 ops 函数指针 */
  * 暴露或翻译成核心层能理解的结构。它们与后端生命周期回调分离，以便清晰
  * 标识依赖核心层类型的接口边界。
  */
-struct mo_ecat_backend_translation_ops {
+struct backend_translation_ops {
     /** 将 scan() 获得的从站基本信息写入核心层运行时数组。 */
     int  (*read_discovered_slaves)(struct mo_ecat_backend *backend,
                                    struct mo_ecat_slave *slaves,
@@ -43,7 +43,7 @@ struct mo_ecat_backend_translation_ops {
      * refs 由核心层根据 slaves[].pdo_entries 预先构造好基础信息。
      */
     int  (*fill_pdo_refs)(struct mo_ecat_backend *backend,
-                          struct mo_ecat_pdo_ref *refs,
+                          struct mo_ecat_slave_pdo_ref *refs,
                           size_t ref_count,
                           uint32_t generation);
 
@@ -57,7 +57,7 @@ struct mo_ecat_backend_translation_ops {
                             size_t slave_count);
 };
 
-struct mo_ecat_backend_ops {
+struct backend_ops {
     int  (*open)(struct mo_ecat_backend *backend,
                  const struct mo_ecat_master_config *config);
 
@@ -76,9 +76,9 @@ struct mo_ecat_backend_ops {
     int  (*cycle_end)(struct mo_ecat_backend *backend,
                       struct mo_ecat_cycle_result *result);
 
-    int  (*read_diagnostics)(struct mo_ecat_backend *backend,
-                             struct mo_ecat_slave_state *states,
-                             size_t state_count);
+    int  (*read_slave_states)(struct mo_ecat_backend *backend,
+                              struct mo_ecat_slave *slaves,
+                              size_t slave_count);
 
     int  (*deactivate)(struct mo_ecat_backend *backend);
     void (*close)(struct mo_ecat_backend *backend);
@@ -86,8 +86,8 @@ struct mo_ecat_backend_ops {
 
 struct mo_ecat_backend {
     const char *name;
-    const struct mo_ecat_backend_ops *ops;
-    const struct mo_ecat_backend_translation_ops *translation_ops;
+    const struct backend_ops *ops;
+    const struct backend_translation_ops *translation_ops;
     void *ctx;
 };
 

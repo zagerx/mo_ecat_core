@@ -29,6 +29,18 @@ static const char *yes_no(int value)
 	return value ? "yes" : "no";
 }
 
+static const char *al_state_name(enum mo_ecat_slave_al_state state)
+{
+	switch (state) {
+	case MO_ECAT_AL_STATE_INIT:       return "INIT";
+	case MO_ECAT_AL_STATE_PRE_OP:     return "PRE-OP";
+	case MO_ECAT_AL_STATE_SAFE_OP:    return "SAFE-OP";
+	case MO_ECAT_AL_STATE_OP:         return "OP";
+	case MO_ECAT_AL_STATE_BOOTSTRAP:  return "BOOT";
+	default:                          return "UNKNOWN";
+	}
+}
+
 void print_state(struct mo_ecat_master *master)
 {
 	enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
@@ -65,6 +77,12 @@ void print_diagnostics(struct mo_ecat_master *master)
 		printf("       vendor=0x%08X product=0x%08X revision=0x%08X\n",
 		       slave.vendor_id, slave.product_code, slave.revision_number);
 		printf("       default PDO entries: %zu\n", slave.pdo_entry_count);
+		printf("       state=%s error=%s online=%s operational=%s al_status=0x%04X\n",
+		       al_state_name(slave.state.al_state),
+		       yes_no(slave.state.error),
+		       yes_no(slave.state.online),
+		       yes_no(slave.state.operational),
+		       slave.state.al_status_code);
 	}
 }
 
@@ -106,16 +124,16 @@ void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
 		return;
 	}
 
-	struct mo_ecat_pdo_ref ref;
+	struct mo_ecat_slave_pdo_ref ref;
 	if (mo_ecat_master_get_pdo_ref(master, idx, &ref) < 0) {
 		printf("PDO ref index out of range (count=%zu)\n", count);
 		return;
 	}
 	const char *dir = (ref.direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
 
-	printf("PDO[%zu]: slave=%zu, index=0x%04X, subindex=%u, "
+	printf("PDO[%zu]: slave=%zu, object_index=0x%04X, object_subindex=%u, "
 	       "dir=%s, offset=%u.%u, bits=%u, gen=%u\n",
-	       idx, ref.slave_index, ref.index, ref.subindex,
+	       idx, ref.slave_index, ref.object_index, ref.object_subindex,
 	       dir, ref.byte_offset, ref.bit_offset, ref.bit_length,
 	       ref.generation);
 
