@@ -121,7 +121,9 @@ void master_state_idle(struct statemachine *sm)
 		sm->phase = MASTER_PHASE_READ_PDO;
 		break;
 	case MASTER_PHASE_READ_PDO:
-		result = master_read_pdo_entries(master);
+		result = backend_read_pdo_entries(&master->backend,
+						  master->slave_table.slaves,
+						  master->slave_table.count);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_FAILED);
 			master_release_resources(master);

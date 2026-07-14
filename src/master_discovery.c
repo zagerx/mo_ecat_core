@@ -77,16 +77,6 @@ int master_read_all_slave_states(struct mo_ecat_master *master)
 					     master->slave_table.count);
 }
 
-int master_read_pdo_entries(struct mo_ecat_master *master)
-{
-	if (!master || (master->slave_table.count > 0 && !master->slave_table.slaves)) {
-		return -1;
-	}
-
-	return backend_read_pdo_entries(&master->backend, master->slave_table.slaves,
-					master->slave_table.count);
-}
-
 static size_t master_count_pdo_refs(const struct mo_ecat_master *master)
 {
 	size_t count = 0;

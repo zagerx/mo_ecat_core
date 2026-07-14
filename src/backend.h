@@ -41,6 +41,17 @@ int backend_get_slave_count(struct backend_instance *backend, size_t *slave_coun
 int backend_translate_slave_info(struct backend_instance *backend,
                                    struct mo_ecat_slave *slaves,
                                    size_t slave_count);
+
+/**
+ * @brief 读取所有从站的默认 PDO 映射条目。
+ *
+ * 后端通过 SDO 访问每个支持 CoE 的从站，读取 0x1C12/0x1C13 PDO 分配对象及
+ * 对应映射对象，将解析后的条目填充到 slaves[].pdo_entries[] 中。
+ *
+ * @param slaves 核心层从站数组，由调用者根据从站数量预先分配。
+ * @param slave_count 从站数量。
+ * @return 0 成功，非 0 失败。
+ */
 int backend_read_pdo_entries(struct backend_instance *backend,
                              struct mo_ecat_slave *slaves,
                              size_t slave_count);
