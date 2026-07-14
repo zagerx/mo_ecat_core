@@ -36,8 +36,8 @@ struct backend_instance {
 
 int backend_open(struct backend_instance *backend,
                  const struct mo_ecat_master_config *config);
-int backend_scan(struct backend_instance *backend, size_t *slave_count);
-int backend_read_discovered_slaves(struct backend_instance *backend,
+int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
+int backend_translate_slave_info(struct backend_instance *backend,
                                    struct mo_ecat_slave *slaves,
                                    size_t slave_count);
 int backend_read_pdo_entries(struct backend_instance *backend,

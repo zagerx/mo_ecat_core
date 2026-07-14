@@ -8,24 +8,6 @@
 
 #include "master_priv.h"
 
-static int allocate_discovery_memory(struct mo_ecat_master *master, size_t slave_count)
-{
-	if (slave_count > SIZE_MAX / sizeof(*master->slave_table.slaves)) {
-		return -1;
-	}
-
-	if (slave_count == 0) {
-		return 0;
-	}
-
-	master->slave_table.slaves = calloc(slave_count, sizeof(*master->slave_table.slaves));
-	if (!master->slave_table.slaves) {
-		return -1;
-	}
-
-	return 0;
-}
-
 void master_clear_cmd(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -53,38 +35,27 @@ void master_release_resources(struct mo_ecat_master *master)
 	master->process.pdo_refs.count = 0;
 }
 
-int master_backend_open(struct mo_ecat_master *master)
+int master_build_slave_table(struct mo_ecat_master *master, size_t slave_count)
 {
 	if (!master) {
 		return -1;
 	}
 
-	return backend_open(&master->backend, master->config);
-}
-
-int master_scan(struct mo_ecat_master *master, size_t *slave_count)
-{
-	if (!master || !slave_count) {
-		return -1;
-	}
-
-	return backend_scan(&master->backend, slave_count);
-}
-
-int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
-{
-	if (!master) {
-		return -1;
-	}
-
-	if (slave_count > 0 && allocate_discovery_memory(master, slave_count) < 0) {
-		return -1;
+	if (slave_count > 0) {
+		if (slave_count > SIZE_MAX / sizeof(*master->slave_table.slaves)) {
+			return -1;
+		}
+		master->slave_table.slaves =
+			calloc(slave_count, sizeof(*master->slave_table.slaves));
+		if (!master->slave_table.slaves) {
+			return -1;
+		}
 	}
 
 	master->slave_table.count = slave_count;
-	if (slave_count > 0 && backend_read_discovered_slaves(&master->backend,
-							    master->slave_table.slaves,
-							    slave_count) < 0) {
+	if (slave_count > 0 &&
+	    backend_translate_slave_info(&master->backend, master->slave_table.slaves,
+					 slave_count) < 0) {
 		return -1;
 	}
 	if (backend_read_slave_states(&master->backend, master->slave_table.slaves,
@@ -100,8 +71,7 @@ int master_read_pdo_entries(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	return backend_read_pdo_entries(&master->backend,
-					master->slave_table.slaves,
+	return backend_read_pdo_entries(&master->backend, master->slave_table.slaves,
 					master->slave_table.count);
 }
 

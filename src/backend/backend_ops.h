@@ -24,7 +24,7 @@ extern "C" {
  */
 struct backend_translation_ops {
     /** 将 scan() 获得的从站基本信息写入核心层运行时数组。 */
-    int  (*read_discovered_slaves)(struct backend_instance *backend,
+    int  (*translate_slave_info)(struct backend_instance *backend,
                                    struct mo_ecat_slave *slaves,
                                    size_t slave_count);
 
@@ -62,9 +62,9 @@ struct backend_ops {
     int  (*open)(struct backend_instance *backend,
                  const struct mo_ecat_master_config *config);
 
-    /** 扫描总线并返回实际从站数量。open() 成功后调用。 */
-    int  (*scan)(struct backend_instance *backend,
-                 size_t *slave_count);
+    /** 扫描总线、加载从站基本信息到适配层，并返回实际从站数量。open() 成功后调用。 */
+    int  (*load_slave_info)(struct backend_instance *backend,
+                            size_t *slave_count);
 
     /** 完成 PDO 映射，只更新适配层内部状态，不直接填充核心层对象。 */
     int  (*configure)(struct backend_instance *backend);

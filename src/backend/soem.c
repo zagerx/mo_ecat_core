@@ -65,7 +65,7 @@ static int soem_backend_open(struct backend_instance *backend,
 	return 0;
 }
 
-static int soem_backend_scan(struct backend_instance *backend, size_t *slave_count)
+static int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	int count;
@@ -148,7 +148,7 @@ static void soem_fill_slave_info(struct mo_ecat_slave *slaves, size_t slave_coun
 	}
 }
 
-static int soem_backend_read_discovered_slaves(struct backend_instance *backend,
+static int soem_backend_translate_slave_info(struct backend_instance *backend,
 					       struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -534,7 +534,7 @@ static void soem_backend_close(struct backend_instance *backend)
 
 static const struct backend_translation_ops soem_translation_ops = {
 	.read_pdo_entries = soem_backend_read_pdo_entries,
-	.read_discovered_slaves = soem_backend_read_discovered_slaves,
+	.translate_slave_info = soem_backend_translate_slave_info,
 	.fill_pdo_refs = soem_backend_fill_pdo_refs,
 	.get_process_image = soem_backend_get_process_image,
 	.fill_slave_info = soem_backend_fill_slave_info,
@@ -542,7 +542,7 @@ static const struct backend_translation_ops soem_translation_ops = {
 
 static const struct backend_ops soem_ops = {
 	.open = soem_backend_open,
-	.scan = soem_backend_scan,
+	.load_slave_info = soem_backend_load_slave_info,
 	.configure = soem_backend_configure,
 	.activate = soem_backend_activate,
 	.cycle_begin = soem_backend_cycle_begin,

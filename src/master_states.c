@@ -86,7 +86,7 @@ void master_state_idle(struct statemachine *sm)
 
 		result = backend_init(&master->backend);
 		if (result == 0) {
-			result = master_backend_open(master);
+			result = backend_open(&master->backend, master->config);
 		}
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
@@ -97,9 +97,9 @@ void master_state_idle(struct statemachine *sm)
 		sm->phase = MASTER_PHASE_SCAN_BUILD;
 		break;
 	case MASTER_PHASE_SCAN_BUILD:
-		result = master_scan(master, &slave_count);
+		result = backend_load_slave_info(&master->backend, &slave_count);
 		if (result == 0) {
-			result = master_build_topology(master, slave_count);
+			result = master_build_slave_table(master, slave_count);
 		}
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);

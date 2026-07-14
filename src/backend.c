@@ -19,20 +19,20 @@ int backend_open(struct backend_instance *backend,
 	return backend->ops->open(backend, config);
 }
 
-int backend_scan(struct backend_instance *backend, size_t *slave_count)
+int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count)
 {
-	if (!backend || !slave_count || !backend->ops || !backend->ops->scan) {
+	if (!backend || !slave_count || !backend->ops || !backend->ops->load_slave_info) {
 		return -1;
 	}
 
-	return backend->ops->scan(backend, slave_count);
+	return backend->ops->load_slave_info(backend, slave_count);
 }
 
-int backend_read_discovered_slaves(struct backend_instance *backend,
+int backend_translate_slave_info(struct backend_instance *backend,
 				   struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
-	    !backend->translation_ops->read_discovered_slaves) {
+	    !backend->translation_ops->translate_slave_info) {
 		return -1;
 	}
 
@@ -40,7 +40,7 @@ int backend_read_discovered_slaves(struct backend_instance *backend,
 		return -1;
 	}
 
-	return backend->translation_ops->read_discovered_slaves(backend, slaves, slave_count);
+	return backend->translation_ops->translate_slave_info(backend, slaves, slave_count);
 }
 
 int backend_read_pdo_entries(struct backend_instance *backend,
