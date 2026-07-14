@@ -13,9 +13,9 @@
 
 /** @brief 状态机内置阶段 */
 enum {
-	ENTER = 0,
-	EXIT,
-	USER_STATUS
+	SM_PHASE_ENTER = 0,
+	SM_PHASE_EXIT,
+	SM_PHASE_START
 };
 
 struct statemachine;
@@ -23,7 +23,7 @@ typedef void (*sm_state_t)(struct statemachine *);
 
 /** @brief 状态机实例 */
 struct statemachine {
-	volatile int16_t phase;                /**< 当前阶段：ENTER / EXIT / 用户自定义 */
+	volatile int16_t phase;                /**< 当前阶段：SM_PHASE_ENTER / SM_PHASE_EXIT / 用户自定义 */
 	volatile uint32_t count;               /**< 通用计数器，由用户代码自行维护 */
 	void *data;                            /**< 用户私有数据 */
 	sm_state_t current_state;              /**< 当前状态函数 */
@@ -32,8 +32,8 @@ struct statemachine {
 	sm_state_t next_state;                 /**< 延迟切换目标，NULL 表示无 pending */
 };
 
-/** @brief 初始化状态机，所有字段清零，phase 置为 ENTER */
-void statemachine_init(struct statemachine *obj, void *data, sm_state_t initial_state);
+/** @brief 初始化状态机，所有字段清零，phase 置为 SM_PHASE_ENTER */
+void sm_init(struct statemachine *obj, void *data, sm_state_t initial_state);
 
 /**
  * @brief 调度状态机
@@ -45,13 +45,13 @@ void sm_dispatch(struct statemachine *sm);
 /**
  * @brief 延迟状态切换（中断安全）
  * @details 仅将目标状态写入 next_state，不执行回调。
- *          真正的 EXIT/ENTER 在下次 sm_dispatch() 时完成。
+ *          真正的 SM_PHASE_EXIT/SM_PHASE_ENTER 在下次 sm_dispatch() 时完成。
  *          可在任意中断中调用。
  */
 void sm_transition(struct statemachine *sm, sm_state_t new_state);
 
 /**
- * @brief 同步状态切换（立即执行 EXIT/ENTER）
+ * @brief 同步状态切换（立即执行 SM_PHASE_EXIT/SM_PHASE_ENTER）
  * @warning 只能在不会被更高优先级中断抢占的上下文调用
  *          （如系统最高优先级中断内或关中断临界区）。
  */

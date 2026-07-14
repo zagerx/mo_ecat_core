@@ -103,10 +103,14 @@ int robot_build(struct robot *robot, struct mo_ecat_master *master,
 	size_t joint_index = 0;
 	size_t group_index = 0;
 
-	if (!robot || !master || !config || !config->name || !config->joints ||
-	    config->joint_count == 0 ||
-	    mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_DISCOVERED) {
-		return -1;
+	{
+		enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
+		if (!robot || !master || !config || !config->name || !config->joints ||
+		    config->joint_count == 0 ||
+		    (state != MO_ECAT_MASTER_STATE_DISCOVERED &&
+		     state != MO_ECAT_MASTER_STATE_IDLE)) {
+			return -1;
+		}
 	}
 	for (size_t i = 0; i < config->joint_count; ++i) {
 		if (!config->joints[i].joint_name || config->joints[i].group >= ROBOT_GROUP_COUNT) {

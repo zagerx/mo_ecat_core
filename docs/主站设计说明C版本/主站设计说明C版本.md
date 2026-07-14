@@ -76,7 +76,7 @@ typedef struct ec_master {
 - 主站运行时必须处于上述某一个状态。
 - 每个状态的转换必须有明确的进入动作和退出动作。
 - `struct ec_master` / `struct mo_ecat_master` 内部必须持有 `struct statemachine sm`。
-- 对外可见状态 ID 只允许在状态函数的 `ENTER` 阶段更新。
+- 对外可见状态 ID 只允许在状态函数的 `SM_PHASE_ENTER` 阶段更新。
 - 所有迁移必须由状态函数调用 `sm_transition()` 完成，禁止业务流程直接写 `master->state = ...`。
 - 非法迁移必须返回错误，不允许调用后端，不允许改变 PDO 映射。
 
@@ -110,7 +110,7 @@ FAULT
 
 实现要求：
 
-业务 API 不直接切换状态，只保存请求参数并提交命令，例如 `CONFIGURE`、`ACTIVATE`、`DEACTIVATE`、`RESET`。迁移是否合法由当前状态函数在自己的 `USER_STATUS` 或自定义子阶段判断，合法时完成资源准备、执行对应动作并调用 `sm_transition()`，非法时拒绝命令。
+业务 API 不直接切换状态，只保存请求参数并提交命令，例如 `CONFIGURE`、`ACTIVATE`、`DEACTIVATE`、`RESET`。迁移是否合法由当前状态函数在自己的 `SM_PHASE_START` 或自定义子阶段判断，合法时完成资源准备、执行对应动作并调用 `sm_transition()`，非法时拒绝命令。
 
 状态机调度必须有且只有一个固定周期入口：
 
@@ -126,14 +126,14 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 void mo_ecat_master_state_running(struct statemachine *sm)
 {
     switch (sm->phase) {
-    case ENTER:
+    case SM_PHASE_ENTER:
         /* 设置 RUNNING 状态 ID，执行进入动作 */
-        sm->phase = USER_STATUS;
+        sm->phase = SM_PHASE_START;
         break;
-    case USER_STATUS:
+    case SM_PHASE_START:
         /* 运行态持续动作，由 sm_dispatch() 周期调度 */
         break;
-    case EXIT:
+    case SM_PHASE_EXIT:
         /* 离开 RUNNING 前的动作 */
         break;
     }

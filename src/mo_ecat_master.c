@@ -12,34 +12,6 @@
 
 static int s_master_instance_in_use;
 
-enum mo_ecat_master_state master_state_from_sm(const struct mo_ecat_master *master)
-{
-	sm_state_t current_state;
-
-	if (!master) {
-		return MO_ECAT_MASTER_STATE_INIT;
-	}
-
-	current_state = master->sm.current_state;
-	if (current_state == master_state_idle) {
-		return MO_ECAT_MASTER_STATE_IDLE;
-	}
-	if (current_state == master_state_discovered) {
-		return MO_ECAT_MASTER_STATE_DISCOVERED;
-	}
-	if (current_state == master_state_ready) {
-		return MO_ECAT_MASTER_STATE_READY;
-	}
-	if (current_state == master_state_running) {
-		return MO_ECAT_MASTER_STATE_RUNNING;
-	}
-	if (current_state == master_state_fault) {
-		return MO_ECAT_MASTER_STATE_FAULT;
-	}
-
-	return MO_ECAT_MASTER_STATE_INIT;
-}
-
 enum mo_ecat_master_cmd master_read_cmd(const struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -68,7 +40,7 @@ int mo_ecat_master_init(struct mo_ecat_master *master, const struct mo_ecat_mast
 	}
 
 	master->config = config;
-	statemachine_init(&master->sm, master, master_state_init);
+	sm_init(&master->sm, master, master_state_init);
 	return 0;
 }
 

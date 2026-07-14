@@ -7,8 +7,6 @@
 #include "master_states.h"
 #include "master_priv.h"
 
-static void master_state_configuring(struct statemachine *sm);
-
 static void master_set_fault(struct mo_ecat_master *master,
 			     enum mo_ecat_master_error error)
 {
@@ -27,12 +25,12 @@ void master_state_init(struct statemachine *sm)
 
 	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
-	case ENTER:
+	case SM_PHASE_ENTER:
 		if (master) {
 			sm_transition(sm, master_state_idle);
 		}
 		break;
-	case EXIT:
+	case SM_PHASE_EXIT:
 	default:
 		break;
 	}
@@ -41,8 +39,11 @@ void master_state_init(struct statemachine *sm)
 void master_state_idle(struct statemachine *sm)
 {
 	enum {
-		SCAN = USER_STATUS,
-		CONFIG_PDO,
+		MASTER_PHASE_START = SM_PHASE_START,
+		MASTER_PHASE_OPEN,
+		MASTER_PHASE_SCAN_BUILD,
+		MASTER_PHASE_READ_PDO,
+		MASTER_PHASE_DISCOVERED,
 	};
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
@@ -55,15 +56,21 @@ void master_state_idle(struct statemachine *sm)
 
 	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
-	case ENTER:
+	case SM_PHASE_ENTER:
 		if (master) {
 			master->process.image.active = 0;
 		}
-		sm->phase = SCAN;
+		sm->phase = MASTER_PHASE_START;
 		break;
-	case SCAN:
+	case MASTER_PHASE_START:
 		cmd = master_read_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
+			break;
+		}
+		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
+			master_release_resources(master);
+			sm->phase = MASTER_PHASE_START;
+			master_clear_cmd(master);
 			break;
 		}
 		if (cmd != MO_ECAT_MASTER_CMD_SCAN) {
@@ -71,28 +78,38 @@ void master_state_idle(struct statemachine *sm)
 			break;
 		}
 
+		master_clear_cmd(master);
+		sm->phase = MASTER_PHASE_OPEN;
+		break;
+	case MASTER_PHASE_OPEN:
 		master_release_resources(master);
+
 		result = backend_init(&master->backend);
 		if (result == 0) {
 			result = master_backend_open(master);
 		}
-		if (result == 0) {
-			result = master_scan(master, &slave_count);
-		}
-		if (result == 0) {
-			result = master_build_topology(master, slave_count);
-		}
-
-		master_clear_cmd(master);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
 			master_release_resources(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
-		sm->phase = CONFIG_PDO;
+		sm->phase = MASTER_PHASE_SCAN_BUILD;
 		break;
-	case CONFIG_PDO:
+	case MASTER_PHASE_SCAN_BUILD:
+		result = master_scan(master, &slave_count);
+		if (result == 0) {
+			result = master_build_topology(master, slave_count);
+		}
+		if (result < 0) {
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
+			master_release_resources(master);
+			sm_transition(sm, master_state_fault);
+			break;
+		}
+		sm->phase = MASTER_PHASE_READ_PDO;
+		break;
+	case MASTER_PHASE_READ_PDO:
 		result = master_read_pdo_entries(master);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_FAILED);
@@ -100,63 +117,31 @@ void master_state_idle(struct statemachine *sm)
 			sm_transition(sm, master_state_fault);
 			break;
 		}
-		sm_transition(sm, master_state_discovered);
+		sm->phase = MASTER_PHASE_DISCOVERED;
 		break;
-	case EXIT:
-	default:
-		break;
-	}
-}
-
-void master_state_discovered(struct statemachine *sm)
-{
-	struct mo_ecat_master *master;
-	enum mo_ecat_master_cmd cmd;
-
-	if (!sm) {
-		return;
-	}
-
-	master = (struct mo_ecat_master *)sm->data;
-	switch (sm->phase) {
-	case ENTER:
-		if (master) {
-			master->process.image.active = 0;
-		}
-		sm->phase = USER_STATUS;
-		break;
-	case USER_STATUS:
+	case MASTER_PHASE_DISCOVERED:
 		cmd = master_read_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
 			master_release_resources(master);
-			sm_transition(sm, master_state_idle);
-		} else if (cmd == MO_ECAT_MASTER_CMD_CONFIGURE) {
-			sm_transition(sm, master_state_configuring);
+			sm->phase = MASTER_PHASE_START;
+			master_clear_cmd(master);
+			break;
 		}
-		master_clear_cmd(master);
-		break;
-	case EXIT:
-	default:
-		break;
-	}
-}
+		if (cmd == MO_ECAT_MASTER_CMD_SCAN) {
+			master_clear_cmd(master);
+			sm->phase = MASTER_PHASE_OPEN;
+			break;
+		}
+		if (cmd != MO_ECAT_MASTER_CMD_CONFIGURE) {
+			master_clear_cmd(master);
+			break;
+		}
 
-static void master_state_configuring(struct statemachine *sm)
-{
-	struct mo_ecat_master *master;
-	int result;
-
-	if (!sm) {
-		return;
-	}
-
-	master = (struct mo_ecat_master *)sm->data;
-	switch (sm->phase) {
-	case ENTER:
 		result = master_configure(master);
+		master_clear_cmd(master);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_IOMAP_FAILED);
 			master_release_resources(master);
@@ -165,11 +150,35 @@ static void master_state_configuring(struct statemachine *sm)
 		}
 		sm_transition(sm, master_state_ready);
 		break;
-	case USER_STATUS:
-	case EXIT:
+	case SM_PHASE_EXIT:
 	default:
 		break;
 	}
+}
+
+enum mo_ecat_master_state master_state_from_sm(const struct mo_ecat_master *master)
+{
+	sm_state_t current_state;
+
+	if (!master) {
+		return MO_ECAT_MASTER_STATE_INIT;
+	}
+
+	current_state = master->sm.current_state;
+	if (current_state == master_state_idle) {
+		return MO_ECAT_MASTER_STATE_IDLE;
+	}
+	if (current_state == master_state_ready) {
+		return MO_ECAT_MASTER_STATE_READY;
+	}
+	if (current_state == master_state_running) {
+		return MO_ECAT_MASTER_STATE_RUNNING;
+	}
+	if (current_state == master_state_fault) {
+		return MO_ECAT_MASTER_STATE_FAULT;
+	}
+
+	return MO_ECAT_MASTER_STATE_INIT;
 }
 
 void master_state_ready(struct statemachine *sm)
@@ -183,13 +192,13 @@ void master_state_ready(struct statemachine *sm)
 
 	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
-	case ENTER:
+	case SM_PHASE_ENTER:
 		if (master) {
 			master->process.image.active = 0;
 		}
-		sm->phase = USER_STATUS;
+		sm->phase = SM_PHASE_START;
 		break;
-	case USER_STATUS:
+	case SM_PHASE_START:
 		cmd = master_read_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;
@@ -208,7 +217,7 @@ void master_state_ready(struct statemachine *sm)
 		}
 		master_clear_cmd(master);
 		break;
-	case EXIT:
+	case SM_PHASE_EXIT:
 	default:
 		break;
 	}
@@ -225,10 +234,10 @@ void master_state_running(struct statemachine *sm)
 
 	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
-	case ENTER:
-		sm->phase = USER_STATUS;
+	case SM_PHASE_ENTER:
+		sm->phase = SM_PHASE_START;
 		break;
-	case USER_STATUS:
+	case SM_PHASE_START:
 		cmd = master_read_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;
@@ -242,7 +251,7 @@ void master_state_running(struct statemachine *sm)
 		}
 		master_clear_cmd(master);
 		break;
-	case EXIT:
+	case SM_PHASE_EXIT:
 	default:
 		break;
 	}
@@ -259,13 +268,13 @@ void master_state_fault(struct statemachine *sm)
 
 	master = (struct mo_ecat_master *)sm->data;
 	switch (sm->phase) {
-	case ENTER:
+	case SM_PHASE_ENTER:
 		if (master) {
 			master->process.image.active = 0;
 		}
-		sm->phase = USER_STATUS;
+		sm->phase = SM_PHASE_START;
 		break;
-	case USER_STATUS:
+	case SM_PHASE_START:
 		cmd = master_read_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;
@@ -276,7 +285,7 @@ void master_state_fault(struct statemachine *sm)
 		}
 		master_clear_cmd(master);
 		break;
-	case EXIT:
+	case SM_PHASE_EXIT:
 	default:
 		break;
 	}

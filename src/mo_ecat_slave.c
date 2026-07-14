@@ -65,10 +65,8 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
 
 	pthread_mutex_lock(&master->lock);
 	state = master_state_from_sm(master);
-	if (state != MO_ECAT_MASTER_STATE_DISCOVERED &&
-	    state != MO_ECAT_MASTER_STATE_READY &&
-	    state != MO_ECAT_MASTER_STATE_RUNNING &&
-	    state != MO_ECAT_MASTER_STATE_FAULT) {
+	if (state == MO_ECAT_MASTER_STATE_INIT ||
+	    (state == MO_ECAT_MASTER_STATE_IDLE && master->slave_table.count == 0)) {
 		pthread_mutex_unlock(&master->lock);
 		return -1;
 	}

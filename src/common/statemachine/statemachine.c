@@ -6,12 +6,12 @@
 #include "statemachine.h"
 #include <stdint.h>
 
-void statemachine_init(struct statemachine *obj, void *data, sm_state_t initial_state)
+void sm_init(struct statemachine *obj, void *data, sm_state_t initial_state)
 {
 	if (!obj || !initial_state) {
 		return;
 	}
-	obj->phase = ENTER;
+	obj->phase = SM_PHASE_ENTER;
 	obj->data = data;
 	obj->current_state = initial_state;
 	obj->previous_state = NULL;
@@ -25,18 +25,18 @@ void sm_dispatch(struct statemachine *sm)
 		return;
 	}
 
-	/* 若存在 pending transition，原子化完成旧 EXIT → 新 ENTER */
+	/* 若存在 pending transition，原子化完成旧 SM_PHASE_EXIT → 新 SM_PHASE_ENTER */
 	if (sm->next_state && sm->next_state != sm->current_state) {
 		sm_state_t target = sm->next_state;
 		sm->next_state = NULL; /* 立即清除，防止回调内再次触发造成递归 */
 
-		sm->phase = EXIT;
+		sm->phase = SM_PHASE_EXIT;
 		sm->current_state(sm);
 
 		sm->previous_state = sm->current_state;
 		sm->current_state = target;
 
-		sm->phase = ENTER;
+		sm->phase = SM_PHASE_ENTER;
 		sm->current_state(sm);
 		return; /* 切换后本次调度结束 */
 	}
@@ -59,13 +59,13 @@ void sm_transition_sync(struct statemachine *sm, sm_state_t new_state)
 	}
 	sm->next_state = new_state;
 
-	/* 立即在本上下文完成切换：EXIT → 更新指针 → ENTER */
+	/* 立即在本上下文完成切换：SM_PHASE_EXIT → 更新指针 → SM_PHASE_ENTER */
 	if (sm->current_state) {
-		sm->phase = EXIT;
+		sm->phase = SM_PHASE_EXIT;
 		sm->current_state(sm);
 	}
 	sm->previous_state = sm->current_state;
 	sm->current_state = new_state;
-	sm->phase = ENTER;
+	sm->phase = SM_PHASE_ENTER;
 	sm->current_state(sm);
 }
