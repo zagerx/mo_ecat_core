@@ -41,9 +41,7 @@ void master_release_resources(struct mo_ecat_master *master)
 		return;
 	}
 
-	if (master->backend.ops && master->backend.ops->close) {
-		master->backend.ops->close(&master->backend);
-	}
+	backend_close(&master->backend);
 
 	free(master->process.pdo_refs.refs);
 	free(master->slave_table.slaves);
@@ -57,25 +55,25 @@ void master_release_resources(struct mo_ecat_master *master)
 
 int master_backend_open(struct mo_ecat_master *master)
 {
-	if (!master || !master->backend.ops || !master->backend.ops->open) {
+	if (!master) {
 		return -1;
 	}
 
-	return master->backend.ops->open(&master->backend, master->config);
+	return backend_open(&master->backend, master->config);
 }
 
 int master_scan(struct mo_ecat_master *master, size_t *slave_count)
 {
-	if (!master || !slave_count || !master->backend.ops || !master->backend.ops->scan) {
+	if (!master || !slave_count) {
 		return -1;
 	}
 
-	return master->backend.ops->scan(&master->backend, slave_count);
+	return backend_scan(&master->backend, slave_count);
 }
 
 int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 {
-	if (!master || !master->backend.ops || !master->backend.translation_ops) {
+	if (!master) {
 		return -1;
 	}
 
@@ -84,31 +82,27 @@ int master_build_topology(struct mo_ecat_master *master, size_t slave_count)
 	}
 
 	master->slave_table.count = slave_count;
-	if (slave_count > 0 && (!master->backend.translation_ops->read_discovered_slaves ||
-				master->backend.translation_ops->read_discovered_slaves(
-					&master->backend, master->slave_table.slaves, slave_count) < 0)) {
+	if (slave_count > 0 && backend_read_discovered_slaves(&master->backend,
+							    master->slave_table.slaves,
+							    slave_count) < 0) {
 		return -1;
 	}
-	if (master->backend.ops->read_slave_states) {
-		if (master->backend.ops->read_slave_states(&master->backend, master->slave_table.slaves,
-							   master->slave_table.count) < 0) {
-			return -1;
-		}
+	if (backend_read_slave_states(&master->backend, master->slave_table.slaves,
+				      master->slave_table.count) < 0) {
+		return -1;
 	}
 	return 0;
 }
 
 int master_read_pdo_entries(struct mo_ecat_master *master)
 {
-	if (!master || !master->backend.ops || !master->backend.translation_ops ||
-	    !master->backend.translation_ops->read_pdo_entries ||
-	    (master->slave_table.count > 0 && !master->slave_table.slaves)) {
+	if (!master || (master->slave_table.count > 0 && !master->slave_table.slaves)) {
 		return -1;
 	}
 
-	return master->backend.translation_ops->read_pdo_entries(&master->backend,
-							 master->slave_table.slaves,
-							 master->slave_table.count);
+	return backend_read_pdo_entries(&master->backend,
+					master->slave_table.slaves,
+					master->slave_table.count);
 }
 
 static size_t master_count_pdo_refs(const struct mo_ecat_master *master)
@@ -148,8 +142,7 @@ int master_configure(struct mo_ecat_master *master)
 	size_t pdo_ref_count;
 	struct mo_ecat_slave_pdo_ref *refs = NULL;
 
-	if (!master || !master->backend.ops || !master->backend.ops->configure ||
-	    !master->backend.translation_ops) {
+	if (!master) {
 		return -1;
 	}
 
@@ -162,37 +155,27 @@ int master_configure(struct mo_ecat_master *master)
 		master_build_pdo_refs(master, refs);
 	}
 
-	if (master->backend.ops->configure(&master->backend) < 0) {
+	if (backend_configure(&master->backend) < 0) {
 		free(refs);
 		return -1;
 	}
 
-	if (!master->backend.translation_ops ||
-	    !master->backend.translation_ops->get_process_image ||
-	    master->backend.translation_ops->get_process_image(&master->backend,
-							       &master->process.image) < 0) {
+	if (backend_get_process_image(&master->backend, &master->process.image) < 0) {
 		free(refs);
 		return -1;
 	}
 	master->process.image.generation++;
 
 	if (pdo_ref_count > 0) {
-		if (!master->backend.translation_ops ||
-		    !master->backend.translation_ops->fill_pdo_refs ||
-		    master->backend.translation_ops->fill_pdo_refs(&master->backend, refs,
-									 pdo_ref_count,
-									 master->process.image.generation) < 0) {
+		if (backend_fill_pdo_refs(&master->backend, refs, pdo_ref_count,
+					  master->process.image.generation) < 0) {
 			free(refs);
 			return -1;
 		}
 	}
 
-	if (master->backend.translation_ops &&
-	    master->backend.translation_ops->fill_slave_info) {
-		master->backend.translation_ops->fill_slave_info(&master->backend,
-								 master->slave_table.slaves,
-								 master->slave_table.count);
-	}
+	backend_fill_slave_info(&master->backend, master->slave_table.slaves,
+				master->slave_table.count);
 
 	free(master->process.pdo_refs.refs);
 	master->process.pdo_refs.refs = refs;
@@ -202,11 +185,11 @@ int master_configure(struct mo_ecat_master *master)
 
 int master_activate(struct mo_ecat_master *master)
 {
-	if (!master || !master->backend.ops || !master->backend.ops->activate) {
+	if (!master) {
 		return -1;
 	}
 
-	if (master->backend.ops->activate(&master->backend) < 0) {
+	if (backend_activate(&master->backend) < 0) {
 		return -1;
 	}
 
@@ -216,11 +199,11 @@ int master_activate(struct mo_ecat_master *master)
 
 int master_deactivate(struct mo_ecat_master *master)
 {
-	if (!master || !master->backend.ops || !master->backend.ops->deactivate) {
+	if (!master) {
 		return -1;
 	}
 
-	if (master->backend.ops->deactivate(&master->backend) < 0) {
+	if (backend_deactivate(&master->backend) < 0) {
 		return -1;
 	}
 

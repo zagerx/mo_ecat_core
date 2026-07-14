@@ -26,7 +26,7 @@ static int pdo_ref_in_bounds(const struct mo_ecat_process_image *image,
 	return end_bit >= start_bit && end_bit <= image_bits;
 }
 
-int mo_ecat_master_cycle_result_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
+int mo_ecat_master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
 {
 	int backend_result;
 
@@ -35,18 +35,18 @@ int mo_ecat_master_cycle_result_begin(struct mo_ecat_master *master, struct mo_e
 	}
 
 	pthread_mutex_lock(&master->lock);
-	if (!master->process.image.active || !master->backend.ops || !master->backend.ops->cycle_begin) {
+	if (!master->process.image.active) {
 		pthread_mutex_unlock(&master->lock);
 		return -1;
 	}
 
 	memset(result, 0, sizeof(*result));
-	backend_result = master->backend.ops->cycle_begin(&master->backend, result);
+	backend_result = backend_cycle_begin(&master->backend, result);
 	pthread_mutex_unlock(&master->lock);
 	return backend_result;
 }
 
-int mo_ecat_master_cycle_result_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
+int mo_ecat_master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
 {
 	int backend_result;
 
@@ -55,12 +55,12 @@ int mo_ecat_master_cycle_result_end(struct mo_ecat_master *master, struct mo_eca
 	}
 
 	pthread_mutex_lock(&master->lock);
-	if (!master->process.image.active || !master->backend.ops || !master->backend.ops->cycle_end) {
+	if (!master->process.image.active) {
 		pthread_mutex_unlock(&master->lock);
 		return -1;
 	}
 
-	backend_result = master->backend.ops->cycle_end(&master->backend, result);
+	backend_result = backend_cycle_end(&master->backend, result);
 	if (backend_result == 0) {
 		master->cycle_result.last = *result;
 	}

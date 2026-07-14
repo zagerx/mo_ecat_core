@@ -16,6 +16,7 @@ set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_slave.c
     src/master_states.c
     src/common/statemachine/statemachine.c
+    src/backend.c
 )
 
 option(MO_ECAT_BACKEND_SOEM "Use SOEM backend" ON)

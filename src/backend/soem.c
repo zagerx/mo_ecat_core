@@ -9,6 +9,7 @@
 
 #include "soem/soem.h"
 #include "backend.h"
+#include "backend_ops.h"
 
 #define MO_ECAT_SOEM_IOMAP_SIZE 2048
 
@@ -23,7 +24,7 @@ struct soem_backend_ctx {
 
 static struct soem_backend_ctx s_soem_ctx;
 
-static struct soem_backend_ctx *soem_ctx(struct mo_ecat_backend *backend)
+static struct soem_backend_ctx *soem_ctx(struct backend_instance *backend)
 {
 	return (struct soem_backend_ctx *)backend->ctx;
 }
@@ -46,7 +47,7 @@ static enum mo_ecat_slave_al_state soem_to_al_state(uint16_t soem_state)
 	}
 }
 
-static int soem_backend_open(struct mo_ecat_backend *backend,
+static int soem_backend_open(struct backend_instance *backend,
 			     const struct mo_ecat_master_config *config)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -64,7 +65,7 @@ static int soem_backend_open(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_scan(struct mo_ecat_backend *backend, size_t *slave_count)
+static int soem_backend_scan(struct backend_instance *backend, size_t *slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	int count;
@@ -147,7 +148,7 @@ static void soem_fill_slave_info(struct mo_ecat_slave *slaves, size_t slave_coun
 	}
 }
 
-static int soem_backend_read_discovered_slaves(struct mo_ecat_backend *backend,
+static int soem_backend_read_discovered_slaves(struct backend_instance *backend,
 					       struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -225,7 +226,7 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 	return 0;
 }
 
-static int soem_backend_read_pdo_entries(struct mo_ecat_backend *backend,
+static int soem_backend_read_pdo_entries(struct backend_instance *backend,
 					 struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -261,7 +262,7 @@ static int soem_backend_read_pdo_entries(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_configure(struct mo_ecat_backend *backend)
+static int soem_backend_configure(struct backend_instance *backend)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	int mapped_size;
@@ -302,7 +303,7 @@ static int soem_backend_configure(struct mo_ecat_backend *backend)
 	return 0;
 }
 
-static int soem_backend_get_process_image(struct mo_ecat_backend *backend,
+static int soem_backend_get_process_image(struct backend_instance *backend,
 					  struct mo_ecat_process_image *image)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -317,7 +318,7 @@ static int soem_backend_get_process_image(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_fill_pdo_refs(struct mo_ecat_backend *backend, struct mo_ecat_slave_pdo_ref *refs,
+static int soem_backend_fill_pdo_refs(struct backend_instance *backend, struct mo_ecat_slave_pdo_ref *refs,
 				      size_t ref_count, uint32_t generation)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -392,7 +393,7 @@ cleanup:
 	return result;
 }
 
-static int soem_backend_fill_slave_info(struct mo_ecat_backend *backend,
+static int soem_backend_fill_slave_info(struct backend_instance *backend,
 					struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -406,7 +407,7 @@ static int soem_backend_fill_slave_info(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_activate(struct mo_ecat_backend *backend)
+static int soem_backend_activate(struct backend_instance *backend)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -428,7 +429,7 @@ static int soem_backend_activate(struct mo_ecat_backend *backend)
 	return 0;
 }
 
-static int soem_backend_cycle_begin(struct mo_ecat_backend *backend,
+static int soem_backend_cycle_begin(struct backend_instance *backend,
 				    struct mo_ecat_cycle_result *result)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -460,7 +461,7 @@ static int soem_backend_cycle_begin(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_cycle_end(struct mo_ecat_backend *backend,
+static int soem_backend_cycle_end(struct backend_instance *backend,
 				  struct mo_ecat_cycle_result *result)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -477,7 +478,7 @@ static int soem_backend_cycle_end(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_read_slave_states(struct mo_ecat_backend *backend,
+static int soem_backend_read_slave_states(struct backend_instance *backend,
 					 struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -503,7 +504,7 @@ static int soem_backend_read_slave_states(struct mo_ecat_backend *backend,
 	return 0;
 }
 
-static int soem_backend_deactivate(struct mo_ecat_backend *backend)
+static int soem_backend_deactivate(struct backend_instance *backend)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -516,7 +517,7 @@ static int soem_backend_deactivate(struct mo_ecat_backend *backend)
 	return 0;
 }
 
-static void soem_backend_close(struct mo_ecat_backend *backend)
+static void soem_backend_close(struct backend_instance *backend)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -551,7 +552,7 @@ static const struct backend_ops soem_ops = {
 	.close = soem_backend_close,
 };
 
-int backend_init(struct mo_ecat_backend *backend)
+int backend_init(struct backend_instance *backend)
 {
 	if (!backend) {
 		return -1;

@@ -63,7 +63,7 @@ struct mo_ecat_master {
 
 	enum mo_ecat_master_cmd command;            /**< 当前请求命令 */
 	enum mo_ecat_master_error error_code;       /**< 当前故障码 */
-	struct mo_ecat_backend backend;             /**< 后端实例 */
+	struct backend_instance backend;             /**< 后端实例 */
 	const struct mo_ecat_master_config *config; /**< 主站配置指针，指向外部配置，生命周期由调用者保证 */
 	struct mo_ecat_master_process_data process; /**< 过程数据（映像 + PDO 引用） */
 	struct mo_ecat_master_slave_table slave_table; /**< 从站表 */

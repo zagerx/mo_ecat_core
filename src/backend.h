@@ -15,85 +15,58 @@ extern "C" {
 
 /* ==================== Backend 契约 ==================== */
 
-struct mo_ecat_backend;          /* 前向声明，用于 ops 函数指针 */
+struct backend_instance;          /* 后端实例前向声明 */
+struct backend_ops;              /* 后端生命周期/运行时 ops 前向声明 */
+struct backend_translation_ops;  /* 后端数据转换 ops 前向声明 */
 
 /**
- * 适配层到核心层的数据绑定/转换回调。
+ * @brief 后端实例
  *
- * 这些回调负责在发现、扫描、配置阶段把后端私有的从站/PDO/过程映像数据
- * 暴露或翻译成核心层能理解的结构。它们与后端生命周期回调分离，以便清晰
- * 标识依赖核心层类型的接口边界。
+ * 对核心层而言，ops 和 translation_ops 是不透明指针，
+ * 具体回调表定义见 backend/backend_ops.h，仅供 backend.c 和后端实现使用。
  */
-struct backend_translation_ops {
-    /** 将 scan() 获得的从站基本信息写入核心层运行时数组。 */
-    int  (*read_discovered_slaves)(struct mo_ecat_backend *backend,
-                                   struct mo_ecat_slave *slaves,
-                                   size_t slave_count);
-
-    /**
-     * 读取扫描到的从站默认 PDO 映射描述。
-     * 该操作只读取 PDO 分配与映射对象，不建立过程数据映像。
-     */
-    int  (*read_pdo_entries)(struct mo_ecat_backend *backend,
-                             struct mo_ecat_slave *slaves,
-                             size_t slave_count);
-
-    /**
-     * 根据适配层映射结果，填充核心层 PDO 引用数组的 offset 等字段。
-     * refs 由核心层根据 slaves[].pdo_entries 预先构造好基础信息。
-     */
-    int  (*fill_pdo_refs)(struct mo_ecat_backend *backend,
-                          struct mo_ecat_slave_pdo_ref *refs,
-                          size_t ref_count,
-                          uint32_t generation);
-
-    /** 将适配层已映射好的过程映像信息绑定到核心层对象。 */
-    int  (*get_process_image)(struct mo_ecat_backend *backend,
-                              struct mo_ecat_process_image *image);
-
-    /** 将适配层最新从站静态信息回填到核心层从站数组。 */
-    int  (*fill_slave_info)(struct mo_ecat_backend *backend,
-                            struct mo_ecat_slave *slaves,
-                            size_t slave_count);
-};
-
-struct backend_ops {
-    int  (*open)(struct mo_ecat_backend *backend,
-                 const struct mo_ecat_master_config *config);
-
-    /** 扫描总线并返回实际从站数量。open() 成功后调用。 */
-    int  (*scan)(struct mo_ecat_backend *backend,
-                 size_t *slave_count);
-
-    /** 完成 PDO 映射，只更新适配层内部状态，不直接填充核心层对象。 */
-    int  (*configure)(struct mo_ecat_backend *backend);
-
-    int  (*activate)(struct mo_ecat_backend *backend);
-
-    int  (*cycle_begin)(struct mo_ecat_backend *backend,
-                        struct mo_ecat_cycle_result *result);
-
-    int  (*cycle_end)(struct mo_ecat_backend *backend,
-                      struct mo_ecat_cycle_result *result);
-
-    int  (*read_slave_states)(struct mo_ecat_backend *backend,
-                              struct mo_ecat_slave *slaves,
-                              size_t slave_count);
-
-    int  (*deactivate)(struct mo_ecat_backend *backend);
-    void (*close)(struct mo_ecat_backend *backend);
-};
-
-struct mo_ecat_backend {
+struct backend_instance {
     const char *name;
     const struct backend_ops *ops;
     const struct backend_translation_ops *translation_ops;
     void *ctx;
 };
 
+/* ==================== Backend 统一入口 ==================== */
+
+int backend_open(struct backend_instance *backend,
+                 const struct mo_ecat_master_config *config);
+int backend_scan(struct backend_instance *backend, size_t *slave_count);
+int backend_read_discovered_slaves(struct backend_instance *backend,
+                                   struct mo_ecat_slave *slaves,
+                                   size_t slave_count);
+int backend_read_pdo_entries(struct backend_instance *backend,
+                             struct mo_ecat_slave *slaves,
+                             size_t slave_count);
+int backend_configure(struct backend_instance *backend);
+int backend_get_process_image(struct backend_instance *backend,
+                              struct mo_ecat_process_image *image);
+int backend_fill_pdo_refs(struct backend_instance *backend,
+                          struct mo_ecat_slave_pdo_ref *refs,
+                          size_t ref_count,
+                          uint32_t generation);
+int backend_fill_slave_info(struct backend_instance *backend,
+                            struct mo_ecat_slave *slaves,
+                            size_t slave_count);
+int backend_activate(struct backend_instance *backend);
+int backend_cycle_begin(struct backend_instance *backend,
+                        struct mo_ecat_cycle_result *result);
+int backend_cycle_end(struct backend_instance *backend,
+                      struct mo_ecat_cycle_result *result);
+int backend_read_slave_states(struct backend_instance *backend,
+                              struct mo_ecat_slave *slaves,
+                              size_t slave_count);
+int backend_deactivate(struct backend_instance *backend);
+void backend_close(struct backend_instance *backend);
+
 /* ==================== Backend 工厂 ==================== */
 
-int backend_init(struct mo_ecat_backend *backend);
+int backend_init(struct backend_instance *backend);
 
 #ifdef __cplusplus
 }

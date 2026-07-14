@@ -73,14 +73,9 @@ int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	if (!master->backend.ops || !master->backend.ops->read_slave_states) {
-		pthread_mutex_unlock(&master->lock);
-		return -1;
-	}
-
-	result = master->backend.ops->read_slave_states(&master->backend,
-							master->slave_table.slaves,
-							master->slave_table.count);
+	result = backend_read_slave_states(&master->backend,
+					   master->slave_table.slaves,
+					   master->slave_table.count);
 
 	pthread_mutex_unlock(&master->lock);
 	return result;
