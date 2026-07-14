@@ -49,10 +49,6 @@ struct backend_translation_ops {
     int  (*get_process_image)(struct backend_instance *backend,
                               struct mo_ecat_process_image *image);
 
-    /** 将适配层最新从站静态信息回填到核心层从站数组。 */
-    int  (*fill_slave_info)(struct backend_instance *backend,
-                            struct mo_ecat_slave *slaves,
-                            size_t slave_count);
 };
 
 /**

@@ -84,6 +84,18 @@ static int soem_backend_load_slave_info(struct backend_instance *backend, size_t
 	return 0;
 }
 
+int backend_get_slave_count(struct backend_instance *backend, size_t *slave_count)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+
+	if (!ctx || !slave_count || !ctx->opened) {
+		return -1;
+	}
+
+	*slave_count = (size_t)ctx->context.slavecount;
+	return 0;
+}
+
 static int soem_check_dc_support(ecx_contextt *context)
 {
 	if (!context) {
@@ -100,65 +112,62 @@ static int soem_check_dc_support(ecx_contextt *context)
 	return 0;
 }
 
-static void soem_fill_slave_info(struct mo_ecat_slave *slaves, size_t slave_count,
-				 ecx_contextt *context)
-{
-	for (size_t i = 0; i < slave_count; ++i) {
-		struct mo_ecat_slave *slave = &slaves[i];
-		const ec_slavet *soem_slave = &context->slavelist[i + 1];
-
-		slave->position = soem_slave->configadr - EC_NODEOFFSET;
-		slave->alias = soem_slave->aliasadr;
-		slave->vendor_id = soem_slave->eep_man;
-		slave->product_code = soem_slave->eep_id;
-		slave->revision_number = soem_slave->eep_rev;
-		slave->has_dc = soem_slave->hasdc ? 1 : 0;
-		slave->propagation_delay_ns = soem_slave->pdelay;
-
-		strncpy(slave->name, (const char *)soem_slave->name, MO_ECAT_MAX_NAME_LEN);
-		slave->name[MO_ECAT_MAX_NAME_LEN] = '\0';
-
-		slave->state.al_state = soem_to_al_state(soem_slave->state);
-
-		/* 邮箱参数与协议能力 */
-		slave->mailbox.protocol = soem_slave->mbx_proto;
-		slave->mailbox.write_address = soem_slave->mbx_wo;
-		slave->mailbox.write_size = soem_slave->mbx_l;
-		slave->mailbox.read_address = soem_slave->mbx_ro;
-		slave->mailbox.read_size = soem_slave->mbx_rl;
-
-		slave->has_coe = (soem_slave->mbx_proto & ECT_MBXPROT_COE) ? 1 : 0;
-		slave->has_foe = (soem_slave->mbx_proto & ECT_MBXPROT_FOE) ? 1 : 0;
-		slave->has_eoe = (soem_slave->mbx_proto & ECT_MBXPROT_EOE) ? 1 : 0;
-		slave->has_soe = (soem_slave->mbx_proto & ECT_MBXPROT_SOE) ? 1 : 0;
-
-		/* Sync Manager 配置 */
-		for (int sm_idx = 0; sm_idx < EC_MAXSM; ++sm_idx) {
-			slave->sm[sm_idx].start_address = soem_slave->SM[sm_idx].StartAddr;
-			slave->sm[sm_idx].length = soem_slave->SM[sm_idx].SMlength;
-			slave->sm[sm_idx].flags = soem_slave->SM[sm_idx].SMflags;
-			slave->sm[sm_idx].type = soem_slave->SMtype[sm_idx];
-		}
-
-		/* FMMU 功能分配 */
-		slave->fmmu[0].function = soem_slave->FMMU0func;
-		slave->fmmu[1].function = soem_slave->FMMU1func;
-		slave->fmmu[2].function = soem_slave->FMMU2func;
-		slave->fmmu[3].function = soem_slave->FMMU3func;
-	}
-}
-
 static int soem_backend_translate_slave_info(struct backend_instance *backend,
-					       struct mo_ecat_slave *slaves, size_t slave_count)
+					     struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
+	ecx_contextt *context;
 
 	if (!ctx || (slave_count > 0 && !slaves) ||
 	    slave_count != (size_t)ctx->context.slavecount) {
 		return -1;
 	}
 
-	soem_fill_slave_info(slaves, slave_count, &ctx->context);
+	context = &ctx->context;
+	for (size_t i = 0; i < slave_count; ++i) {
+		struct mo_ecat_slave *slave = &slaves[i];
+		const ec_slavet *soem_slave = &context->slavelist[i + 1];
+
+		slave->base_info.position = soem_slave->configadr - EC_NODEOFFSET;
+		slave->base_info.alias = soem_slave->aliasadr;
+		slave->base_info.vendor_id = soem_slave->eep_man;
+		slave->base_info.product_code = soem_slave->eep_id;
+		slave->base_info.revision_number = soem_slave->eep_rev;
+		slave->base_info.has_dc = soem_slave->hasdc ? 1 : 0;
+		slave->base_info.propagation_delay_ns = soem_slave->pdelay;
+
+		strncpy(slave->base_info.name, (const char *)soem_slave->name,
+			MO_ECAT_MAX_NAME_LEN);
+		slave->base_info.name[MO_ECAT_MAX_NAME_LEN] = '\0';
+
+		/* 邮箱参数与协议能力 */
+		slave->base_info.mailbox.protocol = soem_slave->mbx_proto;
+		slave->base_info.mailbox.write_address = soem_slave->mbx_wo;
+		slave->base_info.mailbox.write_size = soem_slave->mbx_l;
+		slave->base_info.mailbox.read_address = soem_slave->mbx_ro;
+		slave->base_info.mailbox.read_size = soem_slave->mbx_rl;
+
+		slave->base_info.has_coe = (soem_slave->mbx_proto & ECT_MBXPROT_COE) ? 1 : 0;
+		slave->base_info.has_foe = (soem_slave->mbx_proto & ECT_MBXPROT_FOE) ? 1 : 0;
+		slave->base_info.has_eoe = (soem_slave->mbx_proto & ECT_MBXPROT_EOE) ? 1 : 0;
+		slave->base_info.has_soe = (soem_slave->mbx_proto & ECT_MBXPROT_SOE) ? 1 : 0;
+
+		/* Sync Manager 配置 */
+		for (int sm_idx = 0; sm_idx < EC_MAXSM; ++sm_idx) {
+			slave->base_info.sm[sm_idx].start_address =
+				soem_slave->SM[sm_idx].StartAddr;
+			slave->base_info.sm[sm_idx].length = soem_slave->SM[sm_idx].SMlength;
+			slave->base_info.sm[sm_idx].flags = soem_slave->SM[sm_idx].SMflags;
+			slave->base_info.sm[sm_idx].type = soem_slave->SMtype[sm_idx];
+		}
+
+		/* FMMU 功能分配 */
+		slave->base_info.fmmu[0].function = soem_slave->FMMU0func;
+		slave->base_info.fmmu[1].function = soem_slave->FMMU1func;
+		slave->base_info.fmmu[2].function = soem_slave->FMMU2func;
+		slave->base_info.fmmu[3].function = soem_slave->FMMU3func;
+	}
+
 	return 0;
 }
 
@@ -241,7 +250,7 @@ static int soem_backend_read_pdo_entries(struct backend_instance *backend,
 
 		slave->pdo_entry_count = 0;
 		/* 非 CoE 从站没有标准 SDO PDO 分配对象，保留为空即可。 */
-		if (!slave->has_coe) {
+		if (!slave->base_info.has_coe) {
 			continue;
 		}
 		/* ecx_config_init() 已请求 PRE_OP；确认完成迁移后再进行 SDO 读取。 */
@@ -318,8 +327,9 @@ static int soem_backend_get_process_image(struct backend_instance *backend,
 	return 0;
 }
 
-static int soem_backend_fill_pdo_refs(struct backend_instance *backend, struct mo_ecat_slave_pdo_ref *refs,
-				      size_t ref_count, uint32_t generation)
+static int soem_backend_fill_pdo_refs(struct backend_instance *backend,
+				      struct mo_ecat_slave_pdo_ref *refs, size_t ref_count,
+				      uint32_t generation)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	int slavecount;
@@ -391,20 +401,6 @@ cleanup:
 	free(used_out_bits);
 	free(used_in_bits);
 	return result;
-}
-
-static int soem_backend_fill_slave_info(struct backend_instance *backend,
-					struct mo_ecat_slave *slaves, size_t slave_count)
-{
-	struct soem_backend_ctx *ctx = soem_ctx(backend);
-
-	if (!ctx || !ctx->configured || slave_count != (size_t)ctx->context.slavecount ||
-	    (slave_count > 0 && !slaves)) {
-		return -1;
-	}
-
-	soem_fill_slave_info(slaves, slave_count, &ctx->context);
-	return 0;
 }
 
 static int soem_backend_activate(struct backend_instance *backend)
@@ -479,7 +475,7 @@ static int soem_backend_cycle_end(struct backend_instance *backend,
 }
 
 static int soem_backend_read_slave_states(struct backend_instance *backend,
-					 struct mo_ecat_slave *slaves, size_t slave_count)
+					  struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -498,7 +494,8 @@ static int soem_backend_read_slave_states(struct backend_instance *backend,
 		slaves[i].state.error = (soem_slave->ALstatuscode != 0) ? 1 : 0;
 		slaves[i].state.al_status_code = soem_slave->ALstatuscode;
 		slaves[i].state.online = 1;
-		slaves[i].state.operational = (slaves[i].state.al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
+		slaves[i].state.operational =
+			(slaves[i].state.al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
 	}
 
 	return 0;
@@ -537,7 +534,6 @@ static const struct backend_translation_ops soem_translation_ops = {
 	.translate_slave_info = soem_backend_translate_slave_info,
 	.fill_pdo_refs = soem_backend_fill_pdo_refs,
 	.get_process_image = soem_backend_get_process_image,
-	.fill_slave_info = soem_backend_fill_slave_info,
 };
 
 static const struct backend_ops soem_ops = {

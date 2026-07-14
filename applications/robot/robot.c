@@ -36,9 +36,9 @@ static int slave_matches(const struct mo_ecat_slave_info *slave,
 			 const struct robot_slave_identity *identity)
 {
 	return slave && identity &&
-	       slave->position == identity->position &&
-	       slave->vendor_id == identity->vendor_id &&
-	       slave->product_code == identity->product_code;
+	       slave->base_info.position == identity->position &&
+	       slave->base_info.vendor_id == identity->vendor_id &&
+	       slave->base_info.product_code == identity->product_code;
 }
 
 static int find_slave(struct mo_ecat_master *master, const struct robot_slave_identity *identity,

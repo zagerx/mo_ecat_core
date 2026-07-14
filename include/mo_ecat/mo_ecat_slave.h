@@ -61,8 +61,11 @@ struct mo_ecat_slave_fmmu {
     uint8_t function;
 };
 
-/** 扫描得到的从站运行时信息。 */
-struct mo_ecat_slave {
+/** 从站基础信息。
+ *
+ * 扫描阶段即可确定，运行期间基本不变。
+ */
+struct mo_ecat_slave_base_info {
     uint16_t position;
     uint16_t alias;
     uint32_t vendor_id;
@@ -71,7 +74,6 @@ struct mo_ecat_slave {
     char name[MO_ECAT_MAX_NAME_LEN + 1];
     int has_dc;
     uint32_t propagation_delay_ns;
-    struct mo_ecat_slave_state state;
     struct mo_ecat_slave_mailbox mailbox;
     int has_coe;
     int has_foe;
@@ -79,6 +81,12 @@ struct mo_ecat_slave {
     int has_soe;
     struct mo_ecat_slave_sync_manager sm[MO_ECAT_MAX_SM];
     struct mo_ecat_slave_fmmu fmmu[MO_ECAT_MAX_FMMU];
+};
+
+/** 扫描得到的从站运行时信息。 */
+struct mo_ecat_slave {
+    struct mo_ecat_slave_base_info base_info;
+    struct mo_ecat_slave_state state;
     struct mo_ecat_slave_pdo_entry pdo_entries[MO_ECAT_MAX_PDO_ENTRIES];
     size_t pdo_entry_count;
 };
@@ -89,13 +97,7 @@ struct mo_ecat_slave {
  * 由 mo_ecat_master_get_slave_info() 复制返回，避免向应用层暴露内部数组指针。
  */
 struct mo_ecat_slave_info {
-    uint16_t position;
-    uint16_t alias;
-    uint32_t vendor_id;
-    uint32_t product_code;
-    uint32_t revision_number;
-    char name[MO_ECAT_MAX_NAME_LEN + 1];
-    int has_dc;
+    struct mo_ecat_slave_base_info base_info;
     size_t pdo_entry_count;
     struct mo_ecat_slave_state state; /**< 从站运行时诊断状态 */
 };

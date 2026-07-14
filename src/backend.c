@@ -98,21 +98,6 @@ int backend_fill_pdo_refs(struct backend_instance *backend,
 	return backend->translation_ops->fill_pdo_refs(backend, refs, ref_count, generation);
 }
 
-int backend_fill_slave_info(struct backend_instance *backend,
-			    struct mo_ecat_slave *slaves, size_t slave_count)
-{
-	if (!backend || !backend->translation_ops ||
-	    !backend->translation_ops->fill_slave_info) {
-		return -1;
-	}
-
-	if (slave_count > 0 && !slaves) {
-		return -1;
-	}
-
-	return backend->translation_ops->fill_slave_info(backend, slaves, slave_count);
-}
-
 int backend_activate(struct backend_instance *backend)
 {
 	if (!backend || !backend->ops || !backend->ops->activate) {

@@ -35,9 +35,15 @@ void master_release_resources(struct mo_ecat_master *master)
 	master->process.pdo_refs.count = 0;
 }
 
-int master_build_slave_table(struct mo_ecat_master *master, size_t slave_count)
+int master_build_slave_table(struct mo_ecat_master *master)
 {
+	size_t slave_count;
+
 	if (!master) {
+		return -1;
+	}
+
+	if (backend_get_slave_count(&master->backend, &slave_count) < 0) {
 		return -1;
 	}
 
@@ -58,11 +64,17 @@ int master_build_slave_table(struct mo_ecat_master *master, size_t slave_count)
 					 slave_count) < 0) {
 		return -1;
 	}
-	if (backend_read_slave_states(&master->backend, master->slave_table.slaves,
-				      master->slave_table.count) < 0) {
+	return 0;
+}
+
+int master_read_slave_states(struct mo_ecat_master *master)
+{
+	if (!master || (master->slave_table.count > 0 && !master->slave_table.slaves)) {
 		return -1;
 	}
-	return 0;
+
+	return backend_read_slave_states(&master->backend, master->slave_table.slaves,
+					 master->slave_table.count);
 }
 
 int master_read_pdo_entries(struct mo_ecat_master *master)
@@ -144,8 +156,8 @@ int master_configure(struct mo_ecat_master *master)
 		}
 	}
 
-	backend_fill_slave_info(&master->backend, master->slave_table.slaves,
-				master->slave_table.count);
+	backend_translate_slave_info(&master->backend, master->slave_table.slaves,
+				     master->slave_table.count);
 
 	free(master->process.pdo_refs.refs);
 	master->process.pdo_refs.refs = refs;

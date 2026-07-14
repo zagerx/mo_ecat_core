@@ -39,14 +39,7 @@ int mo_ecat_master_get_slave_info(const struct mo_ecat_master *master,
 
 	slave = &master->slave_table.slaves[index];
 	memset(info, 0, sizeof(*info));
-	info->position = slave->position;
-	info->alias = slave->alias;
-	info->vendor_id = slave->vendor_id;
-	info->product_code = slave->product_code;
-	info->revision_number = slave->revision_number;
-	memcpy(info->name, slave->name, sizeof(info->name) - 1);
-	info->name[sizeof(info->name) - 1] = '\0';
-	info->has_dc = slave->has_dc;
+	info->base_info = slave->base_info;
 	info->pdo_entry_count = slave->pdo_entry_count;
 	info->state = slave->state;
 

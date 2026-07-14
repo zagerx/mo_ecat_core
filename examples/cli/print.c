@@ -71,11 +71,11 @@ void print_diagnostics(struct mo_ecat_master *master)
 			continue;
 		}
 		printf("  [%zu] %s\n", i,
-		       slave.name[0] ? slave.name : "<unnamed>");
+		       slave.base_info.name[0] ? slave.base_info.name : "<unnamed>");
 		printf("       position=%u alias=%u dc=%s\n",
-		       slave.position, slave.alias, yes_no(slave.has_dc));
+		       slave.base_info.position, slave.base_info.alias, yes_no(slave.base_info.has_dc));
 		printf("       vendor=0x%08X product=0x%08X revision=0x%08X\n",
-		       slave.vendor_id, slave.product_code, slave.revision_number);
+		       slave.base_info.vendor_id, slave.base_info.product_code, slave.base_info.revision_number);
 		printf("       default PDO entries: %zu\n", slave.pdo_entry_count);
 		printf("       state=%s error=%s online=%s operational=%s al_status=0x%04X\n",
 		       al_state_name(slave.state.al_state),
@@ -108,8 +108,8 @@ void print_robot(const struct robot *robot)
 
 			printf("    %s -> Slave[%zu]",
 			       joint->name, joint->slave_index);
-			if (has_slave && slave.name[0]) {
-				printf(" (%s)", slave.name);
+			if (has_slave && slave.base_info.name[0]) {
+				printf(" (%s)", slave.base_info.name);
 			}
 			printf("\n");
 		}

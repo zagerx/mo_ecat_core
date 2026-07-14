@@ -37,6 +37,7 @@ struct backend_instance {
 int backend_open(struct backend_instance *backend,
                  const struct mo_ecat_master_config *config);
 int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
+int backend_get_slave_count(struct backend_instance *backend, size_t *slave_count);
 int backend_translate_slave_info(struct backend_instance *backend,
                                    struct mo_ecat_slave *slaves,
                                    size_t slave_count);
@@ -50,9 +51,6 @@ int backend_fill_pdo_refs(struct backend_instance *backend,
                           struct mo_ecat_slave_pdo_ref *refs,
                           size_t ref_count,
                           uint32_t generation);
-int backend_fill_slave_info(struct backend_instance *backend,
-                            struct mo_ecat_slave *slaves,
-                            size_t slave_count);
 int backend_activate(struct backend_instance *backend);
 int backend_cycle_begin(struct backend_instance *backend,
                         struct mo_ecat_cycle_result *result);

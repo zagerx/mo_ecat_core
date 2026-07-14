@@ -42,6 +42,7 @@ void master_state_idle(struct statemachine *sm)
 		MASTER_PHASE_START = SM_PHASE_START,
 		MASTER_PHASE_OPEN,
 		MASTER_PHASE_SCAN_BUILD,
+		MASTER_PHASE_READ_STATE,
 		MASTER_PHASE_READ_PDO,
 		MASTER_PHASE_DISCOVERED,
 	};
@@ -99,10 +100,20 @@ void master_state_idle(struct statemachine *sm)
 	case MASTER_PHASE_SCAN_BUILD:
 		result = backend_load_slave_info(&master->backend, &slave_count);
 		if (result == 0) {
-			result = master_build_slave_table(master, slave_count);
+			result = master_build_slave_table(master);
 		}
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
+			master_release_resources(master);
+			sm_transition(sm, master_state_fault);
+			break;
+		}
+		sm->phase = MASTER_PHASE_READ_STATE;
+		break;
+	case MASTER_PHASE_READ_STATE:
+		result = master_read_slave_states(master);
+		if (result < 0) {
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
 			master_release_resources(master);
 			sm_transition(sm, master_state_fault);
 			break;
