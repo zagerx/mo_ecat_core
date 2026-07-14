@@ -78,7 +78,7 @@ enum mo_ecat_master_state master_state_from_sm(const struct mo_ecat_master *mast
 enum mo_ecat_master_cmd master_read_cmd(const struct mo_ecat_master *master);
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 int master_build_slave_table(struct mo_ecat_master *master);
-int master_read_slave_states(struct mo_ecat_master *master);
+int master_read_all_slave_states(struct mo_ecat_master *master);
 int master_read_pdo_entries(struct mo_ecat_master *master);
 int master_configure(struct mo_ecat_master *master);
 int master_activate(struct mo_ecat_master *master);

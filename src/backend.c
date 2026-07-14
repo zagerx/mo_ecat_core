@@ -135,10 +135,10 @@ int backend_cycle_end(struct backend_instance *backend,
 	return backend->ops->cycle_end(backend, result);
 }
 
-int backend_read_slave_states(struct backend_instance *backend,
-			      struct mo_ecat_slave *slaves, size_t slave_count)
+int backend_read_all_slave_states(struct backend_instance *backend,
+				  struct mo_ecat_slave *slaves, size_t slave_count)
 {
-	if (!backend || !backend->ops || !backend->ops->read_slave_states) {
+	if (!backend || !backend->ops || !backend->ops->read_all_slave_states) {
 		return -1;
 	}
 
@@ -146,7 +146,18 @@ int backend_read_slave_states(struct backend_instance *backend,
 		return -1;
 	}
 
-	return backend->ops->read_slave_states(backend, slaves, slave_count);
+	return backend->ops->read_all_slave_states(backend, slaves, slave_count);
+}
+
+int backend_read_single_slave_state(struct backend_instance *backend,
+				    size_t slave_index,
+				    struct mo_ecat_slave_state *state)
+{
+	if (!backend || !backend->ops || !backend->ops->read_single_slave_state || !state) {
+		return -1;
+	}
+
+	return backend->ops->read_single_slave_state(backend, slave_index, state);
 }
 
 int backend_deactivate(struct backend_instance *backend)

@@ -111,7 +111,7 @@ void master_state_idle(struct statemachine *sm)
 		sm->phase = MASTER_PHASE_READ_STATE;
 		break;
 	case MASTER_PHASE_READ_STATE:
-		result = master_read_slave_states(master);
+		result = master_read_all_slave_states(master);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
 			master_release_resources(master);

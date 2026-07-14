@@ -474,7 +474,7 @@ static int soem_backend_cycle_end(struct backend_instance *backend,
 	return 0;
 }
 
-static int soem_backend_read_slave_states(struct backend_instance *backend,
+static int soem_backend_read_all_slave_states(struct backend_instance *backend,
 					  struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -497,6 +497,35 @@ static int soem_backend_read_slave_states(struct backend_instance *backend,
 		slaves[i].state.operational =
 			(slaves[i].state.al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
 	}
+
+	return 0;
+}
+
+static int soem_backend_read_single_slave_state(struct backend_instance *backend,
+							size_t slave_index,
+							struct mo_ecat_slave_state *state)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+	ec_alstatust alstatus;
+	uint16_t configadr;
+	int wkc;
+
+	if (!ctx || !state || slave_index >= (size_t)ctx->context.slavecount) {
+		return -1;
+	}
+
+	configadr = ctx->context.slavelist[slave_index + 1].configadr;
+	wkc = ecx_FPRD(&ctx->context.port, configadr, ECT_REG_ALSTAT,
+		       sizeof(alstatus), &alstatus, EC_TIMEOUTRET);
+	if (wkc <= 0) {
+		return -1;
+	}
+
+	state->al_state = soem_to_al_state(etohs(alstatus.alstatus));
+	state->error = (etohs(alstatus.alstatus) & EC_STATE_ERROR) ? 1 : 0;
+	state->al_status_code = etohs(alstatus.alstatuscode);
+	state->online = 1;
+	state->operational = (state->al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
 
 	return 0;
 }
@@ -543,7 +572,8 @@ static const struct backend_ops soem_ops = {
 	.activate = soem_backend_activate,
 	.cycle_begin = soem_backend_cycle_begin,
 	.cycle_end = soem_backend_cycle_end,
-	.read_slave_states = soem_backend_read_slave_states,
+	.read_all_slave_states = soem_backend_read_all_slave_states,
+	.read_single_slave_state = soem_backend_read_single_slave_state,
 	.deactivate = soem_backend_deactivate,
 	.close = soem_backend_close,
 };

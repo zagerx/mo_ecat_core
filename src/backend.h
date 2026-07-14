@@ -56,9 +56,12 @@ int backend_cycle_begin(struct backend_instance *backend,
                         struct mo_ecat_cycle_result *result);
 int backend_cycle_end(struct backend_instance *backend,
                       struct mo_ecat_cycle_result *result);
-int backend_read_slave_states(struct backend_instance *backend,
-                              struct mo_ecat_slave *slaves,
-                              size_t slave_count);
+int backend_read_all_slave_states(struct backend_instance *backend,
+                                  struct mo_ecat_slave *slaves,
+                                  size_t slave_count);
+int backend_read_single_slave_state(struct backend_instance *backend,
+                                    size_t slave_index,
+                                    struct mo_ecat_slave_state *state);
 int backend_deactivate(struct backend_instance *backend);
 void backend_close(struct backend_instance *backend);
 

@@ -73,9 +73,13 @@ struct backend_ops {
     int  (*cycle_end)(struct backend_instance *backend,
                       struct mo_ecat_cycle_result *result);
 
-    int  (*read_slave_states)(struct backend_instance *backend,
-                              struct mo_ecat_slave *slaves,
-                              size_t slave_count);
+    int  (*read_all_slave_states)(struct backend_instance *backend,
+                                  struct mo_ecat_slave *slaves,
+                                  size_t slave_count);
+
+    int  (*read_single_slave_state)(struct backend_instance *backend,
+                                    size_t slave_index,
+                                    struct mo_ecat_slave_state *state);
 
     int  (*deactivate)(struct backend_instance *backend);
     void (*close)(struct backend_instance *backend);

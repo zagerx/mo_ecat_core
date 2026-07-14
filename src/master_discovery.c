@@ -67,14 +67,14 @@ int master_build_slave_table(struct mo_ecat_master *master)
 	return 0;
 }
 
-int master_read_slave_states(struct mo_ecat_master *master)
+int master_read_all_slave_states(struct mo_ecat_master *master)
 {
 	if (!master || (master->slave_table.count > 0 && !master->slave_table.slaves)) {
 		return -1;
 	}
 
-	return backend_read_slave_states(&master->backend, master->slave_table.slaves,
-					 master->slave_table.count);
+	return backend_read_all_slave_states(&master->backend, master->slave_table.slaves,
+					     master->slave_table.count);
 }
 
 int master_read_pdo_entries(struct mo_ecat_master *master)
