@@ -14,12 +14,28 @@
  * @master: 主站对象指针
  * @error: 故障码
  */
-static void master_set_fault(struct mo_ecat_master *master,
-			     enum mo_ecat_master_error error)
+static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_error error)
 {
 	if (master) {
 		atomic_store(&master->error_code, error);
 	}
+}
+
+/**
+ * master_idle_fail - 结束 IDLE 状态中的配置流程并进入故障状态
+ * @sm: 状态机实例指针
+ * @master: 主站对象指针
+ * @error: 本次流程失败对应的故障码
+ *
+ * IDLE 内的扫描、PDO 描述读取和映射建立共享相同的失败收尾：记录故障、
+ * 释放已获取资源，并迁移至 FAULT。该函数只收敛这条固定故障出口。
+ */
+static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *master,
+			     enum mo_ecat_master_error error)
+{
+	master_set_fault(master, error);
+	master_resources_release(master);
+	sm_transition(sm, master_state_fault);
 }
 
 /**
@@ -70,9 +86,7 @@ void master_state_idle(struct statemachine *sm)
 		MASTER_PHASE_BUILD_PDO_MAPPING,
 	};
 	struct mo_ecat_master *master;
-	enum mo_ecat_master_cmd cmd;
 	size_t slave_count;
-	int result;
 
 	if (!sm) {
 		return;
@@ -87,114 +101,97 @@ void master_state_idle(struct statemachine *sm)
 		}
 		sm->phase = MASTER_PHASE_START;
 		break;
-	case MASTER_PHASE_START:
-		cmd = master_take_cmd(master);
-		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
-			break;
-		}
-		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
-			master_resources_release(master);
-			sm->phase = MASTER_PHASE_START;
-			break;
-		}
-		if (cmd != MO_ECAT_MASTER_CMD_SCAN) {
-			break;
-		}
 
-		sm->phase = MASTER_PHASE_OPEN;
-		break;
-	case MASTER_PHASE_OPEN:
+	case MASTER_PHASE_START: {
+		switch (master_take_cmd(master)) {
+		case MO_ECAT_MASTER_CMD_RESET:
+			master_resources_release(master);
+			break;
+		case MO_ECAT_MASTER_CMD_SCAN:
+			sm->phase = MASTER_PHASE_OPEN;
+			break;
+		case MO_ECAT_MASTER_CMD_NONE:
+		default:
+			break;
+		}
+	} break;
+
+	case MASTER_PHASE_OPEN: {
 		master_resources_release(master);
-
-		result = backend_init(&master->backend);
-		if (result == 0) {
-			result = backend_open(&master->backend, master->config);
-		}
-		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
-			master_resources_release(master);
-			sm_transition(sm, master_state_fault);
+		if (backend_init(&master->backend) < 0 ||
+		    backend_open(&master->backend, master->config) < 0) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
 			break;
 		}
 		sm->phase = MASTER_PHASE_SCAN_BUILD;
-		break;
-	case MASTER_PHASE_SCAN_BUILD:
-		result = backend_load_slave_info(&master->backend, &slave_count);
-		if (result == 0) {
-			result = master_topology_build(master);
-		}
-		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
-			master_resources_release(master);
-			sm_transition(sm, master_state_fault);
+	} break;
+
+	case MASTER_PHASE_SCAN_BUILD: {
+		if (backend_load_slave_info(&master->backend, &slave_count) < 0 ||
+		    master_topology_build(master, slave_count) < 0) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
 			break;
 		}
 		sm->phase = MASTER_PHASE_READ_STATE;
-		break;
-	case MASTER_PHASE_READ_STATE:
-		result = master_topology_refresh_states(master);
-		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
-			master_resources_release(master);
-			sm_transition(sm, master_state_fault);
+	} break;
+
+	case MASTER_PHASE_READ_STATE: {
+		if (master_topology_refresh_states(master) < 0) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
 			break;
 		}
 		sm->phase = MASTER_PHASE_READ_PDO;
-		break;
-	case MASTER_PHASE_READ_PDO:
-		result = backend_read_pdo_entries(&master->backend,
-					  master->topology.slaves,
-					  master->topology.slave_count);
-		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED);
-			master_resources_release(master);
-			sm_transition(sm, master_state_fault);
+	} break;
+
+	case MASTER_PHASE_READ_PDO: {
+		if (backend_read_pdo_entries(&master->backend, master->topology.slaves,
+					     master->topology.slave_count) < 0) {
+			master_idle_fail(sm, master,
+					 MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED);
 			break;
 		}
 		sm->phase = MASTER_PHASE_WAIT_CONFIGURE;
-		break;
-	case MASTER_PHASE_WAIT_CONFIGURE:
-		cmd = master_take_cmd(master);
-		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
-			break;
-		}
-		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
+	} break;
+
+	case MASTER_PHASE_WAIT_CONFIGURE: {
+		switch (master_take_cmd(master)) {
+		case MO_ECAT_MASTER_CMD_RESET:
 			master_resources_release(master);
 			sm->phase = MASTER_PHASE_START;
 			break;
-		}
-		if (cmd == MO_ECAT_MASTER_CMD_SCAN) {
+		case MO_ECAT_MASTER_CMD_SCAN:
 			sm->phase = MASTER_PHASE_OPEN;
 			break;
-		}
-		if (cmd != MO_ECAT_MASTER_CMD_CONFIGURE) {
+		case MO_ECAT_MASTER_CMD_CONFIGURE:
+			sm->phase = MASTER_PHASE_CONFIGURE_DC;
+			break;
+		case MO_ECAT_MASTER_CMD_NONE:
+		default:
 			break;
 		}
+	} break;
 
-		sm->phase = MASTER_PHASE_CONFIGURE_DC;
-		break;
-	case MASTER_PHASE_CONFIGURE_DC:
-		/* DC 配置独立失败，不能继续建立 PDO 映射。 */
-		result = backend_configure_dc(&master->backend);
-		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED);
-			master_resources_release(master);
-			sm_transition(sm, master_state_fault);
+	case MASTER_PHASE_CONFIGURE_DC: { /* DC 配置独立失败，不能继续建立 PDO 映射。 */
+		if (backend_configure_dc(&master->backend) < 0) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED);
 			break;
 		}
 		sm->phase = MASTER_PHASE_BUILD_PDO_MAPPING;
-		break;
+	} break;
+
 	case MASTER_PHASE_BUILD_PDO_MAPPING:
 		/* 后端建立 PDO 数据区域并回填所有 PDO entry 的地址偏移。 */
-		result = master_pdo_mapping_build(master);
-		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED);
-			master_resources_release(master);
-			sm_transition(sm, master_state_fault);
-			break;
+		{
+			if (master_pdo_mapping_build(master) < 0) {
+				master_idle_fail(
+					sm, master,
+					MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED);
+				break;
+			}
+			sm_transition(sm, master_state_ready);
 		}
-		sm_transition(sm, master_state_ready);
 		break;
+
 	case SM_PHASE_EXIT:
 	default:
 		break;

@@ -52,8 +52,6 @@ int backend_open(struct backend_instance *backend,
 
 int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
 
-int backend_get_slave_count(struct backend_instance *backend, size_t *slave_count);
-
 int backend_translate_slave_info(struct backend_instance *backend,
                                    struct master_slave *slaves,
                                    size_t slave_count);

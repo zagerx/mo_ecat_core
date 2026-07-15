@@ -9,7 +9,7 @@
 
 struct mo_ecat_master;
 
-int master_topology_build(struct mo_ecat_master *master);
+int master_topology_build(struct mo_ecat_master *master, size_t slave_count);
 
 int master_topology_refresh_states(struct mo_ecat_master *master);
 

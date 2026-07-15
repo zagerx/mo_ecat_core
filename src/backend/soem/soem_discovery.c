@@ -90,24 +90,6 @@ int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave
 }
 
 /**
- * backend_get_slave_count - 获取从站数量
- * @backend: 后端实例指针
- * @slave_count: 用于返回从站数量的指针
- *
- * Return: 0 成功，非 0 失败
- */
-int backend_get_slave_count(struct backend_instance *backend, size_t *slave_count)
-{
-	struct soem_backend_context *context = soem_backend_context_get(backend);
-
-	if (!context || !slave_count || !context->opened) {
-		return -1;
-	}
-	*slave_count = (size_t)context->context.slavecount;
-	return 0;
-}
-
-/**
  * soem_backend_translate_slave_info - 转换 SOEM 从站信息到核心层结构
  * @backend: 后端实例指针
  * @slaves: 核心层从站数组

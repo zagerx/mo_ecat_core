@@ -13,20 +13,15 @@
 /**
  * master_topology_build - 构建主站从站拓扑
  * @master: 主站对象指针
+ * @slave_count: 扫描阶段得到的从站数量
  *
- * 从后端获取从站数量，分配并填充从站表。
+ * 根据扫描阶段得到的从站数量，分配并填充从站表。
  *
  * Return: 0 成功，非 0 失败
  */
-int master_topology_build(struct mo_ecat_master *master)
+int master_topology_build(struct mo_ecat_master *master, size_t slave_count)
 {
-	size_t slave_count;
-
 	if (!master) {
-		return -1;
-	}
-
-	if (backend_get_slave_count(&master->backend, &slave_count) < 0) {
 		return -1;
 	}
 
