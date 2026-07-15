@@ -1,3 +1,7 @@
+/*
+ * mo_ecat_topology.h - 总线拓扑节点信息接口
+ */
+
 #ifndef MO_ECAT_TOPOLOGY_H
 #define MO_ECAT_TOPOLOGY_H
 
@@ -9,6 +13,15 @@ extern "C" {
 
 struct mo_ecat_master;
 
+/**
+ * enum mo_ecat_node_al_state - 节点应用层状态
+ * @MO_ECAT_NODE_AL_STATE_INIT:       Init
+ * @MO_ECAT_NODE_AL_STATE_PRE_OP:     Pre-Operational
+ * @MO_ECAT_NODE_AL_STATE_SAFE_OP:    Safe-Operational
+ * @MO_ECAT_NODE_AL_STATE_OP:         Operational
+ * @MO_ECAT_NODE_AL_STATE_BOOTSTRAP:  Bootstrap
+ * @MO_ECAT_NODE_AL_STATE_UNKNOWN:    未知或无法识别
+ */
 enum mo_ecat_node_al_state {
     MO_ECAT_NODE_AL_STATE_INIT,
     MO_ECAT_NODE_AL_STATE_PRE_OP,
@@ -18,6 +31,14 @@ enum mo_ecat_node_al_state {
     MO_ECAT_NODE_AL_STATE_UNKNOWN
 };
 
+/**
+ * struct mo_ecat_node_state - 节点运行时诊断状态
+ * @al_state:        应用层状态
+ * @has_error:       是否存在 AL 错误
+ * @al_status_code:  AL 状态码
+ * @is_online:       是否在线
+ * @is_operational:  是否处于 OP 状态
+ */
 struct mo_ecat_node_state {
     enum mo_ecat_node_al_state al_state;
     int has_error;
@@ -27,7 +48,15 @@ struct mo_ecat_node_state {
 };
 
 /**
- * @brief 拓扑节点的公开只读视图
+ * struct mo_ecat_node_info - 拓扑节点的公开只读视图
+ * @position:        节点位置
+ * @alias:           节点别名
+ * @vendor_id:       厂商 ID
+ * @product_code:    产品码
+ * @revision_number: 修订号
+ * @name:            节点名称字符串
+ * @dc_supported:    是否支持分布式时钟
+ * @state:           节点运行时诊断状态
  *
  * 由 mo_ecat_master_get_node_info() 复制返回，避免向应用层暴露内部数组指针。
  */
@@ -39,27 +68,27 @@ struct mo_ecat_node_info {
     uint32_t revision_number;
     char name[MO_ECAT_MAX_NAME_LEN + 1];
     int dc_supported;
-    struct mo_ecat_node_state state; /**< 节点运行时诊断状态 */
+    struct mo_ecat_node_state state;
 };
 
 /**
- * @file mo_ecat_topology.h
- * @brief 总线拓扑节点信息接口
- */
-
-/**
- * @brief 获取已发现节点数量
+ * mo_ecat_master_get_node_count - 获取已发现节点数量
+ * @master: 主站对象
+ *
+ * Return: 节点数量
  */
 size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master);
 
 /**
- * @brief 获取指定节点信息的只读副本
+ * mo_ecat_master_get_node_info - 获取指定节点信息的只读副本
+ * @master: 主站对象
+ * @index:  节点下标
+ * @info:   调用方提供的缓冲区，核心复制数据
  *
- * 调用方提供 info 缓冲区，核心复制数据。返回的指针不指向内部数组，
- * 因此在调用返回后即使发生状态迁移也不会悬空。调用方不得在主站扫描、RESET 或
- * 重新配置期间并发调用本函数。
+ * 返回的指针不指向内部数组，因此在调用返回后即使发生状态迁移也不会悬空。
+ * 调用方不得在主站扫描、RESET 或重新配置期间并发调用本函数。
  *
- * @return 0 成功，非 0 失败
+ * Return: 0 成功，非 0 失败
  */
 int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
                                  size_t index, struct mo_ecat_node_info *info);
