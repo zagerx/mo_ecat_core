@@ -1,3 +1,10 @@
+/*
+ * master_priv.h - 主站核心层内部定义
+ *
+ * 定义主站核心层内部使用的拓扑、PDO 映射及主站对象结构，
+ * 并提供状态机与核心模块使用的内部辅助函数声明。
+ */
+
 #ifndef MASTER_PRIV_H
 #define MASTER_PRIV_H
 
@@ -23,51 +30,95 @@ extern "C" {
 #endif
 
 /**
- * @brief 从站表
+ * struct master_topology - 从站表
+ * @slaves: 从站信息数组
+ * @slave_count: 从站数量
  *
  * 保存已发现从站信息，运行时状态由后端直接更新到 slaves[].state。
  */
 struct master_topology {
-	struct master_slave *slaves; /**< 从站信息数组 */
-	size_t slave_count;          /**< 从站数量 */
+	struct master_slave *slaves;
+	size_t slave_count;
 };
 
 /**
- * @brief PDO 映射管理
+ * struct master_pdo_mapping - PDO 映射管理
+ * @image: PDO 数据区域
+ * @entries: PDO entry 内部映射数组
+ * @entry_count: PDO entry 映射数量
+ * @generation: 当前映射版本
+ * @is_active: 是否允许周期读写
  *
  * 保存主站 PDO 数据区域、所有 PDO entry 的地址映射以及映射运行状态。
  */
 struct master_pdo_mapping {
-	struct master_pdo_image image;                   /**< PDO 数据区域 */
-	struct master_pdo_entry_mapping *entries;        /**< PDO entry 内部映射数组 */
-	size_t entry_count;                              /**< PDO entry 映射数量 */
-	uint32_t generation;                             /**< 当前映射版本 */
-	int is_active;                                   /**< 是否允许周期读写 */
+	struct master_pdo_image image;
+	struct master_pdo_entry_mapping *entries;
+	size_t entry_count;
+	uint32_t generation;
+	int is_active;
 };
 
 /**
- * @brief 主站对象（核心层内部定义）
+ * struct mo_ecat_master - 主站对象（核心层内部定义）
+ * @sm: 底层状态机
+ * @command: 外部线程提交的命令槽
+ * @state: 向外发布的主站状态
+ * @error_code: 向外发布的故障码
+ * @backend: 后端实例
+ * @config: 主站配置指针，指向外部配置，生命周期由调用者保证
+ * @pdo_mapping: 主站 PDO 映射
+ * @topology: 从站拓扑
+ * @user_data: 用户私有数据
+ * @cyclic_callback: 周期控制回调，仅在 RUNNING 调用
  */
 struct mo_ecat_master {
-	struct statemachine sm; /**< 底层状态机 */
+	struct statemachine sm;
 
-	_Atomic enum mo_ecat_master_cmd command;    /**< 外部线程提交的命令槽 */
-	_Atomic enum mo_ecat_master_state state;    /**< 向外发布的主站状态 */
-	_Atomic enum mo_ecat_master_error error_code; /**< 向外发布的故障码 */
-	struct backend_instance backend;             /**< 后端实例 */
-	const struct mo_ecat_master_config *config; /**< 主站配置指针，指向外部配置，生命周期由调用者保证 */
-	struct master_pdo_mapping pdo_mapping;      /**< 主站 PDO 映射 */
-	struct master_topology topology; /**< 从站拓扑 */
+	_Atomic enum mo_ecat_master_cmd command;
+	_Atomic enum mo_ecat_master_state state;
+	_Atomic enum mo_ecat_master_error error_code;
+	struct backend_instance backend;
+	const struct mo_ecat_master_config *config;
+	struct master_pdo_mapping pdo_mapping;
+	struct master_topology topology;
 
-	void *user_data;      /**< 用户私有数据 */
-	mo_ecat_cyclic_callback cyclic_callback; /**< 周期控制回调，仅在 RUNNING 调用 */
+	void *user_data;
+	mo_ecat_cyclic_callback cyclic_callback;
 };
 
-/* 内部辅助函数，供状态机与核心模块使用 */
+/**
+ * master_take_cmd - 取出主站当前命令
+ * @master: 主站对象指针
+ *
+ * Return: 当前待处理的命令值
+ */
 enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
+
+/**
+ * master_write_cmd - 向主站写入命令
+ * @master: 主站对象指针
+ * @cmd: 待写入的命令
+ */
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
+
+/**
+ * master_cyclic_receive - 主站周期接收
+ * @master: 主站对象指针
+ * @result: 周期结果指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_cyclic_receive(struct mo_ecat_master *master,
 			  struct mo_ecat_cyclic_result *result);
+
+/**
+ * master_cyclic_send - 主站周期发送
+ * @master: 主站对象指针
+ * @result: 周期结果指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_cyclic_send(struct mo_ecat_master *master,
 		       struct mo_ecat_cyclic_result *result);
 

@@ -1,13 +1,36 @@
+/*
+ * master_pdo_mapping.h - 主站 PDO 映射内部接口
+ *
+ * 提供主站 PDO 映射建立与周期交换激活/停用的内部接口。
+ */
+
 #ifndef MASTER_PDO_MAPPING_H
 #define MASTER_PDO_MAPPING_H
 
 struct mo_ecat_master;
 
-/** 建立主站 PDO 映射与 PDO 数据区域。 */
+/**
+ * master_pdo_mapping_build - 建立主站 PDO 映射与 PDO 数据区域
+ * @master: 主站对象指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_pdo_mapping_build(struct mo_ecat_master *master);
 
-/** 激活或停用主站 PDO 周期交换。 */
+/**
+ * master_pdo_mapping_activate - 激活主站 PDO 周期交换
+ * @master: 主站对象指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_pdo_mapping_activate(struct mo_ecat_master *master);
+
+/**
+ * master_pdo_mapping_deactivate - 停用主站 PDO 周期交换
+ * @master: 主站对象指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_pdo_mapping_deactivate(struct mo_ecat_master *master);
 
 #endif /* MASTER_PDO_MAPPING_H */
