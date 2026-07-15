@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 	printf("Interface: %s\n", g_master_config.interface_name);
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(&g_master_config);
+	g_master = mo_ecat_master_create(&g_master_config, NULL, NULL);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;

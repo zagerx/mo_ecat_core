@@ -30,6 +30,16 @@ struct mo_ecat_cycle_result {
 };
 
 /**
+ * @brief RUNNING 状态中的周期控制回调。
+ *
+ * 回调执行在主站唯一周期调度线程中，位于接收输入 PDO 与发送输出 PDO 之间。
+ * 回调可通过 mo_ecat_pdo_input() / mo_ecat_pdo_output() 访问本周期 PDO 数据。
+ */
+typedef void (*mo_ecat_cycle_callback)(struct mo_ecat_master *master,
+                                       const struct mo_ecat_cycle_result *result,
+                                       void *user_data);
+
+/**
  * @file mo_ecat_master_state.h
  * @brief 主站状态与周期结果查询
  */
