@@ -10,6 +10,7 @@ option(MO_ECAT_BUILD_EXAMPLES "Build mo_ecat examples" ON)
 add_subdirectory(third_party/SOEM)
 
 set(MO_ECAT_CORE_SOURCES
+    src/config/mo_ecat_master_cfg.c
     src/mo_ecat_master.c
     src/master_resources.c
     src/master_error.c

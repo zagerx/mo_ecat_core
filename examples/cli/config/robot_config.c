@@ -1,8 +1,8 @@
 /**
  * @file robot_config.c
- * @brief 机器人配置文件解析预留实现
+ * @brief CLI 默认机器人配置
  *
- * 后续在这里将 YAML/JSON 等配置文件转换为 robot_config。
+ * 机器人应用库本身不持有默认配置；其他应用可链接自己的配置实现。
  */
 
 #include "robot_config.h"

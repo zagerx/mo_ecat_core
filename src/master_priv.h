@@ -67,7 +67,7 @@ struct master_pdo_mapping {
  * @state: 向外发布的主站状态
  * @error_code: 向外发布的故障码
  * @backend: 后端实例
- * @config: 主站配置指针，指向外部配置，生命周期由调用者保证
+ * @config: 主站内建配置指针，指向核心库的静态主站配置
  * @pdo_mapping: 主站 PDO 映射
  * @topology: 从站拓扑
  * @user_data: 用户私有数据

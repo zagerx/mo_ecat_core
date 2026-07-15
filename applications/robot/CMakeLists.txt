@@ -1,5 +1,4 @@
 add_library(mo_robot STATIC
-	robot_config.c
 	robot.c
 )
 

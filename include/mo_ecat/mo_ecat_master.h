@@ -9,7 +9,6 @@
 #define MO_ECAT_MASTER_H
 
 #include "mo_ecat/mo_ecat_common.h"
-#include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_cyclic.h"
 
@@ -57,10 +56,8 @@ enum mo_ecat_master_error {
     MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };
 
-struct mo_ecat_master *mo_ecat_master_create(
-    const struct mo_ecat_master_config *config,
-    mo_ecat_cyclic_callback callback,
-    void *user_data);
+struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
+                                              void *user_data);
 
 void mo_ecat_master_destroy(struct mo_ecat_master *master);
 

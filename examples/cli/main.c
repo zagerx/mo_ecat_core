@@ -21,7 +21,6 @@
 #include "threads.h"
 #include "commands.h"
 #include "mo_ecat/mo_ecat_master.h"
-#include "mo_ecat_master_cfg.h"
 
 /* 全局状态定义，其他模块通过 cli_state.h 引用 */
 struct mo_ecat_master *g_master = NULL;
@@ -63,10 +62,10 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_handler);
 
 	printf("mo_ecat CLI\n");
-	printf("Interface: %s\n", g_master_config.interface_name);
+	printf("Starting EtherCAT CLI.\n");
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(&g_master_config, NULL, NULL);
+	g_master = mo_ecat_master_create(NULL, NULL);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;

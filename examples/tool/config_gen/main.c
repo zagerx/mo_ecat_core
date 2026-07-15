@@ -471,7 +471,7 @@ static int write_master_files(const char *interface,
     fprintf(h, "#ifndef MO_ECAT_MASTER_CFG_H\n");
     fprintf(h, "#define MO_ECAT_MASTER_CFG_H\n");
     fprintf(h, "\n");
-    fprintf(h, "#include \"mo_ecat/mo_ecat_master_config.h\"\n");
+    fprintf(h, "#include \"config/master_config.h\"\n");
     fprintf(h, "\n");
     fprintf(h, "extern const struct mo_ecat_master_config g_master_config;\n");
     fprintf(h, "\n");

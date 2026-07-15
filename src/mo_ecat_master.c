@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config/mo_ecat_master_cfg.h"
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "master_priv.h"
@@ -43,23 +44,21 @@ void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd
 /**
  * master_init - 初始化主站对象
  * @master: 主站对象指针
- * @config: 主站配置指针
  * @callback: 周期控制回调
  * @user_data: 用户私有数据
  *
  * Return: 0 成功，非 0 失败
  */
 static int master_init(struct mo_ecat_master *master,
-		       const struct mo_ecat_master_config *config,
 		       mo_ecat_cyclic_callback callback,
 		       void *user_data)
 {
-	if (!master || !config || config->interface_name[0] == '\0') {
+	if (!master || g_master_config.interface_name[0] == '\0') {
 		return -1;
 	}
 
 	memset(master, 0, sizeof(*master));
-	master->config = config;
+	master->config = &g_master_config;
 	master->cyclic_callback = callback;
 	master->user_data = user_data;
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
@@ -89,7 +88,6 @@ static void master_deinit(struct mo_ecat_master *master)
 
 /**
  * mo_ecat_master_create - 创建主站对象
- * @config: 主站配置指针
  * @callback: 周期控制回调
  * @user_data: 用户私有数据
  *
@@ -97,8 +95,7 @@ static void master_deinit(struct mo_ecat_master *master)
  *
  * Return: 成功返回主站对象指针，失败返回 NULL
  */
-struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config,
-					     mo_ecat_cyclic_callback callback,
+struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
 					     void *user_data)
 {
 	struct mo_ecat_master *master;
@@ -112,7 +109,7 @@ struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config 
 		return NULL;
 	}
 
-	if (master_init(master, config, callback, user_data) < 0) {
+	if (master_init(master, callback, user_data) < 0) {
 		free(master);
 		return NULL;
 	}

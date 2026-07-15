@@ -12,7 +12,6 @@
 #include "print.h"
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat_master_cfg.h"
 
 void cmd_state(void)
 {
@@ -23,7 +22,7 @@ void cmd_scan(void)
 {
 	int rc = mo_ecat_master_write_cmd(g_master, MO_ECAT_MASTER_CMD_SCAN);
 	if (rc == 0) {
-		printf("Scan requested on %s.\n", g_master_config.interface_name);
+		printf("Scan requested.\n");
 	} else {
 		printf("Failed to request scan.\n");
 	}
