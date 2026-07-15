@@ -7,7 +7,7 @@
  */
 
 #include "backend.h"
-#include "backend/backend_ops.h"
+#include "backend_ops.h"
 
 int backend_open(struct backend_instance *backend,
 		 const struct mo_ecat_master_config *config)

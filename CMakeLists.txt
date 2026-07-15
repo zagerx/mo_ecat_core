@@ -11,18 +11,25 @@ add_subdirectory(third_party/SOEM)
 
 set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_master.c
-    src/master_discovery.c
-    src/cyclic.c
-    src/topology.c
+    src/master_resources.c
+    src/master_topology.c
+    src/master_pdo_mapping.c
+    src/mo_ecat_cyclic.c
+    src/mo_ecat_topology.c
     src/master_states.c
     src/common/statemachine/statemachine.c
-    src/backend.c
+    src/backend/backend.c
 )
 
 option(MO_ECAT_BACKEND_SOEM "Use SOEM backend" ON)
 
 if(MO_ECAT_BACKEND_SOEM)
-    list(APPEND MO_ECAT_CORE_SOURCES src/backend/soem.c)
+    list(APPEND MO_ECAT_CORE_SOURCES
+        src/backend/soem/soem_backend.c
+        src/backend/soem/soem_discovery.c
+        src/backend/soem/soem_mapping.c
+        src/backend/soem/soem_cyclic.c
+    )
 endif()
 
 if(NOT MO_ECAT_BACKEND_SOEM)

@@ -8,12 +8,15 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_cyclic.h"
 #include "mo_ecat/mo_ecat_topology.h"
-#include "backend.h"
+#include "backend/backend.h"
 #include "common/statemachine/statemachine.h"
 #include "master_states.h"
-#include "pdo_image.h"
+#include "master_resources.h"
+#include "master_topology.h"
+#include "master_pdo_mapping.h"
+#include "pdo_image_priv.h"
 #include "pdo_mapping_priv.h"
-#include "slave_priv.h"
+#include "topology_priv.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,12 +66,6 @@ struct mo_ecat_master {
 /* 内部辅助函数，供状态机与核心模块使用 */
 enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
-int master_topology_build(struct mo_ecat_master *master);
-int master_topology_refresh_states(struct mo_ecat_master *master);
-int master_pdo_mapping_build(struct mo_ecat_master *master);
-int master_pdo_mapping_activate(struct mo_ecat_master *master);
-int master_pdo_mapping_deactivate(struct mo_ecat_master *master);
-void master_resources_release(struct mo_ecat_master *master);
 int master_cyclic_receive(struct mo_ecat_master *master,
 			  struct mo_ecat_cyclic_result *result);
 int master_cyclic_send(struct mo_ecat_master *master,

@@ -1,5 +1,5 @@
-#ifndef BACKEND_H
-#define BACKEND_H
+#ifndef BACKEND_BACKEND_H
+#define BACKEND_BACKEND_H
 
 #include <stddef.h>
 
@@ -7,7 +7,7 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_cyclic.h"
 #include "mo_ecat/mo_ecat_topology.h"
-#include "pdo_image.h"
+#include "pdo_image_priv.h"
 #include "pdo_mapping_priv.h"
 
 #ifdef __cplusplus
@@ -107,4 +107,4 @@ int backend_init(struct backend_instance *backend);
 }
 #endif
 
-#endif /* BACKEND_H */
+#endif /* BACKEND_BACKEND_H */

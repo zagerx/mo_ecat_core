@@ -1,5 +1,5 @@
 /**
- * @file cyclic.c
+ * @file mo_ecat_cyclic.c
  * @brief 周期数据访问
  */
 

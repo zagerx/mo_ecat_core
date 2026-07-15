@@ -1,5 +1,5 @@
-#ifndef PDO_IMAGE_H
-#define PDO_IMAGE_H
+#ifndef PDO_IMAGE_PRIV_H
+#define PDO_IMAGE_PRIV_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,4 +16,4 @@ struct master_pdo_image {
     size_t size;     /**< PDO 数据内存总字节数 */
 };
 
-#endif /* PDO_IMAGE_H */
+#endif /* PDO_IMAGE_PRIV_H */

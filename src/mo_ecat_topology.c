@@ -1,5 +1,5 @@
 /**
- * @file topology.c
+ * @file mo_ecat_topology.c
  * @brief 主站拓扑节点查询接口
  */
 

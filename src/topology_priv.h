@@ -1,5 +1,5 @@
-#ifndef SLAVE_PRIV_H
-#define SLAVE_PRIV_H
+#ifndef TOPOLOGY_PRIV_H
+#define TOPOLOGY_PRIV_H
 
 #include "mo_ecat/mo_ecat_topology.h"
 
@@ -61,4 +61,4 @@ struct master_slave {
 	size_t pdo_entry_count;
 };
 
-#endif /* SLAVE_PRIV_H */
+#endif /* TOPOLOGY_PRIV_H */
