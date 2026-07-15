@@ -1,6 +1,8 @@
-/**
- * @file soem_mapping.c
- * @brief SOEM PDO 描述读取、DC 配置与 PDO 映射
+/*
+ * soem_mapping.c - SOEM PDO 描述读取、DC 配置与 PDO 映射
+ *
+ * 通过 SDO 读取从站 PDO 分配与映射对象，配置 SOEM 分布式时钟，并建立
+ * IOmap 以获取 PDO entry 在过程数据区域中的偏移。
  */
 
 #include <stdio.h>
@@ -9,6 +11,12 @@
 #include "soem_backend.h"
 #include "topology_priv.h"
 
+/**
+ * soem_check_dc_support - 检查所有从站是否支持 DC
+ * @context: SOEM 上下文指针
+ *
+ * Return: 全部支持返回 0，任一不支持返回 -1
+ */
 static int soem_check_dc_support(ecx_contextt *context)
 {
 	if (!context) {
@@ -23,6 +31,19 @@ static int soem_check_dc_support(ecx_contextt *context)
 	return 0;
 }
 
+/**
+ * soem_read_pdo_assignment - 读取单个 PDO 分配对象下的所有 entry
+ * @context: SOEM 上下文指针
+ * @slave_number: 从站编号（SOEM 内部编号，从 1 开始）
+ * @assignment_index: PDO 分配对象索引（如 0x1C12/0x1C13）
+ * @direction: PDO 方向
+ * @slave: 核心层从站缓存
+ *
+ * 读取 PDO 分配对象，再读取每个 PDO 的映射对象，将解析结果填充到
+ * slave->pdo_entries[]。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
 				    uint16_t assignment_index, enum mo_ecat_cyclic_direction direction,
 				    struct master_slave *slave)
@@ -86,6 +107,14 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 	return 0;
 }
 
+/**
+ * soem_backend_read_pdo_entries - 读取 SOEM 从站默认 PDO 映射条目
+ * @backend: 后端实例指针
+ * @slaves: 核心层从站数组
+ * @slave_count: 从站数量
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_read_pdo_entries(struct backend_instance *backend,
 				  struct master_slave *slaves, size_t slave_count)
 {
@@ -118,6 +147,12 @@ int soem_backend_read_pdo_entries(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_configure_dc - 配置 SOEM 后端分布式时钟
+ * @backend: 后端实例指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_configure_dc(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
@@ -134,6 +169,17 @@ int soem_backend_configure_dc(struct backend_instance *backend)
 	return 0;
 }
 
+/**
+ * soem_resolve_pdo_entry_offsets - 解析所有 PDO entry 在 IOmap 中的偏移
+ * @context: SOEM 后端上下文指针
+ * @entries: PDO entry 映射数组
+ * @entry_count: PDO entry 数量
+ *
+ * 根据 SOEM slave 的输入/输出指针和位宽，计算每个 entry 的 byte_offset
+ * 与 bit_offset。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 static int soem_resolve_pdo_entry_offsets(struct soem_backend_context *context,
 					  struct master_pdo_entry_mapping *entries,
 					  size_t entry_count)
@@ -201,6 +247,16 @@ cleanup:
 	return result;
 }
 
+/**
+ * soem_backend_build_pdo_mapping - 建立 SOEM 后端 PDO 映射
+ * @backend: 后端实例指针
+ * @entries: PDO entry 映射数组
+ * @entry_count: PDO entry 数量
+ *
+ * 调用 SOEM ecx_config_map_group() 建立 IOmap，并回填每个 entry 的偏移。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_build_pdo_mapping(struct backend_instance *backend,
 				   struct master_pdo_entry_mapping *entries, size_t entry_count)
 {
@@ -232,6 +288,13 @@ int soem_backend_build_pdo_mapping(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_get_pdo_image - 获取 SOEM 后端 PDO 数据区域
+ * @backend: 后端实例指针
+ * @image: 用于返回 PDO 数据映像的指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_get_pdo_image(struct backend_instance *backend,
 			       struct master_pdo_image *image)
 {

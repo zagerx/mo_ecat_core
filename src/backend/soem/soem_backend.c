@@ -1,6 +1,7 @@
-/**
- * @file soem_backend.c
- * @brief SOEM 后端装配
+/*
+ * soem_backend.c - SOEM 后端装配
+ *
+ * 初始化 SOEM 后端实例，将后端回调表注册到 backend_instance。
  */
 
 #include <string.h>
@@ -10,12 +11,22 @@
 
 static struct soem_backend_context s_soem_context;
 
+/**
+ * soem_translation_ops - SOEM 后端数据转换回调表
+ *
+ * 负责从站信息转换、PDO entry 描述读取以及 PDO 数据映像绑定。
+ */
 static const struct backend_translation_ops soem_translation_ops = {
 	.read_pdo_entries = soem_backend_read_pdo_entries,
 	.translate_slave_info = soem_backend_translate_slave_info,
 	.get_pdo_image = soem_backend_get_pdo_image,
 };
 
+/**
+ * soem_ops - SOEM 后端生命周期/运行时回调表
+ *
+ * 负责后端打开、扫描、DC 配置、PDO 映射、周期通信与关闭。
+ */
 static const struct backend_ops soem_ops = {
 	.open = soem_backend_open,
 	.load_slave_info = soem_backend_load_slave_info,
@@ -30,6 +41,14 @@ static const struct backend_ops soem_ops = {
 	.close = soem_backend_close,
 };
 
+/**
+ * backend_init - 初始化后端实例
+ * @backend: 后端实例指针
+ *
+ * 当前实现固定装配 SOEM 后端。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int backend_init(struct backend_instance *backend)
 {
 	if (!backend) {

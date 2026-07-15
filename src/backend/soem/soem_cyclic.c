@@ -1,11 +1,20 @@
-/**
- * @file soem_cyclic.c
- * @brief SOEM 周期数据交换与节点状态读取
+/*
+ * soem_cyclic.c - SOEM 周期数据交换与节点状态读取
+ *
+ * 实现 SOEM 后端的周期通信激活/去激活、过程数据收发以及从站状态读取。
  */
 
 #include "soem_backend.h"
 #include "topology_priv.h"
 
+/**
+ * soem_backend_activate - 激活 SOEM 后端周期通信
+ * @backend: 后端实例指针
+ *
+ * 发送一帧过程数据，并将所有从站切换到 OPERATIONAL 状态。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_activate(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
@@ -20,8 +29,15 @@ int soem_backend_activate(struct backend_instance *backend)
 		       EC_STATE_OPERATIONAL ? 0 : -1;
 }
 
+/**
+ * soem_backend_cyclic_receive - SOEM 后端周期接收
+ * @backend: 后端实例指针
+ * @result: 周期结果指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_cyclic_receive(struct backend_instance *backend,
-				 struct mo_ecat_cyclic_result *result)
+				struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	int wkc;
@@ -45,8 +61,15 @@ int soem_backend_cyclic_receive(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_cyclic_send - SOEM 后端周期发送
+ * @backend: 后端实例指针
+ * @result: 周期结果指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_cyclic_send(struct backend_instance *backend,
-			      struct mo_ecat_cyclic_result *result)
+			     struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
@@ -60,6 +83,14 @@ int soem_backend_cyclic_send(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_read_all_slave_states - 读取 SOEM 所有从站状态
+ * @backend: 后端实例指针
+ * @slaves: 核心层从站数组
+ * @slave_count: 从站数量
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_read_all_slave_states(struct backend_instance *backend,
 				       struct master_slave *slaves, size_t slave_count)
 {
@@ -87,9 +118,19 @@ int soem_backend_read_all_slave_states(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_read_single_slave_state - 读取 SOEM 单个从站状态
+ * @backend: 后端实例指针
+ * @slave_index: 从站索引
+ * @state: 用于返回从站状态的指针
+ *
+ * 通过 FPRD 读取指定从站的 AL 状态寄存器。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_read_single_slave_state(struct backend_instance *backend,
-					  size_t slave_index,
-					  struct mo_ecat_node_state *state)
+					 size_t slave_index,
+					 struct mo_ecat_node_state *state)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	ec_alstatust al_status;
@@ -114,6 +155,14 @@ int soem_backend_read_single_slave_state(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_deactivate - 停用 SOEM 后端周期通信
+ * @backend: 后端实例指针
+ *
+ * 将所有从站切换到 SAFE_OP 状态。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_deactivate(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);

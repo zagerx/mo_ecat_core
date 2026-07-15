@@ -1,6 +1,7 @@
-/**
- * @file mo_ecat_topology.c
- * @brief 主站拓扑节点查询接口
+/*
+ * mo_ecat_topology.c - 主站拓扑节点查询接口
+ *
+ * 提供应用层查询已发现从站数量与节点信息的公开接口。
  */
 
 #include <string.h>
@@ -8,6 +9,12 @@
 #include "mo_ecat/mo_ecat_topology.h"
 #include "master_priv.h"
 
+/**
+ * mo_ecat_master_get_node_count - 获取已发现从站数量
+ * @master: 主站对象指针
+ *
+ * Return: 从站数量；@master 为 NULL 时返回 0
+ */
 size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master)
 {
 	size_t count;
@@ -20,6 +27,14 @@ size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master)
 	return count;
 }
 
+/**
+ * mo_ecat_master_get_node_info - 获取指定从站节点信息
+ * @master: 主站对象指针
+ * @index: 从站索引
+ * @info: 节点信息输出缓冲区
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 				 size_t index, struct mo_ecat_node_info *info)
 {

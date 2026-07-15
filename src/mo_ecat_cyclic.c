@@ -1,6 +1,7 @@
-/**
- * @file mo_ecat_cyclic.c
- * @brief 周期数据访问
+/*
+ * mo_ecat_cyclic.c - 周期数据访问
+ *
+ * 提供 PDO 周期收发、PDO entry 枚举以及输入/输出数据指针查询接口。
  */
 
 #include <string.h>
@@ -8,6 +9,13 @@
 #include "mo_ecat/mo_ecat_cyclic.h"
 #include "master_priv.h"
 
+/**
+ * pdo_entry_mapping_in_bounds - 检查 PDO entry 映射是否在数据映像范围内
+ * @image: PDO 数据映像
+ * @mapping: PDO entry 物理映射
+ *
+ * Return: 在范围内返回非 0，否则返回 0
+ */
 static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
 				       const struct master_pdo_entry_mapping *mapping)
 {
@@ -26,6 +34,13 @@ static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
 	return end_bit >= start_bit && end_bit <= image_bits;
 }
 
+/**
+ * master_cyclic_receive - 主站周期接收
+ * @master: 主站对象指针
+ * @result: 周期结果指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_cyclic_receive(struct mo_ecat_master *master,
 			   struct mo_ecat_cyclic_result *result)
 {
@@ -44,6 +59,13 @@ int master_cyclic_receive(struct mo_ecat_master *master,
 	return backend_result;
 }
 
+/**
+ * master_cyclic_send - 主站周期发送
+ * @master: 主站对象指针
+ * @result: 周期结果指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_cyclic_send(struct mo_ecat_master *master,
 		       struct mo_ecat_cyclic_result *result)
 {
@@ -61,6 +83,12 @@ int master_cyclic_send(struct mo_ecat_master *master,
 	return backend_result;
 }
 
+/**
+ * mo_ecat_master_get_cyclic_entry_count - 获取 PDO entry 数量
+ * @master: 主站对象指针
+ *
+ * Return: PDO entry 数量；@master 为 NULL 时返回 0
+ */
 size_t mo_ecat_master_get_cyclic_entry_count(const struct mo_ecat_master *master)
 {
 	size_t count;
@@ -73,6 +101,14 @@ size_t mo_ecat_master_get_cyclic_entry_count(const struct mo_ecat_master *master
 	return count;
 }
 
+/**
+ * mo_ecat_master_get_cyclic_entry - 获取指定 PDO entry 逻辑描述
+ * @master: 主站对象指针
+ * @index: PDO entry 索引
+ * @entry: PDO entry 输出缓冲区
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int mo_ecat_master_get_cyclic_entry(
 	const struct mo_ecat_master *master,
 	size_t index,
@@ -90,6 +126,13 @@ int mo_ecat_master_get_cyclic_entry(
 	return 0;
 }
 
+/**
+ * master_resolve_pdo_entry_mapping - 根据逻辑 entry 解析物理映射
+ * @master: 主站对象指针
+ * @entry: PDO entry 逻辑描述
+ *
+ * Return: 成功返回映射指针，失败返回 NULL
+ */
 static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
     const struct mo_ecat_master *master, const struct mo_ecat_cyclic_entry *entry)
 {
@@ -116,6 +159,13 @@ static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
 	return mapping;
 }
 
+/**
+ * mo_ecat_cyclic_input - 获取输入 PDO entry 数据指针
+ * @master: 主站对象指针
+ * @entry: PDO entry 逻辑描述
+ *
+ * Return: 成功返回数据指针，失败返回 NULL
+ */
 const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
 				 const struct mo_ecat_cyclic_entry *entry)
 {
@@ -136,6 +186,13 @@ const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
 	return data;
 }
 
+/**
+ * mo_ecat_cyclic_output - 获取输出 PDO entry 数据指针
+ * @master: 主站对象指针
+ * @entry: PDO entry 逻辑描述
+ *
+ * Return: 成功返回可写数据指针，失败返回 NULL
+ */
 void *mo_ecat_cyclic_output(struct mo_ecat_master *master,
 			    const struct mo_ecat_cyclic_entry *entry)
 {

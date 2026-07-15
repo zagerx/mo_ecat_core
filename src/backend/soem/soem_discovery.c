@@ -1,6 +1,8 @@
-/**
- * @file soem_discovery.c
- * @brief SOEM 网口打开、扫描与节点信息转换
+/*
+ * soem_discovery.c - SOEM 网口打开、扫描与节点信息转换
+ *
+ * 实现 SOEM 后端的网口初始化、总线扫描、从站数量获取以及从站基本信息
+ * 到核心层结构的转换。
  */
 
 #include <stdio.h>
@@ -9,11 +11,23 @@
 #include "soem_backend.h"
 #include "topology_priv.h"
 
+/**
+ * soem_backend_context_get - 获取 SOEM 后端上下文
+ * @backend: 后端实例指针
+ *
+ * Return: SOEM 后端上下文指针；@backend 为 NULL 时返回 NULL
+ */
 struct soem_backend_context *soem_backend_context_get(struct backend_instance *backend)
 {
 	return backend ? (struct soem_backend_context *)backend->ctx : NULL;
 }
 
+/**
+ * soem_backend_node_al_state - 转换 SOEM 状态到核心层节点 AL 状态
+ * @soem_state: SOEM 原始状态值
+ *
+ * Return: 对应的节点 AL 状态
+ */
 enum mo_ecat_node_al_state soem_backend_node_al_state(uint16_t soem_state)
 {
 	switch (soem_state & 0x0F) {
@@ -26,6 +40,13 @@ enum mo_ecat_node_al_state soem_backend_node_al_state(uint16_t soem_state)
 	}
 }
 
+/**
+ * soem_backend_open - 打开 SOEM 后端
+ * @backend: 后端实例指针
+ * @config: 主站配置指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_open(struct backend_instance *backend,
 		      const struct mo_ecat_master_config *config)
 {
@@ -43,6 +64,13 @@ int soem_backend_open(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_load_slave_info - 加载从站信息
+ * @backend: 后端实例指针
+ * @slave_count: 用于返回从站数量的指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
@@ -61,6 +89,13 @@ int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave
 	return 0;
 }
 
+/**
+ * backend_get_slave_count - 获取从站数量
+ * @backend: 后端实例指针
+ * @slave_count: 用于返回从站数量的指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int backend_get_slave_count(struct backend_instance *backend, size_t *slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
@@ -72,6 +107,14 @@ int backend_get_slave_count(struct backend_instance *backend, size_t *slave_coun
 	return 0;
 }
 
+/**
+ * soem_backend_translate_slave_info - 转换 SOEM 从站信息到核心层结构
+ * @backend: 后端实例指针
+ * @slaves: 核心层从站数组
+ * @slave_count: 从站数量
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int soem_backend_translate_slave_info(struct backend_instance *backend,
 				     struct master_slave *slaves, size_t slave_count)
 {
@@ -125,6 +168,10 @@ int soem_backend_translate_slave_info(struct backend_instance *backend,
 	return 0;
 }
 
+/**
+ * soem_backend_close - 关闭 SOEM 后端
+ * @backend: 后端实例指针
+ */
 void soem_backend_close(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);

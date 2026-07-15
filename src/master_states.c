@@ -1,12 +1,19 @@
-/**
- * @file master_states.c
- * @brief 主站生命周期状态函数
+/*
+ * master_states.c - 主站生命周期状态函数
+ *
+ * 实现主站状态机各状态：INIT、IDLE、READY、RUNNING、FAULT。
+ * 负责处理外部命令、总线扫描、DC 配置、PDO 映射建立以及周期数据交换。
  */
 
 #include "common/statemachine/statemachine.h"
 #include "master_states.h"
 #include "master_priv.h"
 
+/**
+ * master_set_fault - 设置主站故障码
+ * @master: 主站对象指针
+ * @error: 故障码
+ */
 static void master_set_fault(struct mo_ecat_master *master,
 			     enum mo_ecat_master_error error)
 {
@@ -15,6 +22,12 @@ static void master_set_fault(struct mo_ecat_master *master,
 	}
 }
 
+/**
+ * master_state_init - 主站 INIT 状态
+ * @sm: 状态机实例指针
+ *
+ * 进入 INIT 状态后自动切换到 IDLE 状态。
+ */
 void master_state_init(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
@@ -37,6 +50,13 @@ void master_state_init(struct statemachine *sm)
 	}
 }
 
+/**
+ * master_state_idle - 主站 IDLE 状态
+ * @sm: 状态机实例指针
+ *
+ * 等待 SCAN / CONFIGURE / RESET 命令，依次完成后端打开、从站扫描、
+ * 状态刷新、PDO 描述读取、DC 配置以及 PDO 映射建立。
+ */
 void master_state_idle(struct statemachine *sm)
 {
 	enum {
@@ -181,6 +201,12 @@ void master_state_idle(struct statemachine *sm)
 	}
 }
 
+/**
+ * master_state_ready - 主站 READY 状态
+ * @sm: 状态机实例指针
+ *
+ * 等待 ACTIVATE / RESET 命令，激活 PDO 映射后进入 RUNNING 状态。
+ */
 void master_state_ready(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
@@ -223,6 +249,12 @@ void master_state_ready(struct statemachine *sm)
 	}
 }
 
+/**
+ * master_state_running - 主站 RUNNING 状态
+ * @sm: 状态机实例指针
+ *
+ * 执行周期数据接收、用户回调、周期数据发送，并处理 RESET / DEACTIVATE 命令。
+ */
 void master_state_running(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
@@ -277,6 +309,12 @@ void master_state_running(struct statemachine *sm)
 	}
 }
 
+/**
+ * master_state_fault - 主站 FAULT 状态
+ * @sm: 状态机实例指针
+ *
+ * 进入故障状态后仅响应 RESET 命令，复位后回到 IDLE 状态。
+ */
 void master_state_fault(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;

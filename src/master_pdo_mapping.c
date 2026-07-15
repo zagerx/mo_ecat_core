@@ -1,6 +1,8 @@
-/**
- * @file master_pdo_mapping.c
- * @brief 主站 PDO 映射建立与周期交换启停
+/*
+ * master_pdo_mapping.c - 主站 PDO 映射建立与周期交换启停
+ *
+ * 根据拓扑扫描到的 PDO entry 建立核心层逻辑映射，调用后端建立物理
+ * IOmap，并管理 PDO 映射的激活与去激活。
  */
 
 #include <stdlib.h>
@@ -8,6 +10,12 @@
 #include "master_pdo_mapping.h"
 #include "master_priv.h"
 
+/**
+ * master_pdo_entry_mappings_set_generation - 为所有 PDO entry 映射设置代际
+ * @entries: PDO entry 映射数组
+ * @entry_count: 数组元素个数
+ * @generation: 代际值
+ */
 static void master_pdo_entry_mappings_set_generation(
 	struct master_pdo_entry_mapping *entries, size_t entry_count, uint32_t generation)
 {
@@ -16,8 +24,16 @@ static void master_pdo_entry_mappings_set_generation(
 	}
 }
 
+/**
+ * master_pdo_entry_mappings_build - 根据拓扑信息构建 PDO entry 逻辑映射
+ * @master: 主站对象指针
+ * @entries: PDO entry 映射输出数组，已由调用者分配
+ *
+ * 遍历所有从站的 PDO entry 扫描缓存，填充逻辑描述（entry_id、node_index、
+ * 对象索引、位长度、方向等）。
+ */
 static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
-					     struct master_pdo_entry_mapping *entries)
+					    struct master_pdo_entry_mapping *entries)
 {
 	size_t index = 0;
 
@@ -39,6 +55,15 @@ static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
 	}
 }
 
+/**
+ * master_pdo_mapping_build - 建立主站 PDO 映射
+ * @master: 主站对象指针
+ *
+ * 统计所有从站的 PDO entry 总数，分配逻辑映射数组，调用后端建立物理映射，
+ * 并获取 PDO 数据映像。新的映射会刷新代际计数器。
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_pdo_mapping_build(struct mo_ecat_master *master)
 {
 	struct master_pdo_image image = {0};
@@ -94,6 +119,12 @@ int master_pdo_mapping_build(struct mo_ecat_master *master)
 	return 0;
 }
 
+/**
+ * master_pdo_mapping_activate - 激活 PDO 周期交换
+ * @master: 主站对象指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_pdo_mapping_activate(struct mo_ecat_master *master)
 {
 	if (!master || backend_activate(&master->backend) < 0) {
@@ -104,6 +135,12 @@ int master_pdo_mapping_activate(struct mo_ecat_master *master)
 	return 0;
 }
 
+/**
+ * master_pdo_mapping_deactivate - 去激活 PDO 周期交换
+ * @master: 主站对象指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int master_pdo_mapping_deactivate(struct mo_ecat_master *master)
 {
 	if (!master || backend_deactivate(&master->backend) < 0) {

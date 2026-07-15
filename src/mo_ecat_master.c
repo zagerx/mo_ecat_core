@@ -1,6 +1,7 @@
-/**
- * @file mo_ecat_master.c
- * @brief 主站对象、生命周期与命令接口
+/*
+ * mo_ecat_master.c - 主站对象、生命周期与命令接口
+ *
+ * 提供主站对象的创建/销毁、命令写入、状态查询以及状态机调度等公开接口。
  */
 
 #include <stdlib.h>
@@ -12,6 +13,12 @@
 
 static int s_master_instance_in_use;
 
+/**
+ * master_take_cmd - 取出主站当前命令
+ * @master: 主站对象指针
+ *
+ * Return: 当前待处理的命令值；@master 为 NULL 时返回 MO_ECAT_MASTER_CMD_NONE
+ */
 enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -21,6 +28,11 @@ enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master)
 	return atomic_exchange(&master->command, MO_ECAT_MASTER_CMD_NONE);
 }
 
+/**
+ * master_write_cmd - 向主站写入命令
+ * @master: 主站对象指针
+ * @cmd: 待写入的命令
+ */
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd)
 {
 	if (master) {
@@ -28,6 +40,15 @@ void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd
 	}
 }
 
+/**
+ * master_init - 初始化主站对象
+ * @master: 主站对象指针
+ * @config: 主站配置指针
+ * @callback: 周期控制回调
+ * @user_data: 用户私有数据
+ *
+ * Return: 0 成功，非 0 失败
+ */
 static int master_init(struct mo_ecat_master *master,
 		       const struct mo_ecat_master_config *config,
 		       mo_ecat_cyclic_callback callback,
@@ -48,6 +69,10 @@ static int master_init(struct mo_ecat_master *master,
 	return 0;
 }
 
+/**
+ * master_deinit - 反初始化主站对象
+ * @master: 主站对象指针
+ */
 static void master_deinit(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -58,9 +83,19 @@ static void master_deinit(struct mo_ecat_master *master)
 	memset(master, 0, sizeof(*master));
 }
 
+/**
+ * mo_ecat_master_create - 创建主站对象
+ * @config: 主站配置指针
+ * @callback: 周期控制回调
+ * @user_data: 用户私有数据
+ *
+ * 当前仅支持单个主站实例同时存在。
+ *
+ * Return: 成功返回主站对象指针，失败返回 NULL
+ */
 struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config,
 					     mo_ecat_cyclic_callback callback,
-						     void *user_data)
+					     void *user_data)
 {
 	struct mo_ecat_master *master;
 
@@ -82,6 +117,10 @@ struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config 
 	return master;
 }
 
+/**
+ * mo_ecat_master_destroy - 销毁主站对象
+ * @master: 主站对象指针
+ */
 void mo_ecat_master_destroy(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -93,6 +132,13 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
 	s_master_instance_in_use = 0;
 }
 
+/**
+ * mo_ecat_master_write_cmd - 向主站写入命令
+ * @master: 主站对象指针
+ * @cmd: 待写入的命令
+ *
+ * Return: 0 成功，非 0 失败
+ */
 int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd)
 {
 	if (!master || cmd <= MO_ECAT_MASTER_CMD_NONE || cmd > MO_ECAT_MASTER_CMD_RESET) {
@@ -103,6 +149,12 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_
 	return 0;
 }
 
+/**
+ * mo_ecat_master_get_error_code - 获取主站故障码
+ * @master: 主站对象指针
+ *
+ * Return: 当前故障码；@master 为 NULL 时返回 MO_ECAT_MASTER_ERROR_NONE
+ */
 enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_master *master)
 {
 	enum mo_ecat_master_error error;
@@ -115,6 +167,10 @@ enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_mas
 	return error;
 }
 
+/**
+ * mo_ecat_master_dispatch - 调度主站状态机
+ * @master: 主站对象指针
+ */
 void mo_ecat_master_dispatch(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -124,6 +180,12 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master)
 	sm_dispatch(&master->sm);
 }
 
+/**
+ * mo_ecat_master_get_state - 获取主站当前状态
+ * @master: 主站对象指针
+ *
+ * Return: 当前主站状态；@master 为 NULL 时返回 MO_ECAT_MASTER_STATE_INIT
+ */
 enum mo_ecat_master_state mo_ecat_master_get_state(const struct mo_ecat_master *master)
 {
 	enum mo_ecat_master_state state;
