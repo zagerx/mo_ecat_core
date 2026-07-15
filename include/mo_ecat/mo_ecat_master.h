@@ -81,14 +81,15 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master);
 /**
  * @brief 调度主站状态机
  *
- * 应由后台线程以固定周期调用。该函数会处理状态迁移和命令执行。
+ * 必须由唯一的周期调度线程以固定周期调用。该线程独占主站运行态、后端与
+ * PDO 数据区域；RUNNING 状态中的过程数据收发和控制回调也由该线程执行。
  */
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 
 /**
  * @brief 写入主站状态机命令
  *
- * 该函数只写入一条状态机请求，不直接执行后端动作。新命令可以覆盖
+ * 该函数通过原子命令槽写入一条状态机请求，不直接执行后端动作。新命令可以覆盖
  * 尚未消费的旧命令；核心库不保证命令可靠投递，也不保存异步执行结果。
  *
  * @param master 主站对象

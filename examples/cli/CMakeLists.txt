@@ -26,4 +26,4 @@ target_include_directories(ecat_cli PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../config
 )
 
-target_link_libraries(ecat_cli PRIVATE mo_ecat_core mo_robot)
+target_link_libraries(ecat_cli PRIVATE mo_ecat_core mo_robot pthread)

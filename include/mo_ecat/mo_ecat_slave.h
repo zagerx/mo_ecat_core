@@ -115,8 +115,9 @@ size_t mo_ecat_master_get_slave_count(const struct mo_ecat_master *master);
 /**
  * @brief 获取指定从站信息的只读副本
  *
- * 调用方提供 info 缓冲区，核心在锁保护下复制数据。返回的指针不指向内部数组，
- * 因此在调用返回后即使发生状态迁移也不会悬空。
+ * 调用方提供 info 缓冲区，核心复制数据。返回的指针不指向内部数组，
+ * 因此在调用返回后即使发生状态迁移也不会悬空。调用方不得在主站扫描、RESET 或
+ * 重新配置期间并发调用本函数。
  *
  * @return 0 成功，非 0 失败
  */
@@ -124,9 +125,11 @@ int mo_ecat_master_get_slave_info(const struct mo_ecat_master *master,
                                   size_t index, struct mo_ecat_slave_info *info);
 
 /**
- * @brief 读取从站诊断信息
+ * @brief 检查已缓存的从站诊断信息是否可用。
  *
- * 后端会更新从站 AL 状态、online/operational/error 等字段。
+ * 从站状态只能由主站调度线程刷新；本函数不直接调用 backend，避免外部线程
+ * 与周期线程并发访问 EtherCAT 总线。成功返回时，应用可通过
+ * mo_ecat_master_get_slave_info() 获取最近一次缓存的诊断状态。
  */
 int mo_ecat_master_read_diagnostics(struct mo_ecat_master *master);
 

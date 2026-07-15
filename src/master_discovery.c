@@ -9,15 +9,6 @@
 #include "master_priv.h"
 
 /** 清除主站当前请求命令。 */
-void master_clear_cmd(struct mo_ecat_master *master)
-{
-	if (!master) {
-		return;
-	}
-
-	master->command = MO_ECAT_MASTER_CMD_NONE;
-}
-
 /**
  * 释放主站占用的扫描与映射资源。
  *

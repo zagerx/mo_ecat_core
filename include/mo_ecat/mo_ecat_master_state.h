@@ -43,7 +43,7 @@ enum mo_ecat_master_state mo_ecat_master_get_state(
 /**
  * @brief 获取最近一次周期结果
  *
- * 结果由 mo_ecat_master_cycle_end() 成功后更新。
+ * 结果由 RUNNING 状态中的周期发送阶段成功后更新。
  */
 int mo_ecat_master_get_cycle_result(const struct mo_ecat_master *master,
                                     struct mo_ecat_cycle_result *result);

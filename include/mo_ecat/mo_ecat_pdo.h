@@ -11,6 +11,16 @@ extern "C" {
 struct mo_ecat_master;
 
 /**
+ * @brief RUNNING 状态中的周期控制回调。
+ *
+ * 回调执行在主站唯一周期调度线程中，位于接收输入 PDO 与发送输出 PDO 之间。
+ * 回调可通过 mo_ecat_pdo_input() / mo_ecat_pdo_output() 访问本周期 PDO 数据。
+ */
+typedef void (*mo_ecat_cycle_callback)(struct mo_ecat_master *master,
+                                       const struct mo_ecat_cycle_result *result,
+                                       void *user_data);
+
+/**
  * 单个 PDO entry 在主站 PDO 数据区域中的映射描述。
  *
  * 该结构连接从站的 CoE 对象字典条目与过程数据映像中的实际位置。
@@ -40,18 +50,10 @@ struct mo_ecat_pdo_entry_mapping {
 size_t mo_ecat_master_get_pdo_entry_mapping_count(const struct mo_ecat_master *master);
 
 /**
- * @brief PDO 数据区域的公开只读视图
- */
-struct mo_ecat_pdo_image_view {
-    const uint8_t *memory; /**< PDO 数据区域基地址 */
-    size_t         size;   /**< PDO 数据区域字节数 */
-    uint32_t       generation; /**< 所属 PDO 映射版本 */
-};
-
-/**
  * @brief 获取指定 PDO entry 映射的副本
  *
- * 调用方提供 mapping 缓冲区，核心在锁保护下复制数据。
+ * 调用方提供 mapping 缓冲区，核心复制数据。调用方不得在主站 RESET 或重新配置
+ * PDO 映射期间并发调用本函数。
  *
  * @return 0 成功，非 0 失败
  */
@@ -61,37 +63,26 @@ int mo_ecat_master_get_pdo_entry_mapping(
     struct mo_ecat_pdo_entry_mapping *mapping);
 
 /**
- * @brief 获取 PDO 数据区域的公开只读视图
+ * @brief 设置 RUNNING 状态中的周期控制回调。
  *
- * 返回的 view->memory 指向后端 IOmap 内部缓冲区，仅在 READY/RUNNING 且未发生
- * RESET/重新配置前有效。应用层必须在提交 RESET/重新配置前停止访问。
+ * 回调函数和 user_data 必须在主站开始 RUNNING 前设置；运行期间不得修改。
+ */
+int mo_ecat_master_set_cycle_callback(struct mo_ecat_master *master,
+                                      mo_ecat_cycle_callback callback,
+                                      void *user_data);
+
+/**
+ * @brief 获取输入 PDO 在 PDO 数据区域中的地址。
  *
- * @return 0 成功，非 0 失败
- */
-int mo_ecat_master_get_pdo_image_view(
-    const struct mo_ecat_master *master,
-    struct mo_ecat_pdo_image_view *view);
-
-/**
- * @brief 周期开始（接收过程数据）
- */
-int mo_ecat_master_cycle_begin(struct mo_ecat_master *master,
-                               struct mo_ecat_cycle_result *result);
-
-/**
- * @brief 周期结束（发送过程数据）
- */
-int mo_ecat_master_cycle_end(struct mo_ecat_master *master,
-                             struct mo_ecat_cycle_result *result);
-
-/**
- * @brief 获取输入 PDO 在过程数据中的地址
+ * 仅允许在周期控制回调中调用。
  */
 const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
                               const struct mo_ecat_pdo_entry_mapping *mapping);
 
 /**
- * @brief 获取输出 PDO 在过程数据中的地址
+ * @brief 获取输出 PDO 在 PDO 数据区域中的地址。
+ *
+ * 仅允许在周期控制回调中调用。
  */
 void *mo_ecat_pdo_output(struct mo_ecat_master *master,
                          const struct mo_ecat_pdo_entry_mapping *mapping);

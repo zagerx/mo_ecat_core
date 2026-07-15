@@ -2,7 +2,7 @@
 #define MASTER_PRIV_H
 
 #include <stddef.h>
-#include <pthread.h>
+#include <stdatomic.h>
 
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
@@ -20,8 +20,13 @@ extern "C" {
 /**
  * @brief 最近一次周期结果
  */
-struct mo_ecat_master_cycle_result {
-	struct mo_ecat_cycle_result last; /**< 最近一次周期结果 */
+struct master_cycle_snapshot {
+	atomic_int link_up;
+	atomic_uint_fast32_t expected_wkc;
+	atomic_uint_fast32_t actual_wkc;
+	atomic_int_fast64_t dc_time_ns;
+	atomic_int dc_time_valid;
+	atomic_int diagnostics_required;
 };
 
 /**
@@ -53,21 +58,21 @@ struct master_pdo_mapping {
 struct mo_ecat_master {
 	struct statemachine sm; /**< 底层状态机 */
 
-	enum mo_ecat_master_cmd command;            /**< 当前请求命令 */
-	enum mo_ecat_master_error error_code;       /**< 当前故障码 */
+	_Atomic enum mo_ecat_master_cmd command;    /**< 外部线程提交的命令槽 */
+	_Atomic enum mo_ecat_master_state state;    /**< 向外发布的主站状态 */
+	_Atomic enum mo_ecat_master_error error_code; /**< 向外发布的故障码 */
 	struct backend_instance backend;             /**< 后端实例 */
 	const struct mo_ecat_master_config *config; /**< 主站配置指针，指向外部配置，生命周期由调用者保证 */
 	struct master_pdo_mapping pdo_mapping;      /**< 主站 PDO 映射 */
 	struct mo_ecat_master_slave_table slave_table; /**< 从站表 */
-	struct mo_ecat_master_cycle_result cycle_result; /**< 最近一次周期结果 */
+	struct master_cycle_snapshot cycle_result; /**< 最近一次周期结果 */
 
-	pthread_mutex_t lock; /**< 保护本对象的互斥锁 */
 	void *user_data;      /**< 用户私有数据 */
+	mo_ecat_cycle_callback cycle_callback; /**< 周期控制回调，仅在 RUNNING 调用 */
 };
 
 /* 内部辅助函数，供状态机与核心模块使用 */
-enum mo_ecat_master_state master_state_from_sm(const struct mo_ecat_master *master);
-enum mo_ecat_master_cmd master_read_cmd(const struct mo_ecat_master *master);
+enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 int master_build_slave_table(struct mo_ecat_master *master);
 int master_read_all_slave_states(struct mo_ecat_master *master);
@@ -75,7 +80,8 @@ int master_build_pdo_mapping(struct mo_ecat_master *master);
 int master_activate(struct mo_ecat_master *master);
 int master_deactivate(struct mo_ecat_master *master);
 void master_release_resources(struct mo_ecat_master *master);
-void master_clear_cmd(struct mo_ecat_master *master);
+int master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result);
+int master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result);
 
 #ifdef __cplusplus
 }

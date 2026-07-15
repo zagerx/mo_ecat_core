@@ -40,7 +40,6 @@ target_include_directories(mo_ecat_core
 
 target_link_libraries(mo_ecat_core
     PUBLIC soem
-    PUBLIC pthread
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

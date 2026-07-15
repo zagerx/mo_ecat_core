@@ -12,19 +12,19 @@
 
 static int s_master_instance_in_use;
 
-enum mo_ecat_master_cmd master_read_cmd(const struct mo_ecat_master *master)
+enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master)
 {
 	if (!master) {
 		return MO_ECAT_MASTER_CMD_NONE;
 	}
 
-	return master->command;
+	return atomic_exchange(&master->command, MO_ECAT_MASTER_CMD_NONE);
 }
 
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd)
 {
 	if (master) {
-		master->command = cmd;
+		atomic_store(&master->command, cmd);
 	}
 }
 
@@ -35,11 +35,16 @@ int mo_ecat_master_init(struct mo_ecat_master *master, const struct mo_ecat_mast
 	}
 
 	memset(master, 0, sizeof(*master));
-	if (pthread_mutex_init(&master->lock, NULL) != 0) {
-		return -1;
-	}
-
 	master->config = config;
+	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
+	atomic_init(&master->state, MO_ECAT_MASTER_STATE_INIT);
+	atomic_init(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
+	atomic_init(&master->cycle_result.link_up, 0);
+	atomic_init(&master->cycle_result.expected_wkc, 0);
+	atomic_init(&master->cycle_result.actual_wkc, 0);
+	atomic_init(&master->cycle_result.dc_time_ns, 0);
+	atomic_init(&master->cycle_result.dc_time_valid, 0);
+	atomic_init(&master->cycle_result.diagnostics_required, 0);
 	sm_init(&master->sm, master, master_state_init);
 	return 0;
 }
@@ -50,11 +55,7 @@ void mo_ecat_master_deinit(struct mo_ecat_master *master)
 		return;
 	}
 
-	pthread_mutex_lock(&master->lock);
 	master_release_resources(master);
-	pthread_mutex_unlock(&master->lock);
-
-	pthread_mutex_destroy(&master->lock);
 	memset(master, 0, sizeof(*master));
 }
 
@@ -97,9 +98,7 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_
 		return -1;
 	}
 
-	pthread_mutex_lock(&master->lock);
 	master_write_cmd(master, cmd);
-	pthread_mutex_unlock(&master->lock);
 	return 0;
 }
 
@@ -111,9 +110,7 @@ enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_mas
 		return MO_ECAT_MASTER_ERROR_NONE;
 	}
 
-	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	error = master->error_code;
-	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+	error = atomic_load(&master->error_code);
 	return error;
 }
 
@@ -123,9 +120,7 @@ void mo_ecat_master_dispatch(struct mo_ecat_master *master)
 		return;
 	}
 
-	pthread_mutex_lock(&master->lock);
 	sm_dispatch(&master->sm);
-	pthread_mutex_unlock(&master->lock);
 }
 
 enum mo_ecat_master_state mo_ecat_master_get_state(const struct mo_ecat_master *master)
@@ -136,9 +131,7 @@ enum mo_ecat_master_state mo_ecat_master_get_state(const struct mo_ecat_master *
 		return MO_ECAT_MASTER_STATE_INIT;
 	}
 
-	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
-	state = master_state_from_sm(master);
-	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
+	state = atomic_load(&master->state);
 	return state;
 }
 
@@ -148,9 +141,7 @@ void mo_ecat_master_set_user_data(struct mo_ecat_master *master, void *user_data
 		return;
 	}
 
-	pthread_mutex_lock(&master->lock);
 	master->user_data = user_data;
-	pthread_mutex_unlock(&master->lock);
 }
 
 void *mo_ecat_master_get_user_data(const struct mo_ecat_master *master)
@@ -161,8 +152,19 @@ void *mo_ecat_master_get_user_data(const struct mo_ecat_master *master)
 		return NULL;
 	}
 
-	pthread_mutex_lock((pthread_mutex_t *)&master->lock);
 	user_data = master->user_data;
-	pthread_mutex_unlock((pthread_mutex_t *)&master->lock);
 	return user_data;
+}
+
+int mo_ecat_master_set_cycle_callback(struct mo_ecat_master *master,
+				      mo_ecat_cycle_callback callback,
+				      void *user_data)
+{
+	if (!master || atomic_load(&master->state) == MO_ECAT_MASTER_STATE_RUNNING) {
+		return -1;
+	}
+
+	master->cycle_callback = callback;
+	master->user_data = user_data;
+	return 0;
 }
