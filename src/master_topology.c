@@ -19,30 +19,35 @@
  *
  * Return: 0 成功，非 0 失败
  */
-int master_topology_build(struct mo_ecat_master *master, size_t slave_count)
+enum master_error_detail master_topology_build(struct mo_ecat_master *master,
+							size_t slave_count)
 {
+	enum backend_error error;
+
 	if (!master) {
-		return -1;
+		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
 	if (slave_count > 0) {
 		if (slave_count > SIZE_MAX / sizeof(*master->topology.slaves)) {
-			return -1;
+			return MASTER_ERROR_NO_MEMORY;
 		}
 		master->topology.slaves = calloc(slave_count, sizeof(*master->topology.slaves));
 		if (!master->topology.slaves) {
-			return -1;
+			return MASTER_ERROR_NO_MEMORY;
 		}
 	}
 
 	master->topology.slave_count = slave_count;
-	if (slave_count > 0 &&
-	    backend_translate_slave_info(&master->backend, master->topology.slaves,
-					 slave_count) < 0) {
-		return -1;
+	if (slave_count > 0) {
+		error = backend_translate_slave_info(&master->backend, master->topology.slaves,
+						     slave_count);
+		if (error != BACKEND_ERROR_NONE) {
+			return master_error_from_backend(error);
+		}
 	}
 
-	return 0;
+	return MASTER_ERROR_NONE;
 }
 
 /**
@@ -53,12 +58,15 @@ int master_topology_build(struct mo_ecat_master *master, size_t slave_count)
  *
  * Return: 0 成功，非 0 失败
  */
-int master_topology_refresh_states(struct mo_ecat_master *master)
+enum master_error_detail master_topology_refresh_states(struct mo_ecat_master *master)
 {
+	enum backend_error error;
+
 	if (!master || (master->topology.slave_count > 0 && !master->topology.slaves)) {
-		return -1;
+		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
-	return backend_read_all_slave_states(&master->backend, master->topology.slaves,
-					     master->topology.slave_count);
+	error = backend_read_all_slave_states(&master->backend, master->topology.slaves,
+						     master->topology.slave_count);
+	return master_error_from_backend(error);
 }

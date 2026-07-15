@@ -64,44 +64,48 @@ static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
  *
  * Return: 0 成功，非 0 失败
  */
-int master_pdo_mapping_build(struct mo_ecat_master *master)
+enum master_error_detail master_pdo_mapping_build(struct mo_ecat_master *master)
 {
 	struct master_pdo_image image = {0};
 	struct master_pdo_entry_mapping *entries = NULL;
+	enum backend_error error;
 	size_t entry_count = 0;
 	uint32_t generation;
 
 	if (!master) {
-		return -1;
+		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
 	for (size_t i = 0; i < master->topology.slave_count; ++i) {
 		entry_count += master->topology.slaves[i].pdo_entry_count;
 	}
 	if (entry_count > UINT32_MAX) {
-		return -1;
+		return MASTER_ERROR_PDO_MAPPING_FAILED;
 	}
 
 	if (entry_count > 0) {
 		entries = calloc(entry_count, sizeof(*entries));
 		if (!entries) {
-			return -1;
+			return MASTER_ERROR_NO_MEMORY;
 		}
 		master_pdo_entry_mappings_build(master, entries);
 	}
 
-	if (backend_build_pdo_mapping(&master->backend, entries, entry_count) < 0) {
+	error = backend_build_pdo_mapping(&master->backend, entries, entry_count);
+	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
-		return -1;
+		return master_error_from_backend(error);
 	}
-	if (backend_get_pdo_image(&master->backend, &image) < 0) {
+	error = backend_get_pdo_image(&master->backend, &image);
+	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
-		return -1;
+		return master_error_from_backend(error);
 	}
-	if (backend_translate_slave_info(&master->backend, master->topology.slaves,
-					 master->topology.slave_count) < 0) {
+	error = backend_translate_slave_info(&master->backend, master->topology.slaves,
+					    master->topology.slave_count);
+	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
-		return -1;
+		return master_error_from_backend(error);
 	}
 
 	generation = master->pdo_mapping.generation + 1U;
@@ -116,7 +120,7 @@ int master_pdo_mapping_build(struct mo_ecat_master *master)
 	master->pdo_mapping.entry_count = entry_count;
 	master->pdo_mapping.generation = generation;
 	master->pdo_mapping.is_active = 0;
-	return 0;
+	return MASTER_ERROR_NONE;
 }
 
 /**
@@ -125,14 +129,20 @@ int master_pdo_mapping_build(struct mo_ecat_master *master)
  *
  * Return: 0 成功，非 0 失败
  */
-int master_pdo_mapping_activate(struct mo_ecat_master *master)
+enum master_error_detail master_pdo_mapping_activate(struct mo_ecat_master *master)
 {
-	if (!master || backend_activate(&master->backend) < 0) {
-		return -1;
+	enum backend_error error;
+
+	if (!master) {
+		return MASTER_ERROR_INVALID_ARGUMENT;
+	}
+	error = backend_activate(&master->backend);
+	if (error != BACKEND_ERROR_NONE) {
+		return master_error_from_backend(error);
 	}
 
 	master->pdo_mapping.is_active = 1;
-	return 0;
+	return MASTER_ERROR_NONE;
 }
 
 /**
@@ -141,12 +151,18 @@ int master_pdo_mapping_activate(struct mo_ecat_master *master)
  *
  * Return: 0 成功，非 0 失败
  */
-int master_pdo_mapping_deactivate(struct mo_ecat_master *master)
+enum master_error_detail master_pdo_mapping_deactivate(struct mo_ecat_master *master)
 {
-	if (!master || backend_deactivate(&master->backend) < 0) {
-		return -1;
+	enum backend_error error;
+
+	if (!master) {
+		return MASTER_ERROR_INVALID_ARGUMENT;
+	}
+	error = backend_deactivate(&master->backend);
+	if (error != BACKEND_ERROR_NONE) {
+		return master_error_from_backend(error);
 	}
 
 	master->pdo_mapping.is_active = 0;
-	return 0;
+	return MASTER_ERROR_NONE;
 }

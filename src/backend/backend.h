@@ -14,6 +14,7 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_cyclic.h"
 #include "mo_ecat/mo_ecat_topology.h"
+#include "backend_error.h"
 #include "pdo_image_priv.h"
 #include "pdo_mapping_priv.h"
 
@@ -47,51 +48,51 @@ struct backend_instance {
 
 /* ==================== Backend 统一入口 ==================== */
 
-int backend_open(struct backend_instance *backend,
-                 const struct mo_ecat_master_config *config);
+enum backend_error backend_open(struct backend_instance *backend,
+				const struct mo_ecat_master_config *config);
 
-int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
+enum backend_error backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
 
-int backend_translate_slave_info(struct backend_instance *backend,
-                                   struct master_slave *slaves,
-                                   size_t slave_count);
+enum backend_error backend_translate_slave_info(struct backend_instance *backend,
+					  struct master_slave *slaves,
+					  size_t slave_count);
 
-int backend_read_pdo_entries(struct backend_instance *backend,
-                             struct master_slave *slaves,
-                             size_t slave_count);
+enum backend_error backend_read_pdo_entries(struct backend_instance *backend,
+				    struct master_slave *slaves,
+				    size_t slave_count);
 
-int backend_configure_dc(struct backend_instance *backend);
+enum backend_error backend_configure_dc(struct backend_instance *backend);
 
-int backend_build_pdo_mapping(struct backend_instance *backend,
-                              struct master_pdo_entry_mapping *entries,
-                              size_t entry_count);
+enum backend_error backend_build_pdo_mapping(struct backend_instance *backend,
+				     struct master_pdo_entry_mapping *entries,
+				     size_t entry_count);
 
-int backend_get_pdo_image(struct backend_instance *backend,
-                          struct master_pdo_image *image);
+enum backend_error backend_get_pdo_image(struct backend_instance *backend,
+				 struct master_pdo_image *image);
 
-int backend_activate(struct backend_instance *backend);
+enum backend_error backend_activate(struct backend_instance *backend);
 
-int backend_cyclic_receive(struct backend_instance *backend,
-                           struct mo_ecat_cyclic_result *result);
+enum backend_error backend_cyclic_receive(struct backend_instance *backend,
+				  struct mo_ecat_cyclic_result *result);
 
-int backend_cyclic_send(struct backend_instance *backend,
-                        struct mo_ecat_cyclic_result *result);
+enum backend_error backend_cyclic_send(struct backend_instance *backend,
+			       struct mo_ecat_cyclic_result *result);
 
-int backend_read_all_slave_states(struct backend_instance *backend,
-                                  struct master_slave *slaves,
-                                  size_t slave_count);
+enum backend_error backend_read_all_slave_states(struct backend_instance *backend,
+					 struct master_slave *slaves,
+					 size_t slave_count);
 
-int backend_read_single_slave_state(struct backend_instance *backend,
-                                    size_t slave_index,
-                                    struct mo_ecat_node_state *state);
+enum backend_error backend_read_single_slave_state(struct backend_instance *backend,
+					   size_t slave_index,
+					   struct mo_ecat_node_state *state);
 
-int backend_deactivate(struct backend_instance *backend);
+enum backend_error backend_deactivate(struct backend_instance *backend);
 
 void backend_close(struct backend_instance *backend);
 
 /* ==================== Backend 工厂 ==================== */
 
-int backend_init(struct backend_instance *backend);
+enum backend_error backend_init(struct backend_instance *backend);
 
 #ifdef __cplusplus
 }

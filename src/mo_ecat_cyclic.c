@@ -41,22 +41,22 @@ static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
  *
  * Return: 0 成功，非 0 失败
  */
-int master_cyclic_receive(struct mo_ecat_master *master,
-			   struct mo_ecat_cyclic_result *result)
+enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
+							struct mo_ecat_cyclic_result *result)
 {
-	int backend_result;
+	enum backend_error error;
 
 	if (!master || !result) {
-		return -1;
+		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
 	if (!master->pdo_mapping.is_active) {
-		return -1;
+		return MASTER_ERROR_INVALID_STATE;
 	}
 
 	memset(result, 0, sizeof(*result));
-	backend_result = backend_cyclic_receive(&master->backend, result);
-	return backend_result;
+	error = backend_cyclic_receive(&master->backend, result);
+	return master_error_from_backend(error);
 }
 
 /**
@@ -66,21 +66,21 @@ int master_cyclic_receive(struct mo_ecat_master *master,
  *
  * Return: 0 成功，非 0 失败
  */
-int master_cyclic_send(struct mo_ecat_master *master,
-		       struct mo_ecat_cyclic_result *result)
+enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
+						 struct mo_ecat_cyclic_result *result)
 {
-	int backend_result;
+	enum backend_error error;
 
 	if (!master || !result) {
-		return -1;
+		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
 	if (!master->pdo_mapping.is_active) {
-		return -1;
+		return MASTER_ERROR_INVALID_STATE;
 	}
 
-	backend_result = backend_cyclic_send(&master->backend, result);
-	return backend_result;
+	error = backend_cyclic_send(&master->backend, result);
+	return master_error_from_backend(error);
 }
 
 /**

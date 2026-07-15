@@ -21,6 +21,7 @@
 #include "master_resources.h"
 #include "master_topology.h"
 #include "master_pdo_mapping.h"
+#include "master_error.h"
 #include "pdo_image_priv.h"
 #include "pdo_mapping_priv.h"
 #include "topology_priv.h"
@@ -78,6 +79,7 @@ struct mo_ecat_master {
 	_Atomic enum mo_ecat_master_cmd command;
 	_Atomic enum mo_ecat_master_state state;
 	_Atomic enum mo_ecat_master_error error_code;
+	struct master_error_record last_error;
 	struct backend_instance backend;
 	const struct mo_ecat_master_config *config;
 	struct master_pdo_mapping pdo_mapping;
@@ -91,11 +93,11 @@ enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
 
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 
-int master_cyclic_receive(struct mo_ecat_master *master,
-			  struct mo_ecat_cyclic_result *result);
+enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
+							struct mo_ecat_cyclic_result *result);
 
-int master_cyclic_send(struct mo_ecat_master *master,
-		       struct mo_ecat_cyclic_result *result);
+enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
+						 struct mo_ecat_cyclic_result *result);
 
 #ifdef __cplusplus
 }

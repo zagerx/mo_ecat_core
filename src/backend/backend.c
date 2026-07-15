@@ -15,11 +15,11 @@
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_open(struct backend_instance *backend,
-		 const struct mo_ecat_master_config *config)
+enum backend_error backend_open(struct backend_instance *backend,
+				const struct mo_ecat_master_config *config)
 {
 	if (!backend || !backend->ops || !backend->ops->open) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	return backend->ops->open(backend, config);
@@ -32,10 +32,10 @@ int backend_open(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count)
+enum backend_error backend_load_slave_info(struct backend_instance *backend, size_t *slave_count)
 {
 	if (!backend || !slave_count || !backend->ops || !backend->ops->load_slave_info) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->ops->load_slave_info(backend, slave_count);
@@ -49,16 +49,16 @@ int backend_load_slave_info(struct backend_instance *backend, size_t *slave_coun
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_translate_slave_info(struct backend_instance *backend,
-				 struct master_slave *slaves, size_t slave_count)
+enum backend_error backend_translate_slave_info(struct backend_instance *backend,
+					struct master_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->translate_slave_info) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (slave_count > 0 && !slaves) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->translation_ops->translate_slave_info(backend, slaves, slave_count);
@@ -72,16 +72,16 @@ int backend_translate_slave_info(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_read_pdo_entries(struct backend_instance *backend,
-			     struct master_slave *slaves, size_t slave_count)
+enum backend_error backend_read_pdo_entries(struct backend_instance *backend,
+					struct master_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->read_pdo_entries) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (slave_count > 0 && !slaves) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->translation_ops->read_pdo_entries(backend, slaves, slave_count);
@@ -93,10 +93,10 @@ int backend_read_pdo_entries(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_configure_dc(struct backend_instance *backend)
+enum backend_error backend_configure_dc(struct backend_instance *backend)
 {
 	if (!backend || !backend->ops || !backend->ops->configure_dc) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	return backend->ops->configure_dc(backend);
@@ -114,16 +114,16 @@ int backend_configure_dc(struct backend_instance *backend)
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_build_pdo_mapping(struct backend_instance *backend,
-			      struct master_pdo_entry_mapping *entries,
-			      size_t entry_count)
+enum backend_error backend_build_pdo_mapping(struct backend_instance *backend,
+					     struct master_pdo_entry_mapping *entries,
+					     size_t entry_count)
 {
 	if (!backend || !backend->ops || !backend->ops->build_pdo_mapping) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (entry_count > 0 && !entries) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->ops->build_pdo_mapping(backend, entries, entry_count);
@@ -136,16 +136,16 @@ int backend_build_pdo_mapping(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_get_pdo_image(struct backend_instance *backend,
-			  struct master_pdo_image *image)
+enum backend_error backend_get_pdo_image(struct backend_instance *backend,
+					struct master_pdo_image *image)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->get_pdo_image) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (!image) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->translation_ops->get_pdo_image(backend, image);
@@ -157,10 +157,10 @@ int backend_get_pdo_image(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_activate(struct backend_instance *backend)
+enum backend_error backend_activate(struct backend_instance *backend)
 {
 	if (!backend || !backend->ops || !backend->ops->activate) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	return backend->ops->activate(backend);
@@ -173,15 +173,15 @@ int backend_activate(struct backend_instance *backend)
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_cyclic_receive(struct backend_instance *backend,
-			   struct mo_ecat_cyclic_result *result)
+enum backend_error backend_cyclic_receive(struct backend_instance *backend,
+					  struct mo_ecat_cyclic_result *result)
 {
 	if (!backend || !backend->ops || !backend->ops->cyclic_receive) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (!result) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->ops->cyclic_receive(backend, result);
@@ -194,15 +194,15 @@ int backend_cyclic_receive(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_cyclic_send(struct backend_instance *backend,
-			struct mo_ecat_cyclic_result *result)
+enum backend_error backend_cyclic_send(struct backend_instance *backend,
+				       struct mo_ecat_cyclic_result *result)
 {
 	if (!backend || !backend->ops || !backend->ops->cyclic_send) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (!result) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->ops->cyclic_send(backend, result);
@@ -216,15 +216,15 @@ int backend_cyclic_send(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_read_all_slave_states(struct backend_instance *backend,
-				  struct master_slave *slaves, size_t slave_count)
+enum backend_error backend_read_all_slave_states(struct backend_instance *backend,
+						 struct master_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->ops || !backend->ops->read_all_slave_states) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	if (slave_count > 0 && !slaves) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->ops->read_all_slave_states(backend, slaves, slave_count);
@@ -238,12 +238,12 @@ int backend_read_all_slave_states(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_read_single_slave_state(struct backend_instance *backend,
-				    size_t slave_index,
-				    struct mo_ecat_node_state *state)
+enum backend_error backend_read_single_slave_state(struct backend_instance *backend,
+						   size_t slave_index,
+						   struct mo_ecat_node_state *state)
 {
 	if (!backend || !backend->ops || !backend->ops->read_single_slave_state || !state) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	return backend->ops->read_single_slave_state(backend, slave_index, state);
@@ -255,10 +255,10 @@ int backend_read_single_slave_state(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_deactivate(struct backend_instance *backend)
+enum backend_error backend_deactivate(struct backend_instance *backend)
 {
 	if (!backend || !backend->ops || !backend->ops->deactivate) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	return backend->ops->deactivate(backend);

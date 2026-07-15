@@ -5,7 +5,6 @@
  * IOmap 以获取 PDO entry 在过程数据区域中的偏移。
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "soem_backend.h"
@@ -17,18 +16,17 @@
  *
  * Return: 全部支持返回 0，任一不支持返回 -1
  */
-static int soem_check_dc_support(ecx_contextt *context)
+static enum backend_error soem_check_dc_support(ecx_contextt *context)
 {
 	if (!context) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	for (int i = 1; i <= context->slavecount; ++i) {
 		if (!context->slavelist[i].hasdc) {
-			fprintf(stderr, "SOEM backend: slave %d does not support DC\n", i);
-			return -1;
+			return BACKEND_ERROR_DC_UNSUPPORTED;
 		}
 	}
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -44,9 +42,9 @@ static int soem_check_dc_support(ecx_contextt *context)
  *
  * Return: 0 成功，非 0 失败
  */
-static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
-				    uint16_t assignment_index, enum mo_ecat_cyclic_direction direction,
-				    struct master_slave *slave)
+static enum backend_error soem_read_pdo_assignment(
+	ecx_contextt *context, uint16_t slave_number, uint16_t assignment_index,
+	enum mo_ecat_cyclic_direction direction, struct master_slave *slave)
 {
 	uint8_t pdo_count = 0;
 	int size = sizeof(pdo_count);
@@ -55,7 +53,7 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 	wkc = ecx_SDOread(context, slave_number, assignment_index, 0, FALSE, &size, &pdo_count,
 			  EC_TIMEOUTRXM);
 	if (wkc <= 0) {
-		return -1;
+		return BACKEND_ERROR_SDO_READ_FAILED;
 	}
 
 	for (uint8_t pdo_subindex = 1; pdo_subindex <= pdo_count; ++pdo_subindex) {
@@ -66,7 +64,7 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 		wkc = ecx_SDOread(context, slave_number, assignment_index, pdo_subindex, FALSE,
 				  &size, &pdo_index, EC_TIMEOUTRXM);
 		if (wkc <= 0) {
-			return -1;
+			return BACKEND_ERROR_SDO_READ_FAILED;
 		}
 		pdo_index = etohs(pdo_index);
 		if (pdo_index == 0) {
@@ -77,7 +75,7 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 		wkc = ecx_SDOread(context, slave_number, pdo_index, 0, FALSE, &size,
 				  &entry_count, EC_TIMEOUTRXM);
 		if (wkc <= 0) {
-			return -1;
+			return BACKEND_ERROR_SDO_READ_FAILED;
 		}
 
 		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count; ++entry_subindex) {
@@ -85,13 +83,13 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 			struct master_slave_pdo_entry *entry;
 
 			if (slave->pdo_entry_count >= MASTER_MAX_PDO_ENTRIES) {
-				return -1;
+				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
 			}
 			size = sizeof(mapping);
 			wkc = ecx_SDOread(context, slave_number, pdo_index, entry_subindex, FALSE,
 					  &size, &mapping, EC_TIMEOUTRXM);
 			if (wkc <= 0) {
-				return -1;
+				return BACKEND_ERROR_SDO_READ_FAILED;
 			}
 
 			mapping = etohl(mapping);
@@ -104,7 +102,7 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 		}
 	}
 
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -115,14 +113,15 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_read_pdo_entries(struct backend_instance *backend,
-				  struct master_slave *slaves, size_t slave_count)
+enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backend,
+						  struct master_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
+	enum backend_error error;
 
 	if (!context || (slave_count > 0 && !slaves) ||
 	    slave_count != (size_t)context->context.slavecount) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	for (size_t i = 0; i < slave_count; ++i) {
@@ -134,17 +133,21 @@ int soem_backend_read_pdo_entries(struct backend_instance *backend,
 		}
 		if ((ecx_statecheck(&context->context, (uint16_t)(i + 1), EC_STATE_PRE_OP,
 				    EC_TIMEOUTSTATE) & 0x0f) != EC_STATE_PRE_OP) {
-			return -1;
+			return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 		}
-		if (soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c12,
-					     MO_ECAT_CYCLIC_OUTPUT, slave) < 0 ||
-		    soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c13,
-					     MO_ECAT_CYCLIC_INPUT, slave) < 0) {
-			return -1;
+		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c12,
+						 MO_ECAT_CYCLIC_OUTPUT, slave);
+		if (error != BACKEND_ERROR_NONE) {
+			return error;
+		}
+		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c13,
+						 MO_ECAT_CYCLIC_INPUT, slave);
+		if (error != BACKEND_ERROR_NONE) {
+			return error;
 		}
 	}
 
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -153,20 +156,24 @@ int soem_backend_read_pdo_entries(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_configure_dc(struct backend_instance *backend)
+enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
+	enum backend_error error;
 
-	if (!context || !context->opened || soem_check_dc_support(&context->context) < 0) {
-		return -1;
+	if (!context || !context->opened) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	error = soem_check_dc_support(&context->context);
+	if (error != BACKEND_ERROR_NONE) {
+		return error;
 	}
 	if (!ecx_configdc(&context->context)) {
-		fprintf(stderr, "SOEM backend: ecx_configdc failed\n");
-		return -1;
+		return BACKEND_ERROR_DC_CONFIG_FAILED;
 	}
 
 	context->dc_configured = 1;
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -180,26 +187,27 @@ int soem_backend_configure_dc(struct backend_instance *backend)
  *
  * Return: 0 成功，非 0 失败
  */
-static int soem_resolve_pdo_entry_offsets(struct soem_backend_context *context,
-					  struct master_pdo_entry_mapping *entries,
-					  size_t entry_count)
+static enum backend_error soem_resolve_pdo_entry_offsets(
+	struct soem_backend_context *context, struct master_pdo_entry_mapping *entries,
+	size_t entry_count)
 {
 	uint32_t *used_output_bits = NULL;
 	uint32_t *used_input_bits = NULL;
-	int result = -1;
+	enum backend_error result = BACKEND_ERROR_PDO_OFFSET_RESOLVE_FAILED;
 	int slave_count;
 
 	if (!context || (entry_count > 0 && !entries)) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	slave_count = context->context.slavecount;
 	if (slave_count < 0) {
-		return -1;
+		return BACKEND_ERROR_PDO_OFFSET_RESOLVE_FAILED;
 	}
 	if (slave_count > 0) {
 		used_output_bits = calloc((size_t)slave_count, sizeof(*used_output_bits));
 		used_input_bits = calloc((size_t)slave_count, sizeof(*used_input_bits));
 		if (!used_output_bits || !used_input_bits) {
+			result = BACKEND_ERROR_NO_MEMORY;
 			goto cleanup;
 		}
 	}
@@ -240,7 +248,7 @@ static int soem_resolve_pdo_entry_offsets(struct soem_backend_context *context,
 		*used_bits += mapping->entry.bit_length;
 	}
 
-	result = 0;
+	result = BACKEND_ERROR_NONE;
 cleanup:
 	free(used_output_bits);
 	free(used_input_bits);
@@ -257,35 +265,37 @@ cleanup:
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_build_pdo_mapping(struct backend_instance *backend,
-				   struct master_pdo_entry_mapping *entries, size_t entry_count)
+enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
+						   struct master_pdo_entry_mapping *entries, size_t entry_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
+	enum backend_error error;
 	int mapped_size;
 
-	if (!context || !context->opened || !context->dc_configured ||
-	    (entry_count > 0 && !entries)) {
-		return -1;
+	if (!context || !context->opened || !context->dc_configured) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (entry_count > 0 && !entries) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	context->pdo_mapping_ready = 0;
 	context->pdo_image_size = 0;
 	mapped_size = ecx_config_map_group(&context->context, context->iomap, 0);
 	if (mapped_size <= 0 || (size_t)mapped_size > SOEM_BACKEND_IOMAP_SIZE) {
-		fprintf(stderr, "SOEM backend: map failed or exceeds fixed IOmap size\n");
-		return -1;
+		return mapped_size > (int)SOEM_BACKEND_IOMAP_SIZE ?
+			BACKEND_ERROR_PDO_IMAGE_TOO_LARGE : BACKEND_ERROR_PDO_MAPPING_FAILED;
 	}
 
 	context->pdo_image_size = (size_t)mapped_size;
 	context->expected_wkc = (uint32_t)context->context.grouplist[0].outputsWKC * 2U +
 				context->context.grouplist[0].inputsWKC;
-	if (soem_resolve_pdo_entry_offsets(context, entries, entry_count) < 0) {
-		return -1;
+	error = soem_resolve_pdo_entry_offsets(context, entries, entry_count);
+	if (error != BACKEND_ERROR_NONE) {
+		return error;
 	}
 	context->pdo_mapping_ready = 1;
 
-	printf("SOEM backend: %d slaves, IOmap %d bytes, expected WKC %u\n",
-	       context->context.slavecount, mapped_size, context->expected_wkc);
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -295,15 +305,18 @@ int soem_backend_build_pdo_mapping(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_get_pdo_image(struct backend_instance *backend,
-			       struct master_pdo_image *image)
+enum backend_error soem_backend_get_pdo_image(struct backend_instance *backend,
+					      struct master_pdo_image *image)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
-	if (!context || !context->pdo_mapping_ready || !image) {
-		return -1;
+	if (!image) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (!context || !context->pdo_mapping_ready) {
+		return BACKEND_ERROR_NOT_READY;
 	}
 	image->memory = context->iomap;
 	image->size = context->pdo_image_size;
-	return 0;
+	return BACKEND_ERROR_NONE;
 }

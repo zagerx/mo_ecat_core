@@ -39,42 +39,44 @@ struct soem_backend_context *soem_backend_context_get(struct backend_instance *b
 
 enum mo_ecat_node_al_state soem_backend_node_al_state(uint16_t soem_state);
 
-int soem_backend_open(struct backend_instance *backend,
-		      const struct mo_ecat_master_config *config);
+enum backend_error soem_backend_open(struct backend_instance *backend,
+				     const struct mo_ecat_master_config *config);
 
-int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
+enum backend_error soem_backend_load_slave_info(struct backend_instance *backend,
+					 size_t *slave_count);
 
 void soem_backend_close(struct backend_instance *backend);
 
-int soem_backend_translate_slave_info(struct backend_instance *backend,
-				     struct master_slave *slaves, size_t slave_count);
+enum backend_error soem_backend_translate_slave_info(struct backend_instance *backend,
+						     struct master_slave *slaves, size_t slave_count);
 
-int soem_backend_read_pdo_entries(struct backend_instance *backend,
-				  struct master_slave *slaves, size_t slave_count);
+enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backend,
+					  struct master_slave *slaves, size_t slave_count);
 
-int soem_backend_configure_dc(struct backend_instance *backend);
+enum backend_error soem_backend_configure_dc(struct backend_instance *backend);
 
-int soem_backend_build_pdo_mapping(struct backend_instance *backend,
-				   struct master_pdo_entry_mapping *entries, size_t entry_count);
+enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
+						   struct master_pdo_entry_mapping *entries,
+						   size_t entry_count);
 
-int soem_backend_get_pdo_image(struct backend_instance *backend,
-			       struct master_pdo_image *image);
+enum backend_error soem_backend_get_pdo_image(struct backend_instance *backend,
+					      struct master_pdo_image *image);
 
-int soem_backend_activate(struct backend_instance *backend);
+enum backend_error soem_backend_activate(struct backend_instance *backend);
 
-int soem_backend_cyclic_receive(struct backend_instance *backend,
-				 struct mo_ecat_cyclic_result *result);
+enum backend_error soem_backend_cyclic_receive(struct backend_instance *backend,
+						struct mo_ecat_cyclic_result *result);
 
-int soem_backend_cyclic_send(struct backend_instance *backend,
-			      struct mo_ecat_cyclic_result *result);
+enum backend_error soem_backend_cyclic_send(struct backend_instance *backend,
+					     struct mo_ecat_cyclic_result *result);
 
-int soem_backend_read_all_slave_states(struct backend_instance *backend,
-				       struct master_slave *slaves, size_t slave_count);
+enum backend_error soem_backend_read_all_slave_states(struct backend_instance *backend,
+						      struct master_slave *slaves, size_t slave_count);
 
-int soem_backend_read_single_slave_state(struct backend_instance *backend,
-					  size_t slave_index,
-					  struct mo_ecat_node_state *state);
+enum backend_error soem_backend_read_single_slave_state(struct backend_instance *backend,
+							 size_t slave_index,
+							 struct mo_ecat_node_state *state);
 
-int soem_backend_deactivate(struct backend_instance *backend);
+enum backend_error soem_backend_deactivate(struct backend_instance *backend);
 
 #endif /* SOEM_BACKEND_H */

@@ -15,18 +15,18 @@
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_activate(struct backend_instance *backend)
+enum backend_error soem_backend_activate(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
 	if (!context) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 	ecx_send_processdata(&context->context);
 	context->context.slavelist[0].state = EC_STATE_OPERATIONAL;
 	ecx_writestate(&context->context, 0);
 	return ecx_statecheck(&context->context, 0, EC_STATE_OPERATIONAL, 50000) ==
-		       EC_STATE_OPERATIONAL ? 0 : -1;
+		       EC_STATE_OPERATIONAL ? BACKEND_ERROR_NONE : BACKEND_ERROR_ACTIVATE_FAILED;
 }
 
 /**
@@ -36,14 +36,14 @@ int soem_backend_activate(struct backend_instance *backend)
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_cyclic_receive(struct backend_instance *backend,
-				struct mo_ecat_cyclic_result *result)
+enum backend_error soem_backend_cyclic_receive(struct backend_instance *backend,
+						struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	int wkc;
 
 	if (!context || !result) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	wkc = ecx_receive_processdata(&context->context, EC_TIMEOUTRET);
 	result->link_up = wkc > 0;
@@ -53,12 +53,12 @@ int soem_backend_cyclic_receive(struct backend_instance *backend,
 	result->dc_time_valid = 1;
 	if (wkc <= 0) {
 		result->diagnostics_required = 1;
-		return -1;
+		return BACKEND_ERROR_CYCLIC_RECEIVE_FAILED;
 	}
 	if (result->expected_wkc > 0 && result->actual_wkc != result->expected_wkc) {
 		result->diagnostics_required = 1;
 	}
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -68,19 +68,19 @@ int soem_backend_cyclic_receive(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_cyclic_send(struct backend_instance *backend,
-			     struct mo_ecat_cyclic_result *result)
+enum backend_error soem_backend_cyclic_send(struct backend_instance *backend,
+					     struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
 	if (!context || !result) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	if (ecx_send_processdata(&context->context) <= 0) {
 		result->diagnostics_required = 1;
-		return -1;
+		return BACKEND_ERROR_CYCLIC_SEND_FAILED;
 	}
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -91,17 +91,17 @@ int soem_backend_cyclic_send(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_read_all_slave_states(struct backend_instance *backend,
-				       struct master_slave *slaves, size_t slave_count)
+enum backend_error soem_backend_read_all_slave_states(struct backend_instance *backend,
+						      struct master_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
 	if (!context || (slave_count > 0 && !slaves)) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	ecx_readstate(&context->context);
 	if (slave_count != (size_t)context->context.slavecount) {
-		return -1;
+		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 	}
 
 	for (size_t i = 0; i < slave_count; ++i) {
@@ -115,7 +115,7 @@ int soem_backend_read_all_slave_states(struct backend_instance *backend,
 			slaves[i].state.al_state == MO_ECAT_NODE_AL_STATE_OP;
 	}
 
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -128,9 +128,9 @@ int soem_backend_read_all_slave_states(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_read_single_slave_state(struct backend_instance *backend,
-					 size_t slave_index,
-					 struct mo_ecat_node_state *state)
+enum backend_error soem_backend_read_single_slave_state(struct backend_instance *backend,
+								size_t slave_index,
+								struct mo_ecat_node_state *state)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	ec_alstatust al_status;
@@ -138,13 +138,13 @@ int soem_backend_read_single_slave_state(struct backend_instance *backend,
 	int wkc;
 
 	if (!context || !state || slave_index >= (size_t)context->context.slavecount) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	config_address = context->context.slavelist[slave_index + 1].configadr;
 	wkc = ecx_FPRD(&context->context.port, config_address, ECT_REG_ALSTAT,
 		       sizeof(al_status), &al_status, EC_TIMEOUTRET);
 	if (wkc <= 0) {
-		return -1;
+		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 	}
 
 	state->al_state = soem_backend_node_al_state(etohs(al_status.alstatus));
@@ -152,7 +152,7 @@ int soem_backend_read_single_slave_state(struct backend_instance *backend,
 	state->al_status_code = etohs(al_status.alstatuscode);
 	state->is_online = 1;
 	state->is_operational = state->al_state == MO_ECAT_NODE_AL_STATE_OP;
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -163,14 +163,14 @@ int soem_backend_read_single_slave_state(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_deactivate(struct backend_instance *backend)
+enum backend_error soem_backend_deactivate(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
 	if (!context) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 	context->context.slavelist[0].state = EC_STATE_SAFE_OP;
 	ecx_writestate(&context->context, 0);
-	return 0;
+	return BACKEND_ERROR_NONE;
 }

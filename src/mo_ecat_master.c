@@ -65,6 +65,10 @@ static int master_init(struct mo_ecat_master *master,
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
 	atomic_init(&master->state, MO_ECAT_MASTER_STATE_INIT);
 	atomic_init(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
+	master->last_error.master_error = MO_ECAT_MASTER_ERROR_NONE;
+	master->last_error.detail = MASTER_ERROR_NONE;
+	master->last_error.source = MASTER_ERROR_SOURCE_CORE;
+	master->last_error.node_index = SIZE_MAX;
 	sm_init(&master->sm, master, master_state_init);
 	return 0;
 }

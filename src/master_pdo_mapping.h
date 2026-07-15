@@ -7,12 +7,14 @@
 #ifndef MASTER_PDO_MAPPING_H
 #define MASTER_PDO_MAPPING_H
 
+#include "master_error.h"
+
 struct mo_ecat_master;
 
-int master_pdo_mapping_build(struct mo_ecat_master *master);
+enum master_error_detail master_pdo_mapping_build(struct mo_ecat_master *master);
 
-int master_pdo_mapping_activate(struct mo_ecat_master *master);
+enum master_error_detail master_pdo_mapping_activate(struct mo_ecat_master *master);
 
-int master_pdo_mapping_deactivate(struct mo_ecat_master *master);
+enum master_error_detail master_pdo_mapping_deactivate(struct mo_ecat_master *master);
 
 #endif /* MASTER_PDO_MAPPING_H */

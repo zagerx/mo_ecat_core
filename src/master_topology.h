@@ -7,10 +7,13 @@
 #ifndef MASTER_TOPOLOGY_H
 #define MASTER_TOPOLOGY_H
 
+#include "master_error.h"
+
 struct mo_ecat_master;
 
-int master_topology_build(struct mo_ecat_master *master, size_t slave_count);
+enum master_error_detail master_topology_build(struct mo_ecat_master *master,
+						 size_t slave_count);
 
-int master_topology_refresh_states(struct mo_ecat_master *master);
+enum master_error_detail master_topology_refresh_states(struct mo_ecat_master *master);
 
 #endif /* MASTER_TOPOLOGY_H */

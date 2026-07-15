@@ -5,7 +5,6 @@
  * 到核心层结构的转换。
  */
 
-#include <stdio.h>
 #include <string.h>
 
 #include "soem_backend.h"
@@ -47,21 +46,20 @@ enum mo_ecat_node_al_state soem_backend_node_al_state(uint16_t soem_state)
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_open(struct backend_instance *backend,
-		      const struct mo_ecat_master_config *config)
+enum backend_error soem_backend_open(struct backend_instance *backend,
+				     const struct mo_ecat_master_config *config)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
 	if (!context || !config || config->interface_name[0] == '\0') {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	if (!ecx_init(&context->context, config->interface_name)) {
-		fprintf(stderr, "SOEM backend: ecx_init failed on %s\n", config->interface_name);
-		return -1;
+		return BACKEND_ERROR_OPEN_FAILED;
 	}
 
 	context->opened = 1;
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -71,22 +69,22 @@ int soem_backend_open(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave_count)
+enum backend_error soem_backend_load_slave_info(struct backend_instance *backend,
+					 size_t *slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	int count;
 
 	if (!context || !slave_count || !context->opened) {
-		return -1;
+		return BACKEND_ERROR_NOT_READY;
 	}
 	count = ecx_config_init(&context->context);
 	if (count <= 0) {
-		fprintf(stderr, "SOEM backend: ecx_config_init failed\n");
-		return -1;
+		return BACKEND_ERROR_SCAN_FAILED;
 	}
 
 	*slave_count = (size_t)count;
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -97,15 +95,15 @@ int soem_backend_load_slave_info(struct backend_instance *backend, size_t *slave
  *
  * Return: 0 成功，非 0 失败
  */
-int soem_backend_translate_slave_info(struct backend_instance *backend,
-				     struct master_slave *slaves, size_t slave_count)
+enum backend_error soem_backend_translate_slave_info(struct backend_instance *backend,
+						     struct master_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *backend_context = soem_backend_context_get(backend);
 	ecx_contextt *context;
 
 	if (!backend_context || (slave_count > 0 && !slaves) ||
 	    slave_count != (size_t)backend_context->context.slavecount) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	context = &backend_context->context;
@@ -147,7 +145,7 @@ int soem_backend_translate_slave_info(struct backend_instance *backend,
 		slave->base_info.fmmu[3].function = soem_slave->FMMU3func;
 	}
 
-	return 0;
+	return BACKEND_ERROR_NONE;
 }
 
 /**

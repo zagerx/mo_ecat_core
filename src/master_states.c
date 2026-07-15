@@ -14,10 +14,21 @@
  * @master: 主站对象指针
  * @error: 故障码
  */
-static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_error error)
+static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_error error,
+			     enum master_error_detail detail)
 {
 	if (master) {
 		atomic_store(&master->error_code, error);
+		master->last_error.master_error = error;
+		master->last_error.detail = detail;
+		master->last_error.source =
+			(detail == MASTER_ERROR_INVALID_ARGUMENT || detail == MASTER_ERROR_INVALID_STATE ||
+			 detail == MASTER_ERROR_NO_MEMORY) ?
+				MASTER_ERROR_SOURCE_CORE : MASTER_ERROR_SOURCE_BACKEND;
+		master->last_error.native_code = 0;
+		master->last_error.node_index = SIZE_MAX;
+		master->last_error.object_index = 0;
+		master->last_error.object_subindex = 0;
 	}
 }
 
@@ -31,9 +42,10 @@ static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_
  * 释放已获取资源，并迁移至 FAULT。该函数只收敛这条固定故障出口。
  */
 static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *master,
-			     enum mo_ecat_master_error error)
+			     enum mo_ecat_master_error error,
+			     enum master_error_detail detail)
 {
-	master_set_fault(master, error);
+	master_set_fault(master, error, detail);
 	master_resources_release(master);
 	sm_transition(sm, master_state_fault);
 }
@@ -87,6 +99,7 @@ void master_state_idle(struct statemachine *sm)
 	};
 	struct mo_ecat_master *master;
 	size_t slave_count;
+	enum master_error_detail error;
 
 	if (!sm) {
 		return;
@@ -118,36 +131,45 @@ void master_state_idle(struct statemachine *sm)
 
 	case MASTER_PHASE_OPEN: {
 		master_resources_release(master);
-		if (backend_init(&master->backend) < 0 ||
-		    backend_open(&master->backend, master->config) < 0) {
-			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
+		error = master_error_from_backend(backend_init(&master->backend));
+		if (error == MASTER_ERROR_NONE) {
+			error = master_error_from_backend(backend_open(&master->backend, master->config));
+		}
+		if (error != MASTER_ERROR_NONE) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED, error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_SCAN_BUILD;
 	} break;
 
 	case MASTER_PHASE_SCAN_BUILD: {
-		if (backend_load_slave_info(&master->backend, &slave_count) < 0 ||
-		    master_topology_build(master, slave_count) < 0) {
-			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
+		error = master_error_from_backend(backend_load_slave_info(&master->backend,
+									    &slave_count));
+		if (error == MASTER_ERROR_NONE) {
+			error = master_topology_build(master, slave_count);
+		}
+		if (error != MASTER_ERROR_NONE) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED, error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_READ_STATE;
 	} break;
 
 	case MASTER_PHASE_READ_STATE: {
-		if (master_topology_refresh_states(master) < 0) {
-			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
+		error = master_topology_refresh_states(master);
+		if (error != MASTER_ERROR_NONE) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_READ_PDO;
 	} break;
 
 	case MASTER_PHASE_READ_PDO: {
-		if (backend_read_pdo_entries(&master->backend, master->topology.slaves,
-					     master->topology.slave_count) < 0) {
+		error = master_error_from_backend(backend_read_pdo_entries(
+			&master->backend, master->topology.slaves, master->topology.slave_count));
+		if (error != MASTER_ERROR_NONE) {
 			master_idle_fail(sm, master,
-					 MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED);
+					 MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED, error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_WAIT_CONFIGURE;
@@ -172,8 +194,9 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_CONFIGURE_DC: { /* DC 配置独立失败，不能继续建立 PDO 映射。 */
-		if (backend_configure_dc(&master->backend) < 0) {
-			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED);
+		error = master_error_from_backend(backend_configure_dc(&master->backend));
+		if (error != MASTER_ERROR_NONE) {
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED, error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_BUILD_PDO_MAPPING;
@@ -182,10 +205,11 @@ void master_state_idle(struct statemachine *sm)
 	case MASTER_PHASE_BUILD_PDO_MAPPING:
 		/* 后端建立 PDO 数据区域并回填所有 PDO entry 的地址偏移。 */
 		{
-			if (master_pdo_mapping_build(master) < 0) {
+			error = master_pdo_mapping_build(master);
+			if (error != MASTER_ERROR_NONE) {
 				master_idle_fail(
 					sm, master,
-					MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED);
+					MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED, error);
 				break;
 			}
 			sm_transition(sm, master_state_ready);
@@ -208,6 +232,7 @@ void master_state_ready(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
+	enum master_error_detail error;
 
 	if (!sm) {
 		return;
@@ -231,8 +256,9 @@ void master_state_ready(struct statemachine *sm)
 			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
 		} else if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
-			if (master_pdo_mapping_activate(master) < 0) {
-				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED);
+			error = master_pdo_mapping_activate(master);
+			if (error != MASTER_ERROR_NONE) {
+				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
 				master_resources_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
@@ -257,6 +283,7 @@ void master_state_running(struct statemachine *sm)
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
 	struct mo_ecat_cyclic_result result;
+	enum master_error_detail error;
 
 	if (!sm) {
 		return;
@@ -278,13 +305,20 @@ void master_state_running(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_DEACTIVATE) {
-			master_pdo_mapping_deactivate(master);
-			sm_transition(sm, master_state_ready);
+			error = master_pdo_mapping_deactivate(master);
+			if (error != MASTER_ERROR_NONE) {
+				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
+				master_resources_release(master);
+				sm_transition(sm, master_state_fault);
+			} else {
+				sm_transition(sm, master_state_ready);
+			}
 			break;
 		}
 
-		if (master_cyclic_receive(master, &result) < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
+		error = master_cyclic_receive(master, &result);
+		if (error != MASTER_ERROR_NONE) {
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
@@ -294,8 +328,9 @@ void master_state_running(struct statemachine *sm)
 			master->cyclic_callback(master, &result, master->user_data);
 		}
 
-		if (master_cyclic_send(master, &result) < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
+		error = master_cyclic_send(master, &result);
+		if (error != MASTER_ERROR_NONE) {
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 		}

@@ -49,10 +49,10 @@ static const struct backend_ops soem_ops = {
  *
  * Return: 0 成功，非 0 失败
  */
-int backend_init(struct backend_instance *backend)
+enum backend_error backend_init(struct backend_instance *backend)
 {
 	if (!backend) {
-		return -1;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	memset(&s_soem_context, 0, sizeof(s_soem_context));
@@ -60,5 +60,5 @@ int backend_init(struct backend_instance *backend)
 	backend->ops = &soem_ops;
 	backend->translation_ops = &soem_translation_ops;
 	backend->ctx = &s_soem_context;
-	return 0;
+	return BACKEND_ERROR_NONE;
 }

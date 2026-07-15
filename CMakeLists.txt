@@ -12,6 +12,7 @@ add_subdirectory(third_party/SOEM)
 set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_master.c
     src/master_resources.c
+    src/master_error.c
     src/master_topology.c
     src/master_pdo_mapping.c
     src/mo_ecat_cyclic.c

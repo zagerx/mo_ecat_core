@@ -25,15 +25,15 @@ extern "C" {
  * 标识依赖核心层类型的接口边界。
  */
 struct backend_translation_ops {
-    int  (*translate_slave_info)(struct backend_instance *backend,
+    enum backend_error (*translate_slave_info)(struct backend_instance *backend,
                                    struct master_slave *slaves,
                                    size_t slave_count);
 
-    int  (*read_pdo_entries)(struct backend_instance *backend,
+    enum backend_error (*read_pdo_entries)(struct backend_instance *backend,
                              struct master_slave *slaves,
                              size_t slave_count);
 
-    int  (*get_pdo_image)(struct backend_instance *backend,
+    enum backend_error (*get_pdo_image)(struct backend_instance *backend,
                           struct master_pdo_image *image);
 
 };
@@ -53,35 +53,35 @@ struct backend_translation_ops {
  * @close: 关闭后端
  */
 struct backend_ops {
-    int  (*open)(struct backend_instance *backend,
+    enum backend_error (*open)(struct backend_instance *backend,
                  const struct mo_ecat_master_config *config);
 
-    int  (*load_slave_info)(struct backend_instance *backend,
+    enum backend_error (*load_slave_info)(struct backend_instance *backend,
                             size_t *slave_count);
 
-    int  (*configure_dc)(struct backend_instance *backend);
+    enum backend_error (*configure_dc)(struct backend_instance *backend);
 
-    int  (*build_pdo_mapping)(struct backend_instance *backend,
+    enum backend_error (*build_pdo_mapping)(struct backend_instance *backend,
                               struct master_pdo_entry_mapping *entries,
                               size_t entry_count);
 
-    int  (*activate)(struct backend_instance *backend);
+    enum backend_error (*activate)(struct backend_instance *backend);
 
-    int  (*cyclic_receive)(struct backend_instance *backend,
+    enum backend_error (*cyclic_receive)(struct backend_instance *backend,
                            struct mo_ecat_cyclic_result *result);
 
-    int  (*cyclic_send)(struct backend_instance *backend,
+    enum backend_error (*cyclic_send)(struct backend_instance *backend,
                         struct mo_ecat_cyclic_result *result);
 
-    int  (*read_all_slave_states)(struct backend_instance *backend,
+    enum backend_error (*read_all_slave_states)(struct backend_instance *backend,
                                   struct master_slave *slaves,
                                   size_t slave_count);
 
-    int  (*read_single_slave_state)(struct backend_instance *backend,
+    enum backend_error (*read_single_slave_state)(struct backend_instance *backend,
                                     size_t slave_index,
                                     struct mo_ecat_node_state *state);
 
-    int  (*deactivate)(struct backend_instance *backend);
+    enum backend_error (*deactivate)(struct backend_instance *backend);
     void (*close)(struct backend_instance *backend);
 };
 
