@@ -87,38 +87,13 @@ struct mo_ecat_master {
 	mo_ecat_cyclic_callback cyclic_callback;
 };
 
-/**
- * master_take_cmd - 取出主站当前命令
- * @master: 主站对象指针
- *
- * Return: 当前待处理的命令值
- */
 enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
 
-/**
- * master_write_cmd - 向主站写入命令
- * @master: 主站对象指针
- * @cmd: 待写入的命令
- */
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 
-/**
- * master_cyclic_receive - 主站周期接收
- * @master: 主站对象指针
- * @result: 周期结果指针
- *
- * Return: 0 成功，非 0 失败
- */
 int master_cyclic_receive(struct mo_ecat_master *master,
 			  struct mo_ecat_cyclic_result *result);
 
-/**
- * master_cyclic_send - 主站周期发送
- * @master: 主站对象指针
- * @result: 周期结果指针
- *
- * Return: 0 成功，非 0 失败
- */
 int master_cyclic_send(struct mo_ecat_master *master,
 		       struct mo_ecat_cyclic_result *result);
 

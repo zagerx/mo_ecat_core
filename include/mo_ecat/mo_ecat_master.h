@@ -57,60 +57,18 @@ enum mo_ecat_master_error {
     MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };
 
-/**
- * mo_ecat_master_create - 创建并初始化单主站对象
- * @config:    主站配置指针，生命周期由调用者保证
- * @callback:  RUNNING 状态中的周期控制回调，允许为 NULL
- * @user_data: 回调的私有数据
- *
- * 为单主站对象分配内存，并完成字段初始化、配置指针绑定和周期回调注册。
- * 单主站场景下，重复调用会失败并返回 NULL。
- *
- * Return: 成功返回主站对象指针，失败返回 NULL
- */
 struct mo_ecat_master *mo_ecat_master_create(
     const struct mo_ecat_master_config *config,
     mo_ecat_cyclic_callback callback,
     void *user_data);
 
-/**
- * mo_ecat_master_destroy - 销毁主站对象
- * @master: 主站对象
- *
- * 释放后端资源、关闭后端，并释放由 mo_ecat_master_create() 分配的内存。
- */
 void mo_ecat_master_destroy(struct mo_ecat_master *master);
 
-/**
- * mo_ecat_master_dispatch - 调度主站状态机
- * @master: 主站对象
- *
- * 必须由唯一的周期调度线程以固定周期调用。该线程独占主站运行态、后端与
- * 周期数据区域；RUNNING 状态中的过程数据收发和控制回调也由该线程执行。
- */
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 
-/**
- * mo_ecat_master_write_cmd - 写入主站状态机命令
- * @master: 主站对象
- * @cmd:    请求命令；不允许写入 MO_ECAT_MASTER_CMD_NONE
- *
- * 通过原子命令槽写入一条状态机请求，不直接执行后端动作。新命令可以覆盖
- * 尚未消费的旧命令；核心库不保证命令可靠投递，也不保存异步执行结果。
- *
- * Return: 0 表示命令已写入，非 0 表示参数无效
- */
 int mo_ecat_master_write_cmd(struct mo_ecat_master *master,
                              enum mo_ecat_master_cmd cmd);
 
-/**
- * mo_ecat_master_get_error_code - 获取主站最近一次进入 FAULT 的原因
- * @master: 主站对象
- *
- * 该返回值只在状态为 FAULT 时具有诊断意义；命令未被接受时不会更新。
- *
- * Return: 错误码
- */
 enum mo_ecat_master_error mo_ecat_master_get_error_code(
     const struct mo_ecat_master *master);
 

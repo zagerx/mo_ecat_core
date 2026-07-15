@@ -31,15 +31,6 @@ struct mo_ecat_cyclic_result {
     int diagnostics_required;
 };
 
-/**
- * typedef mo_ecat_cyclic_callback - RUNNING 状态中的周期控制回调
- * @master:    主站对象
- * @result:    本周期接收结果
- * @user_data: 应用层私有数据
- *
- * 回调执行在主站唯一周期调度线程中，位于接收输入周期数据与发送输出周期数据之间。
- * 回调可通过 mo_ecat_cyclic_input() / mo_ecat_cyclic_output() 访问本周期数据。
- */
 typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
                                         const struct mo_ecat_cyclic_result *result,
                                         void *user_data);
@@ -65,50 +56,16 @@ struct mo_ecat_cyclic_entry {
     enum mo_ecat_cyclic_direction direction;
 };
 
-/**
- * mo_ecat_master_get_cyclic_entry_count - 获取已建立周期数据映射中的逻辑数据项总数
- * @master: 主站对象
- *
- * Return: 数据项总数
- */
 size_t mo_ecat_master_get_cyclic_entry_count(const struct mo_ecat_master *master);
 
-/**
- * mo_ecat_master_get_cyclic_entry - 获取指定周期数据项的逻辑描述
- * @master: 主站对象
- * @index:  数据项下标
- * @entry:  调用方提供的缓冲区，核心复制数据
- *
- * 调用方不得在主站 RESET 或重新配置周期数据映射期间并发调用本函数。
- *
- * Return: 0 成功，非 0 失败
- */
 int mo_ecat_master_get_cyclic_entry(
     const struct mo_ecat_master *master,
     size_t index,
     struct mo_ecat_cyclic_entry *entry);
 
-/**
- * mo_ecat_cyclic_input - 获取输入周期数据在周期数据区域中的地址
- * @master: 主站对象
- * @entry:  周期数据项描述
- *
- * 仅允许在周期控制回调中调用。
- *
- * Return: 输入数据指针，参数无效时返回 NULL
- */
 const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
                                  const struct mo_ecat_cyclic_entry *entry);
 
-/**
- * mo_ecat_cyclic_output - 获取输出周期数据在周期数据区域中的地址
- * @master: 主站对象
- * @entry:  周期数据项描述
- *
- * 仅允许在周期控制回调中调用。
- *
- * Return: 输出数据指针，参数无效时返回 NULL
- */
 void *mo_ecat_cyclic_output(struct mo_ecat_master *master,
                             const struct mo_ecat_cyclic_entry *entry);
 

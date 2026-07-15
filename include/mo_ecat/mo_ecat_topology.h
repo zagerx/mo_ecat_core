@@ -71,25 +71,8 @@ struct mo_ecat_node_info {
     struct mo_ecat_node_state state;
 };
 
-/**
- * mo_ecat_master_get_node_count - 获取已发现节点数量
- * @master: 主站对象
- *
- * Return: 节点数量
- */
 size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master);
 
-/**
- * mo_ecat_master_get_node_info - 获取指定节点信息的只读副本
- * @master: 主站对象
- * @index:  节点下标
- * @info:   调用方提供的缓冲区，核心复制数据
- *
- * 返回的指针不指向内部数组，因此在调用返回后即使发生状态迁移也不会悬空。
- * 调用方不得在主站扫描、RESET 或重新配置期间并发调用本函数。
- *
- * Return: 0 成功，非 0 失败
- */
 int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
                                  size_t index, struct mo_ecat_node_info *info);
 

@@ -29,27 +29,10 @@ struct backend_translation_ops {
                                    struct master_slave *slaves,
                                    size_t slave_count);
 
-    /**
-     * read_pdo_entries - 读取扫描到的从站默认 PDO 映射描述
-     * @backend: 后端实例指针
-     * @slaves: 核心层从站数组
-     * @slave_count: 从站数量
-     *
-     * 该操作只读取 PDO 分配与映射对象，不建立过程数据映像。
-     *
-     * Return: 0 成功，非 0 失败
-     */
     int  (*read_pdo_entries)(struct backend_instance *backend,
                              struct master_slave *slaves,
                              size_t slave_count);
 
-    /**
-     * get_pdo_image - 将适配层已映射好的 PDO 数据区域绑定到核心层对象
-     * @backend: 后端实例指针
-     * @image: 用于返回 PDO 数据映像的指针
-     *
-     * Return: 0 成功，非 0 失败
-     */
     int  (*get_pdo_image)(struct backend_instance *backend,
                           struct master_pdo_image *image);
 

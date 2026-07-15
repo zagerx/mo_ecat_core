@@ -29,14 +29,6 @@ enum mo_ecat_master_state {
     MO_ECAT_MASTER_STATE_FAULT
 };
 
-/**
- * mo_ecat_master_get_state - 获取主站当前生命周期状态
- * @master: 主站对象
- *
- * 读取主站最近一次通过状态机发布的状态值。
- *
- * Return: 主站生命周期状态
- */
 enum mo_ecat_master_state mo_ecat_master_get_state(
     const struct mo_ecat_master *master);
 
