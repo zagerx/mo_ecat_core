@@ -30,7 +30,7 @@ void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd
 
 static int master_init(struct mo_ecat_master *master,
 		       const struct mo_ecat_master_config *config,
-		       mo_ecat_cycle_callback callback,
+		       mo_ecat_cyclic_callback callback,
 		       void *user_data)
 {
 	if (!master || !config || config->interface_name[0] == '\0') {
@@ -39,7 +39,7 @@ static int master_init(struct mo_ecat_master *master,
 
 	memset(master, 0, sizeof(*master));
 	master->config = config;
-	master->cycle_callback = callback;
+	master->cyclic_callback = callback;
 	master->user_data = user_data;
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
 	atomic_init(&master->state, MO_ECAT_MASTER_STATE_INIT);
@@ -54,12 +54,12 @@ static void master_deinit(struct mo_ecat_master *master)
 		return;
 	}
 
-	master_release_resources(master);
+	master_resources_release(master);
 	memset(master, 0, sizeof(*master));
 }
 
 struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config,
-						     mo_ecat_cycle_callback callback,
+					     mo_ecat_cyclic_callback callback,
 						     void *user_data)
 {
 	struct mo_ecat_master *master;

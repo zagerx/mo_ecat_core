@@ -20,14 +20,14 @@ enum mo_ecat_node_al_state {
 
 struct mo_ecat_node_state {
     enum mo_ecat_node_al_state al_state;
-    int error;
+    int has_error;
     uint16_t al_status_code;
-    int online;
-    int operational;
+    int is_online;
+    int is_operational;
 };
 
 /**
- * @brief 从站信息的公开只读视图
+ * @brief 拓扑节点的公开只读视图
  *
  * 由 mo_ecat_master_get_node_info() 复制返回，避免向应用层暴露内部数组指针。
  */
@@ -38,7 +38,7 @@ struct mo_ecat_node_info {
     uint32_t product_code;
     uint32_t revision_number;
     char name[MO_ECAT_MAX_NAME_LEN + 1];
-    int has_dc;
+    int dc_supported;
     struct mo_ecat_node_state state; /**< 节点运行时诊断状态 */
 };
 
@@ -53,7 +53,7 @@ struct mo_ecat_node_info {
 size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master);
 
 /**
- * @brief 获取指定从站信息的只读副本
+ * @brief 获取指定节点信息的只读副本
  *
  * 调用方提供 info 缓冲区，核心复制数据。返回的指针不指向内部数组，
  * 因此在调用返回后即使发生状态迁移也不会悬空。调用方不得在主站扫描、RESET 或

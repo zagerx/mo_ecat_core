@@ -26,7 +26,8 @@ static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
 	return end_bit >= start_bit && end_bit <= image_bits;
 }
 
-int master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
+int master_cyclic_receive(struct mo_ecat_master *master,
+			   struct mo_ecat_cyclic_result *result)
 {
 	int backend_result;
 
@@ -34,16 +35,17 @@ int master_cycle_begin(struct mo_ecat_master *master, struct mo_ecat_cycle_resul
 		return -1;
 	}
 
-	if (!master->pdo_mapping.active) {
+	if (!master->pdo_mapping.is_active) {
 		return -1;
 	}
 
 	memset(result, 0, sizeof(*result));
-	backend_result = backend_cycle_begin(&master->backend, result);
+	backend_result = backend_cyclic_receive(&master->backend, result);
 	return backend_result;
 }
 
-int master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result *result)
+int master_cyclic_send(struct mo_ecat_master *master,
+		       struct mo_ecat_cyclic_result *result)
 {
 	int backend_result;
 
@@ -51,11 +53,11 @@ int master_cycle_end(struct mo_ecat_master *master, struct mo_ecat_cycle_result 
 		return -1;
 	}
 
-	if (!master->pdo_mapping.active) {
+	if (!master->pdo_mapping.is_active) {
 		return -1;
 	}
 
-	backend_result = backend_cycle_end(&master->backend, result);
+	backend_result = backend_cyclic_send(&master->backend, result);
 	return backend_result;
 }
 
@@ -88,7 +90,7 @@ int mo_ecat_master_get_cyclic_entry(
 	return 0;
 }
 
-static const struct master_pdo_entry_mapping *master_find_pdo_entry_mapping(
+static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
     const struct mo_ecat_master *master, const struct mo_ecat_cyclic_entry *entry)
 {
 	const struct master_pdo_entry_mapping *mapping;
@@ -97,12 +99,12 @@ static const struct master_pdo_entry_mapping *master_find_pdo_entry_mapping(
 		return NULL;
 	}
 
-	if ((size_t)entry->id >= master->pdo_mapping.entry_count) {
+	if ((size_t)entry->entry_id >= master->pdo_mapping.entry_count) {
 		return NULL;
 	}
 
-	mapping = &master->pdo_mapping.entries[entry->id];
-	if (mapping->entry.id != entry->id ||
+	mapping = &master->pdo_mapping.entries[entry->entry_id];
+	if (mapping->entry.entry_id != entry->entry_id ||
 	    mapping->entry.node_index != entry->node_index ||
 	    mapping->entry.object_index != entry->object_index ||
 	    mapping->entry.object_subindex != entry->object_subindex ||
@@ -123,7 +125,7 @@ const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
 	if (!master || !entry || entry->direction != MO_ECAT_CYCLIC_INPUT) {
 		return NULL;
 	}
-	mapping = master_find_pdo_entry_mapping(master, entry);
+	mapping = master_resolve_pdo_entry_mapping(master, entry);
 
 	if (!mapping || mapping->generation != master->pdo_mapping.generation ||
 	    !pdo_entry_mapping_in_bounds(&master->pdo_mapping.image, mapping)) {
@@ -143,7 +145,7 @@ void *mo_ecat_cyclic_output(struct mo_ecat_master *master,
 	if (!master || !entry || entry->direction != MO_ECAT_CYCLIC_OUTPUT) {
 		return NULL;
 	}
-	mapping = master_find_pdo_entry_mapping(master, entry);
+	mapping = master_resolve_pdo_entry_mapping(master, entry);
 
 	if (!mapping || mapping->generation != master->pdo_mapping.generation ||
 	    !pdo_entry_mapping_in_bounds(&master->pdo_mapping.image, mapping)) {

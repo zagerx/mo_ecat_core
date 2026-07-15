@@ -16,24 +16,24 @@ size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master)
 		return 0;
 	}
 
-	count = master->slave_table.count;
+	count = master->topology.slave_count;
 	return count;
 }
 
 int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 				 size_t index, struct mo_ecat_node_info *info)
 {
-	const struct mo_ecat_slave *slave;
+	const struct master_slave *slave;
 
 	if (!master || !info) {
 		return -1;
 	}
 
-	if (index >= master->slave_table.count) {
+	if (index >= master->topology.slave_count) {
 		return -1;
 	}
 
-	slave = &master->slave_table.slaves[index];
+	slave = &master->topology.slaves[index];
 	memset(info, 0, sizeof(*info));
 	info->position = slave->base_info.position;
 	info->alias = slave->base_info.alias;
@@ -41,7 +41,7 @@ int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 	info->product_code = slave->base_info.product_code;
 	info->revision_number = slave->base_info.revision_number;
 	memcpy(info->name, slave->base_info.name, sizeof(info->name));
-	info->has_dc = slave->base_info.has_dc;
+	info->dc_supported = slave->base_info.dc_supported;
 	info->state = slave->state;
 
 	return 0;

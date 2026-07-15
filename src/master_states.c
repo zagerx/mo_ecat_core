@@ -63,7 +63,7 @@ void master_state_idle(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_IDLE);
-			master->pdo_mapping.active = 0;
+			master->pdo_mapping.is_active = 0;
 		}
 		sm->phase = MASTER_PHASE_START;
 		break;
@@ -73,7 +73,7 @@ void master_state_idle(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
-			master_release_resources(master);
+			master_resources_release(master);
 			sm->phase = MASTER_PHASE_START;
 			break;
 		}
@@ -84,7 +84,7 @@ void master_state_idle(struct statemachine *sm)
 		sm->phase = MASTER_PHASE_OPEN;
 		break;
 	case MASTER_PHASE_OPEN:
-		master_release_resources(master);
+		master_resources_release(master);
 
 		result = backend_init(&master->backend);
 		if (result == 0) {
@@ -92,7 +92,7 @@ void master_state_idle(struct statemachine *sm)
 		}
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
@@ -101,21 +101,21 @@ void master_state_idle(struct statemachine *sm)
 	case MASTER_PHASE_SCAN_BUILD:
 		result = backend_load_slave_info(&master->backend, &slave_count);
 		if (result == 0) {
-			result = master_build_slave_table(master);
+			result = master_topology_build(master);
 		}
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED);
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
 		sm->phase = MASTER_PHASE_READ_STATE;
 		break;
 	case MASTER_PHASE_READ_STATE:
-		result = master_read_all_slave_states(master);
+		result = master_topology_refresh_states(master);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
@@ -123,11 +123,11 @@ void master_state_idle(struct statemachine *sm)
 		break;
 	case MASTER_PHASE_READ_PDO:
 		result = backend_read_pdo_entries(&master->backend,
-						  master->slave_table.slaves,
-						  master->slave_table.count);
+					  master->topology.slaves,
+					  master->topology.slave_count);
 		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_READ_DEFAULT_PDO_FAILED);
-			master_release_resources(master);
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
@@ -139,7 +139,7 @@ void master_state_idle(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
-			master_release_resources(master);
+			master_resources_release(master);
 			sm->phase = MASTER_PHASE_START;
 			break;
 		}
@@ -158,7 +158,7 @@ void master_state_idle(struct statemachine *sm)
 		result = backend_configure_dc(&master->backend);
 		if (result < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED);
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
@@ -166,10 +166,10 @@ void master_state_idle(struct statemachine *sm)
 		break;
 	case MASTER_PHASE_BUILD_PDO_MAPPING:
 		/* 后端建立 PDO 数据区域并回填所有 PDO entry 的地址偏移。 */
-		result = master_build_pdo_mapping(master);
+		result = master_pdo_mapping_build(master);
 		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED);
-			master_release_resources(master);
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
@@ -195,7 +195,7 @@ void master_state_ready(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_READY);
-			master->pdo_mapping.active = 0;
+			master->pdo_mapping.is_active = 0;
 		}
 		sm->phase = SM_PHASE_START;
 		break;
@@ -205,12 +205,12 @@ void master_state_ready(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
 		} else if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
-			if (master_activate(master) < 0) {
+			if (master_pdo_mapping_activate(master) < 0) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED);
-				master_release_resources(master);
+				master_resources_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
 				sm_transition(sm, master_state_running);
@@ -227,7 +227,7 @@ void master_state_running(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
-	struct mo_ecat_cycle_result result;
+	struct mo_ecat_cyclic_result result;
 
 	if (!sm) {
 		return;
@@ -244,30 +244,30 @@ void master_state_running(struct statemachine *sm)
 	case SM_PHASE_START:
 		cmd = master_take_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_DEACTIVATE) {
-			master_deactivate(master);
+			master_pdo_mapping_deactivate(master);
 			sm_transition(sm, master_state_ready);
 			break;
 		}
 
-		if (master_cycle_begin(master, &result) < 0) {
+		if (master_cyclic_receive(master, &result) < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
 
-		if (master->cycle_callback) {
-			master->cycle_callback(master, &result, master->user_data);
+		if (master->cyclic_callback) {
+			master->cyclic_callback(master, &result, master->user_data);
 		}
 
-		if (master_cycle_end(master, &result) < 0) {
+		if (master_cyclic_send(master, &result) < 0) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT);
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_fault);
 		}
 		break;
@@ -291,7 +291,7 @@ void master_state_fault(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_FAULT);
-			master->pdo_mapping.active = 0;
+			master->pdo_mapping.is_active = 0;
 		}
 		sm->phase = SM_PHASE_START;
 		break;
@@ -301,7 +301,7 @@ void master_state_fault(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
-			master_release_resources(master);
+			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
 		}
 		break;

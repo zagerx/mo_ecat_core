@@ -10,7 +10,7 @@ extern "C" {
 struct mo_ecat_master;
 
 /** 单次周期通信结果。 */
-struct mo_ecat_cycle_result {
+struct mo_ecat_cyclic_result {
     int link_up;
     uint32_t expected_wkc;
     uint32_t actual_wkc;
@@ -24,9 +24,9 @@ struct mo_ecat_cycle_result {
  *
  * 回调执行在主站唯一周期调度线程中，位于接收输入周期数据与发送输出周期数据之间。
  */
-typedef void (*mo_ecat_cycle_callback)(struct mo_ecat_master *master,
-                                       const struct mo_ecat_cycle_result *result,
-                                       void *user_data);
+typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
+                                        const struct mo_ecat_cyclic_result *result,
+                                        void *user_data);
 
 /**
  * 单个周期数据项的逻辑描述。
@@ -35,11 +35,11 @@ typedef void (*mo_ecat_cycle_callback)(struct mo_ecat_master *master,
  * 核心层保存，应用层不直接访问。
  */
 struct mo_ecat_cyclic_entry {
-	uint32_t id;                 /**< 核心分配的周期数据项标识；不可由应用自行构造 */
-	size_t node_index;           /**< 节点在主站拓扑表中的索引 */
+	uint32_t entry_id;           /**< 核心分配的周期数据项标识；不可由应用自行构造 */
+	size_t node_index;           /**< 节点在主站拓扑数组中的下标，不是 EtherCAT 站地址 */
     uint16_t object_index;       /**< CoE 对象字典索引 */
     uint8_t object_subindex;     /**< CoE 对象字典子索引 */
-    uint8_t bit_length;          /**< 该 PDO entry 占用的位数 */
+    uint8_t bit_length;          /**< 该周期数据项占用的位数 */
 	enum mo_ecat_cyclic_direction direction; /**< 周期数据方向：输入或输出 */
 };
 

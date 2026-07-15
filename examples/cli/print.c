@@ -65,14 +65,14 @@ void print_diagnostics(struct mo_ecat_master *master)
 		printf("  [%zu] %s\n", i,
 		       node.name[0] ? node.name : "<unnamed>");
 		printf("       position=%u alias=%u dc=%s\n",
-		       node.position, node.alias, yes_no(node.has_dc));
+		       node.position, node.alias, yes_no(node.dc_supported));
 		printf("       vendor=0x%08X product=0x%08X revision=0x%08X\n",
 		       node.vendor_id, node.product_code, node.revision_number);
 		printf("       state=%s error=%s online=%s operational=%s al_status=0x%04X\n",
 		       al_state_name(node.state.al_state),
-		       yes_no(node.state.error),
-		       yes_no(node.state.online),
-		       yes_no(node.state.operational),
+		       yes_no(node.state.has_error),
+		       yes_no(node.state.is_online),
+		       yes_no(node.state.is_operational),
 		       node.state.al_status_code);
 	}
 }

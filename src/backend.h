@@ -19,7 +19,7 @@ extern "C" {
 struct backend_instance;          /* 后端实例前向声明 */
 struct backend_ops;              /* 后端生命周期/运行时 ops 前向声明 */
 struct backend_translation_ops;  /* 后端数据转换 ops 前向声明 */
-struct mo_ecat_slave;            /* 核心层内部从站缓存 */
+struct master_slave;             /* 核心层内部从站缓存 */
 
 /**
  * @brief 后端实例
@@ -41,7 +41,7 @@ int backend_open(struct backend_instance *backend,
 int backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
 int backend_get_slave_count(struct backend_instance *backend, size_t *slave_count);
 int backend_translate_slave_info(struct backend_instance *backend,
-                                   struct mo_ecat_slave *slaves,
+                                   struct master_slave *slaves,
                                    size_t slave_count);
 
 /**
@@ -55,7 +55,7 @@ int backend_translate_slave_info(struct backend_instance *backend,
  * @return 0 成功，非 0 失败。
  */
 int backend_read_pdo_entries(struct backend_instance *backend,
-                             struct mo_ecat_slave *slaves,
+                             struct master_slave *slaves,
                              size_t slave_count);
 
 /**
@@ -86,12 +86,12 @@ int backend_build_pdo_mapping(struct backend_instance *backend,
 int backend_get_pdo_image(struct backend_instance *backend,
                           struct master_pdo_image *image);
 int backend_activate(struct backend_instance *backend);
-int backend_cycle_begin(struct backend_instance *backend,
-                        struct mo_ecat_cycle_result *result);
-int backend_cycle_end(struct backend_instance *backend,
-                      struct mo_ecat_cycle_result *result);
+int backend_cyclic_receive(struct backend_instance *backend,
+                           struct mo_ecat_cyclic_result *result);
+int backend_cyclic_send(struct backend_instance *backend,
+                        struct mo_ecat_cyclic_result *result);
 int backend_read_all_slave_states(struct backend_instance *backend,
-                                  struct mo_ecat_slave *slaves,
+                                  struct master_slave *slaves,
                                   size_t slave_count);
 int backend_read_single_slave_state(struct backend_instance *backend,
                                     size_t slave_index,

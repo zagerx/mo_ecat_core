@@ -29,7 +29,7 @@ int backend_load_slave_info(struct backend_instance *backend, size_t *slave_coun
 }
 
 int backend_translate_slave_info(struct backend_instance *backend,
-				   struct mo_ecat_slave *slaves, size_t slave_count)
+			   struct master_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->translate_slave_info) {
@@ -44,7 +44,7 @@ int backend_translate_slave_info(struct backend_instance *backend,
 }
 
 int backend_read_pdo_entries(struct backend_instance *backend,
-			     struct mo_ecat_slave *slaves, size_t slave_count)
+			     struct master_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->read_pdo_entries) {
@@ -118,10 +118,10 @@ int backend_activate(struct backend_instance *backend)
 	return backend->ops->activate(backend);
 }
 
-int backend_cycle_begin(struct backend_instance *backend,
-			struct mo_ecat_cycle_result *result)
+int backend_cyclic_receive(struct backend_instance *backend,
+			   struct mo_ecat_cyclic_result *result)
 {
-	if (!backend || !backend->ops || !backend->ops->cycle_begin) {
+	if (!backend || !backend->ops || !backend->ops->cyclic_receive) {
 		return -1;
 	}
 
@@ -129,13 +129,13 @@ int backend_cycle_begin(struct backend_instance *backend,
 		return -1;
 	}
 
-	return backend->ops->cycle_begin(backend, result);
+	return backend->ops->cyclic_receive(backend, result);
 }
 
-int backend_cycle_end(struct backend_instance *backend,
-		      struct mo_ecat_cycle_result *result)
+int backend_cyclic_send(struct backend_instance *backend,
+			struct mo_ecat_cyclic_result *result)
 {
-	if (!backend || !backend->ops || !backend->ops->cycle_end) {
+	if (!backend || !backend->ops || !backend->ops->cyclic_send) {
 		return -1;
 	}
 
@@ -143,11 +143,11 @@ int backend_cycle_end(struct backend_instance *backend,
 		return -1;
 	}
 
-	return backend->ops->cycle_end(backend, result);
+	return backend->ops->cyclic_send(backend, result);
 }
 
 int backend_read_all_slave_states(struct backend_instance *backend,
-				  struct mo_ecat_slave *slaves, size_t slave_count)
+			  struct master_slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->ops || !backend->ops->read_all_slave_states) {
 		return -1;

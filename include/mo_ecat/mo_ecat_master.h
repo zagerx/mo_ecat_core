@@ -30,9 +30,9 @@ enum mo_ecat_master_cmd {
 enum mo_ecat_master_error {
     MO_ECAT_MASTER_ERROR_NONE,
     MO_ECAT_MASTER_ERROR_DISCOVER_FAILED,
-    MO_ECAT_MASTER_ERROR_READ_DEFAULT_PDO_FAILED,
+    MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED,
     MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED,
-    MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED,
+    MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED,
     MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED,
     MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };
@@ -53,7 +53,7 @@ enum mo_ecat_master_error {
  */
 struct mo_ecat_master *mo_ecat_master_create(
     const struct mo_ecat_master_config *config,
-    mo_ecat_cycle_callback callback,
+    mo_ecat_cyclic_callback callback,
     void *user_data);
 
 /**

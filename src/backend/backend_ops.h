@@ -25,7 +25,7 @@ extern "C" {
 struct backend_translation_ops {
     /** 将 scan() 获得的从站基本信息写入核心层运行时数组。 */
     int  (*translate_slave_info)(struct backend_instance *backend,
-                                   struct mo_ecat_slave *slaves,
+                                   struct master_slave *slaves,
                                    size_t slave_count);
 
     /**
@@ -33,7 +33,7 @@ struct backend_translation_ops {
      * 该操作只读取 PDO 分配与映射对象，不建立过程数据映像。
      */
     int  (*read_pdo_entries)(struct backend_instance *backend,
-                             struct mo_ecat_slave *slaves,
+                             struct master_slave *slaves,
                              size_t slave_count);
 
     /** 将适配层已映射好的 PDO 数据区域绑定到核心层对象。 */
@@ -63,14 +63,14 @@ struct backend_ops {
 
     int  (*activate)(struct backend_instance *backend);
 
-    int  (*cycle_begin)(struct backend_instance *backend,
-                        struct mo_ecat_cycle_result *result);
+    int  (*cyclic_receive)(struct backend_instance *backend,
+                           struct mo_ecat_cyclic_result *result);
 
-    int  (*cycle_end)(struct backend_instance *backend,
-                      struct mo_ecat_cycle_result *result);
+    int  (*cyclic_send)(struct backend_instance *backend,
+                        struct mo_ecat_cyclic_result *result);
 
     int  (*read_all_slave_states)(struct backend_instance *backend,
-                                  struct mo_ecat_slave *slaves,
+                                  struct master_slave *slaves,
                                   size_t slave_count);
 
     int  (*read_single_slave_state)(struct backend_instance *backend,

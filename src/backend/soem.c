@@ -115,7 +115,7 @@ static int soem_check_dc_support(ecx_contextt *context)
 }
 
 static int soem_backend_translate_slave_info(struct backend_instance *backend,
-					     struct mo_ecat_slave *slaves, size_t slave_count)
+					     struct master_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	ecx_contextt *context;
@@ -127,7 +127,7 @@ static int soem_backend_translate_slave_info(struct backend_instance *backend,
 
 	context = &ctx->context;
 	for (size_t i = 0; i < slave_count; ++i) {
-		struct mo_ecat_slave *slave = &slaves[i];
+		struct master_slave *slave = &slaves[i];
 		const ec_slavet *soem_slave = &context->slavelist[i + 1];
 
 		slave->base_info.position = soem_slave->configadr - EC_NODEOFFSET;
@@ -135,7 +135,7 @@ static int soem_backend_translate_slave_info(struct backend_instance *backend,
 		slave->base_info.vendor_id = soem_slave->eep_man;
 		slave->base_info.product_code = soem_slave->eep_id;
 		slave->base_info.revision_number = soem_slave->eep_rev;
-		slave->base_info.has_dc = soem_slave->hasdc ? 1 : 0;
+		slave->base_info.dc_supported = soem_slave->hasdc ? 1 : 0;
 		slave->base_info.propagation_delay_ns = soem_slave->pdelay;
 
 		strncpy(slave->base_info.name, (const char *)soem_slave->name,
@@ -175,7 +175,7 @@ static int soem_backend_translate_slave_info(struct backend_instance *backend,
 
 static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
 				    uint16_t assignment_index, enum mo_ecat_cyclic_direction direction,
-				    struct mo_ecat_slave *slave)
+				    struct master_slave *slave)
 {
 	uint8_t pdo_count = 0;
 	int size = sizeof(pdo_count);
@@ -238,7 +238,7 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 }
 
 static int soem_backend_read_pdo_entries(struct backend_instance *backend,
-					 struct mo_ecat_slave *slaves, size_t slave_count)
+					 struct master_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 
@@ -248,7 +248,7 @@ static int soem_backend_read_pdo_entries(struct backend_instance *backend,
 	}
 
 	for (size_t i = 0; i < slave_count; ++i) {
-		struct mo_ecat_slave *slave = &slaves[i];
+		struct master_slave *slave = &slaves[i];
 
 		slave->pdo_entry_count = 0;
 		/* 非 CoE 从站没有标准 SDO PDO 分配对象，保留为空即可。 */
@@ -465,8 +465,8 @@ static int soem_backend_activate(struct backend_instance *backend)
 	return 0;
 }
 
-static int soem_backend_cycle_begin(struct backend_instance *backend,
-				    struct mo_ecat_cycle_result *result)
+static int soem_backend_cyclic_receive(struct backend_instance *backend,
+				       struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -497,8 +497,8 @@ static int soem_backend_cycle_begin(struct backend_instance *backend,
 	return 0;
 }
 
-static int soem_backend_cycle_end(struct backend_instance *backend,
-				  struct mo_ecat_cycle_result *result)
+static int soem_backend_cyclic_send(struct backend_instance *backend,
+				    struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -515,7 +515,7 @@ static int soem_backend_cycle_end(struct backend_instance *backend,
 }
 
 static int soem_backend_read_all_slave_states(struct backend_instance *backend,
-					      struct mo_ecat_slave *slaves, size_t slave_count)
+					      struct master_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -531,10 +531,10 @@ static int soem_backend_read_all_slave_states(struct backend_instance *backend,
 	for (size_t i = 0; i < slave_count; ++i) {
 		const ec_slavet *soem_slave = &ctx->context.slavelist[i + 1];
 		slaves[i].state.al_state = soem_to_al_state(soem_slave->state);
-		slaves[i].state.error = (soem_slave->ALstatuscode != 0) ? 1 : 0;
+		slaves[i].state.has_error = (soem_slave->ALstatuscode != 0) ? 1 : 0;
 		slaves[i].state.al_status_code = soem_slave->ALstatuscode;
-		slaves[i].state.online = 1;
-		slaves[i].state.operational =
+		slaves[i].state.is_online = 1;
+		slaves[i].state.is_operational =
 			(slaves[i].state.al_state == MO_ECAT_NODE_AL_STATE_OP) ? 1 : 0;
 	}
 
@@ -562,10 +562,10 @@ static int soem_backend_read_single_slave_state(struct backend_instance *backend
 	}
 
 	state->al_state = soem_to_al_state(etohs(alstatus.alstatus));
-	state->error = (etohs(alstatus.alstatus) & EC_STATE_ERROR) ? 1 : 0;
+	state->has_error = (etohs(alstatus.alstatus) & EC_STATE_ERROR) ? 1 : 0;
 	state->al_status_code = etohs(alstatus.alstatuscode);
-	state->online = 1;
-	state->operational = (state->al_state == MO_ECAT_NODE_AL_STATE_OP) ? 1 : 0;
+	state->is_online = 1;
+	state->is_operational = (state->al_state == MO_ECAT_NODE_AL_STATE_OP) ? 1 : 0;
 
 	return 0;
 }
@@ -610,8 +610,8 @@ static const struct backend_ops soem_ops = {
 	.configure_dc = soem_backend_configure_dc,
 	.build_pdo_mapping = soem_backend_build_pdo_mapping,
 	.activate = soem_backend_activate,
-	.cycle_begin = soem_backend_cycle_begin,
-	.cycle_end = soem_backend_cycle_end,
+	.cyclic_receive = soem_backend_cyclic_receive,
+	.cyclic_send = soem_backend_cyclic_send,
 	.read_all_slave_states = soem_backend_read_all_slave_states,
 	.read_single_slave_state = soem_backend_read_single_slave_state,
 	.deactivate = soem_backend_deactivate,

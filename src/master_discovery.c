@@ -14,7 +14,7 @@
  * 关闭后端、释放 PDO entry 映射数组和从站表，但保留 generation
  * 以便后续重新映射时能够区分旧映射。
  */
-void master_release_resources(struct mo_ecat_master *master)
+void master_resources_release(struct mo_ecat_master *master)
 {
 	uint32_t generation;
 
@@ -26,17 +26,17 @@ void master_release_resources(struct mo_ecat_master *master)
 	backend_close(&master->backend);
 
 	free(master->pdo_mapping.entries);
-	free(master->slave_table.slaves);
+	free(master->topology.slaves);
 	memset(&master->backend, 0, sizeof(master->backend));
 	memset(&master->pdo_mapping, 0, sizeof(master->pdo_mapping));
 	master->pdo_mapping.generation = generation;
-	master->slave_table.slaves = NULL;
-	master->slave_table.count = 0;
+	master->topology.slaves = NULL;
+	master->topology.slave_count = 0;
 }
 
 /** 为同一批已解析地址的 PDO entry 标记所属映射版本。 */
-static void master_set_pdo_entry_mapping_generation(struct master_pdo_entry_mapping *entries,
-						    size_t entry_count, uint32_t generation)
+static void master_pdo_entry_mappings_set_generation(
+	struct master_pdo_entry_mapping *entries, size_t entry_count, uint32_t generation)
 {
 	for (size_t i = 0; i < entry_count; ++i) {
 		entries[i].generation = generation;
@@ -49,7 +49,7 @@ static void master_set_pdo_entry_mapping_generation(struct master_pdo_entry_mapp
  * 从后端获取扫描到的从站数量，分配从站信息数组，并由后端将
  * 适配层从站信息翻译到核心层结构。
  */
-int master_build_slave_table(struct mo_ecat_master *master)
+int master_topology_build(struct mo_ecat_master *master)
 {
 	size_t slave_count;
 
@@ -62,19 +62,18 @@ int master_build_slave_table(struct mo_ecat_master *master)
 	}
 
 	if (slave_count > 0) {
-		if (slave_count > SIZE_MAX / sizeof(*master->slave_table.slaves)) {
+		if (slave_count > SIZE_MAX / sizeof(*master->topology.slaves)) {
 			return -1;
 		}
-		master->slave_table.slaves =
-			calloc(slave_count, sizeof(*master->slave_table.slaves));
-		if (!master->slave_table.slaves) {
+		master->topology.slaves = calloc(slave_count, sizeof(*master->topology.slaves));
+		if (!master->topology.slaves) {
 			return -1;
 		}
 	}
 
-	master->slave_table.count = slave_count;
+	master->topology.slave_count = slave_count;
 	if (slave_count > 0 &&
-	    backend_translate_slave_info(&master->backend, master->slave_table.slaves,
+	    backend_translate_slave_info(&master->backend, master->topology.slaves,
 					 slave_count) < 0) {
 		return -1;
 	}
@@ -82,14 +81,14 @@ int master_build_slave_table(struct mo_ecat_master *master)
 }
 
 /** 读取所有从站当前状态到从站表。 */
-int master_read_all_slave_states(struct mo_ecat_master *master)
+int master_topology_refresh_states(struct mo_ecat_master *master)
 {
-	if (!master || (master->slave_table.count > 0 && !master->slave_table.slaves)) {
+	if (!master || (master->topology.slave_count > 0 && !master->topology.slaves)) {
 		return -1;
 	}
 
-	return backend_read_all_slave_states(&master->backend, master->slave_table.slaves,
-					     master->slave_table.count);
+	return backend_read_all_slave_states(&master->backend, master->topology.slaves,
+					     master->topology.slave_count);
 }
 
 /**
@@ -98,19 +97,19 @@ int master_read_all_slave_states(struct mo_ecat_master *master)
  * 本函数只填充 slave_index、object_index、object_subindex、bit_length
  * 和 direction；字节/位偏移由后端在建立 IOmap/domain 时回填。
  */
-static void master_build_pdo_entry_mappings(const struct mo_ecat_master *master,
-					    struct master_pdo_entry_mapping *entries)
+static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
+					     struct master_pdo_entry_mapping *entries)
 {
 	size_t idx = 0;
 
-	for (size_t i = 0; i < master->slave_table.count; ++i) {
-		const struct mo_ecat_slave *slave = &master->slave_table.slaves[i];
+	for (size_t i = 0; i < master->topology.slave_count; ++i) {
+		const struct master_slave *slave = &master->topology.slaves[i];
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
 			const struct master_slave_pdo_entry *entry = &slave->pdo_entries[j];
 			struct master_pdo_entry_mapping *mapping = &entries[idx];
 
-			mapping->entry.id = (uint32_t)idx;
+			mapping->entry.entry_id = (uint32_t)idx;
 			mapping->entry.node_index = i;
 			mapping->entry.object_index = entry->object_index;
 			mapping->entry.object_subindex = entry->object_subindex;
@@ -128,7 +127,7 @@ static void master_build_pdo_entry_mappings(const struct mo_ecat_master *master,
  * 后端在建立 IOmap/domain 时回填地址偏移；仅当映射、PDO 数据区域和从站
  * 信息刷新均成功时，才替换 master->pdo_mapping 中的旧映射。
  */
-int master_build_pdo_mapping(struct mo_ecat_master *master)
+int master_pdo_mapping_build(struct mo_ecat_master *master)
 {
 	struct master_pdo_image image = {0};
 	struct master_pdo_entry_mapping *entries = NULL;
@@ -140,8 +139,8 @@ int master_build_pdo_mapping(struct mo_ecat_master *master)
 	}
 
 	entry_count = 0;
-	for (size_t i = 0; i < master->slave_table.count; ++i) {
-		entry_count += master->slave_table.slaves[i].pdo_entry_count;
+	for (size_t i = 0; i < master->topology.slave_count; ++i) {
+		entry_count += master->topology.slaves[i].pdo_entry_count;
 	}
 	if (entry_count > UINT32_MAX) {
 		return -1;
@@ -152,7 +151,7 @@ int master_build_pdo_mapping(struct mo_ecat_master *master)
 		if (!entries) {
 			return -1;
 		}
-		master_build_pdo_entry_mappings(master, entries);
+		master_pdo_entry_mappings_build(master, entries);
 	}
 
 	if (backend_build_pdo_mapping(&master->backend, entries, entry_count) < 0) {
@@ -165,8 +164,8 @@ int master_build_pdo_mapping(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	if (backend_translate_slave_info(&master->backend, master->slave_table.slaves,
-					 master->slave_table.count) < 0) {
+	if (backend_translate_slave_info(&master->backend, master->topology.slaves,
+					 master->topology.slave_count) < 0) {
 		free(entries);
 		return -1;
 	}
@@ -175,23 +174,23 @@ int master_build_pdo_mapping(struct mo_ecat_master *master)
 	if (generation == 0U) {
 		generation = 1U;
 	}
-	master_set_pdo_entry_mapping_generation(entries, entry_count, generation);
+	master_pdo_entry_mappings_set_generation(entries, entry_count, generation);
 
 	free(master->pdo_mapping.entries);
 	master->pdo_mapping.image = image;
 	master->pdo_mapping.entries = entries;
 	master->pdo_mapping.entry_count = entry_count;
 	master->pdo_mapping.generation = generation;
-	master->pdo_mapping.active = 0;
+	master->pdo_mapping.is_active = 0;
 	return 0;
 }
 
 /**
  * 激活主站 PDO 周期交换。
  *
- * 激活成功后，cycle_begin/cycle_end 与 PDO 数据访问接口方可使用。
+ * 激活成功后，周期数据接收、发送与访问接口方可使用。
  */
-int master_activate(struct mo_ecat_master *master)
+int master_pdo_mapping_activate(struct mo_ecat_master *master)
 {
 	if (!master) {
 		return -1;
@@ -201,12 +200,12 @@ int master_activate(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	master->pdo_mapping.active = 1;
+	master->pdo_mapping.is_active = 1;
 	return 0;
 }
 
 /** 停止主站 PDO 周期交换。 */
-int master_deactivate(struct mo_ecat_master *master)
+int master_pdo_mapping_deactivate(struct mo_ecat_master *master)
 {
 	if (!master) {
 		return -1;
@@ -216,6 +215,6 @@ int master_deactivate(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	master->pdo_mapping.active = 0;
+	master->pdo_mapping.is_active = 0;
 	return 0;
 }

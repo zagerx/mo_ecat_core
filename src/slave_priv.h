@@ -42,7 +42,7 @@ struct master_slave_base_info {
 	uint32_t product_code;
 	uint32_t revision_number;
 	char name[MO_ECAT_MAX_NAME_LEN + 1];
-	int has_dc;
+	int dc_supported;
 	uint32_t propagation_delay_ns;
 	struct master_slave_mailbox mailbox;
 	int has_coe;
@@ -54,7 +54,7 @@ struct master_slave_base_info {
 };
 
 /* 核心层保存的完整从站扫描结果；应用层只能取得摘要副本。 */
-struct mo_ecat_slave {
+struct master_slave {
 	struct master_slave_base_info base_info;
 	struct mo_ecat_node_state state;
 	struct master_slave_pdo_entry pdo_entries[MASTER_MAX_PDO_ENTRIES];
