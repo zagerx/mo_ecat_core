@@ -40,9 +40,9 @@ void print_diagnostics(struct mo_ecat_master *master);
 void print_robot(const struct robot *robot);
 
 /**
- * @brief 打印单个 PDO 引用信息
+ * @brief 打印单个 PDO entry 映射信息
  */
-void print_pdo_ref(struct mo_ecat_master *master, size_t idx);
+void print_pdo_entry_mapping(struct mo_ecat_master *master, size_t idx);
 
 /**
  * @brief 打印命令帮助

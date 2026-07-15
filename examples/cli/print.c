@@ -116,34 +116,34 @@ void print_robot(const struct robot *robot)
 	}
 }
 
-void print_pdo_ref(struct mo_ecat_master *master, size_t idx)
+void print_pdo_entry_mapping(struct mo_ecat_master *master, size_t idx)
 {
-	size_t count = mo_ecat_master_get_pdo_ref_count(master);
+	size_t count = mo_ecat_master_get_pdo_entry_mapping_count(master);
 	if (idx >= count) {
-		printf("PDO ref index out of range (count=%zu)\n", count);
+		printf("PDO entry mapping index out of range (count=%zu)\n", count);
 		return;
 	}
 
-	struct mo_ecat_slave_pdo_ref ref;
-	if (mo_ecat_master_get_pdo_ref(master, idx, &ref) < 0) {
-		printf("PDO ref index out of range (count=%zu)\n", count);
+	struct mo_ecat_pdo_entry_mapping mapping;
+	if (mo_ecat_master_get_pdo_entry_mapping(master, idx, &mapping) < 0) {
+		printf("PDO entry mapping index out of range (count=%zu)\n", count);
 		return;
 	}
-	const char *dir = (ref.direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
+	const char *dir = (mapping.direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
 
-	printf("PDO[%zu]: slave=%zu, object_index=0x%04X, object_subindex=%u, "
+	printf("PDO mapping[%zu]: slave=%zu, object_index=0x%04X, object_subindex=%u, "
 	       "dir=%s, offset=%u.%u, bits=%u, gen=%u\n",
-	       idx, ref.slave_index, ref.object_index, ref.object_subindex,
-	       dir, ref.byte_offset, ref.bit_offset, ref.bit_length,
-	       ref.generation);
+	       idx, mapping.slave_index, mapping.object_index, mapping.object_subindex,
+	       dir, mapping.byte_offset, mapping.bit_offset, mapping.bit_length,
+	       mapping.generation);
 
-	if (ref.direction == MO_ECAT_PDO_INPUT) {
-		const void *p = mo_ecat_pdo_input(master, &ref);
+	if (mapping.direction == MO_ECAT_PDO_INPUT) {
+		const void *p = mo_ecat_pdo_input(master, &mapping);
 		if (p) {
 			printf("  input value @ %p\n", p);
 		}
 	} else {
-		void *p = mo_ecat_pdo_output(master, &ref);
+		void *p = mo_ecat_pdo_output(master, &mapping);
 		if (p) {
 			printf("  output value @ %p\n", p);
 		}
@@ -162,6 +162,6 @@ void print_help(void)
 	       "  reset             release resources and return to IDLE\n"
 	       "  diag              print discovered slave information\n"
 	       "  topology          build and print robot\n"
-	       "  pdo <idx>         print PDO reference information\n"
+	       "  pdo <idx>         print PDO entry mapping information\n"
 	       "  exit              quit\n");
 }

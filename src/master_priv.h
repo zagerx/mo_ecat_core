@@ -11,7 +11,7 @@
 #include "backend.h"
 #include "common/statemachine/statemachine.h"
 #include "master_states.h"
-#include "process_image.h"
+#include "pdo_image.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,24 +35,16 @@ struct mo_ecat_master_slave_table {
 };
 
 /**
- * @brief PDO 引用表
+ * @brief PDO 映射管理
  *
- * 由配置展开得到的扁平 PDO 引用数组，后端负责填写 offset。
+ * 保存主站 PDO 数据区域、所有 PDO entry 的地址映射以及映射运行状态。
  */
-struct mo_ecat_master_pdo_refs {
-	struct mo_ecat_slave_pdo_ref *refs; /**< PDO 引用数组 */
-	size_t count;                 /**< PDO 引用数量 */
-};
-
-/**
- * @brief 过程数据管理单元
- *
- * 把过程映像缓冲区与 PDO 引用表统一放在一起管理，二者在 CONFIGURE 阶段同时建立，
- * 在 RESET/重新配置时同时失效。
- */
-struct mo_ecat_master_process_data {
-	struct mo_ecat_process_image image;      /**< 过程数据映像 */
-	struct mo_ecat_master_pdo_refs pdo_refs; /**< PDO 引用表 */
+struct master_pdo_mapping {
+	struct master_pdo_image image;                   /**< PDO 数据区域 */
+	struct mo_ecat_pdo_entry_mapping *entries;       /**< PDO entry 映射数组 */
+	size_t entry_count;                              /**< PDO entry 映射数量 */
+	uint32_t generation;                             /**< 当前映射版本 */
+	int active;                                      /**< 是否允许周期读写 */
 };
 
 /**
@@ -65,7 +57,7 @@ struct mo_ecat_master {
 	enum mo_ecat_master_error error_code;       /**< 当前故障码 */
 	struct backend_instance backend;             /**< 后端实例 */
 	const struct mo_ecat_master_config *config; /**< 主站配置指针，指向外部配置，生命周期由调用者保证 */
-	struct mo_ecat_master_process_data process; /**< 过程数据（映像 + PDO 引用） */
+	struct master_pdo_mapping pdo_mapping;      /**< 主站 PDO 映射 */
 	struct mo_ecat_master_slave_table slave_table; /**< 从站表 */
 	struct mo_ecat_master_cycle_result cycle_result; /**< 最近一次周期结果 */
 
@@ -79,7 +71,7 @@ enum mo_ecat_master_cmd master_read_cmd(const struct mo_ecat_master *master);
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 int master_build_slave_table(struct mo_ecat_master *master);
 int master_read_all_slave_states(struct mo_ecat_master *master);
-int master_configure(struct mo_ecat_master *master);
+int master_build_pdo_mapping(struct mo_ecat_master *master);
 int master_activate(struct mo_ecat_master *master);
 int master_deactivate(struct mo_ecat_master *master);
 void master_release_resources(struct mo_ecat_master *master);

@@ -18,7 +18,7 @@ extern "C" {
 /**
  * 适配层到核心层的数据绑定/转换回调。
  *
- * 这些回调负责在发现、扫描、配置阶段把后端私有的从站/PDO/过程映像数据
+ * 这些回调负责在发现、扫描、配置阶段把后端私有的从站/PDO/PDO 数据区域
  * 暴露或翻译成核心层能理解的结构。它们与后端生命周期回调分离，以便清晰
  * 标识依赖核心层类型的接口边界。
  */
@@ -36,18 +36,9 @@ struct backend_translation_ops {
                              struct mo_ecat_slave *slaves,
                              size_t slave_count);
 
-    /**
-     * 根据适配层映射结果，填充核心层 PDO 引用数组的 offset 等字段。
-     * refs 由核心层根据 slaves[].pdo_entries 预先构造好基础信息。
-     */
-    int  (*fill_pdo_refs)(struct backend_instance *backend,
-                          struct mo_ecat_slave_pdo_ref *refs,
-                          size_t ref_count,
-                          uint32_t generation);
-
-    /** 将适配层已映射好的过程映像信息绑定到核心层对象。 */
-    int  (*get_process_image)(struct backend_instance *backend,
-                              struct mo_ecat_process_image *image);
+    /** 将适配层已映射好的 PDO 数据区域绑定到核心层对象。 */
+    int  (*get_pdo_image)(struct backend_instance *backend,
+                          struct master_pdo_image *image);
 
 };
 
@@ -62,8 +53,13 @@ struct backend_ops {
     int  (*load_slave_info)(struct backend_instance *backend,
                             size_t *slave_count);
 
-    /** 完成 PDO 映射，只更新适配层内部状态，不直接填充核心层对象。 */
-    int  (*configure)(struct backend_instance *backend);
+    /** 配置分布式时钟，只更新适配层内部状态。 */
+    int  (*configure_dc)(struct backend_instance *backend);
+
+    /** 建立 PDO 映射并填充每个 PDO entry 的 byte/bit offset。 */
+    int  (*build_pdo_mapping)(struct backend_instance *backend,
+                              struct mo_ecat_pdo_entry_mapping *entries,
+                              size_t entry_count);
 
     int  (*activate)(struct backend_instance *backend);
 

@@ -94,7 +94,7 @@ void cmd_pdo(const char *arg)
 		printf("usage: pdo <idx>\n");
 		return;
 	}
-	print_pdo_ref(g_master, (size_t)atoi(arg));
+	print_pdo_entry_mapping(g_master, (size_t)atoi(arg));
 }
 
 void cmd_help(void)

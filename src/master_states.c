@@ -45,6 +45,8 @@ void master_state_idle(struct statemachine *sm)
 		MASTER_PHASE_READ_STATE,
 		MASTER_PHASE_READ_PDO,
 		MASTER_PHASE_DISCOVERED,
+		MASTER_PHASE_CONFIGURE_DC,
+		MASTER_PHASE_BUILD_PDO_MAPPING,
 	};
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
@@ -59,7 +61,7 @@ void master_state_idle(struct statemachine *sm)
 	switch (sm->phase) {
 	case SM_PHASE_ENTER:
 		if (master) {
-			master->process.image.active = 0;
+			master->pdo_mapping.active = 0;
 		}
 		sm->phase = MASTER_PHASE_START;
 		break;
@@ -125,7 +127,7 @@ void master_state_idle(struct statemachine *sm)
 						  master->slave_table.slaves,
 						  master->slave_table.count);
 		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_FAILED);
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_READ_DEFAULT_PDO_FAILED);
 			master_release_resources(master);
 			sm_transition(sm, master_state_fault);
 			break;
@@ -153,10 +155,25 @@ void master_state_idle(struct statemachine *sm)
 			break;
 		}
 
-		result = master_configure(master);
 		master_clear_cmd(master);
+		sm->phase = MASTER_PHASE_CONFIGURE_DC;
+		break;
+	case MASTER_PHASE_CONFIGURE_DC:
+		/* DC 配置独立失败，不能继续建立 PDO 映射。 */
+		result = backend_configure_dc(&master->backend);
 		if (result < 0) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_IOMAP_FAILED);
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED);
+			master_release_resources(master);
+			sm_transition(sm, master_state_fault);
+			break;
+		}
+		sm->phase = MASTER_PHASE_BUILD_PDO_MAPPING;
+		break;
+	case MASTER_PHASE_BUILD_PDO_MAPPING:
+		/* 后端建立 PDO 数据区域并回填所有 PDO entry 的地址偏移。 */
+		result = master_build_pdo_mapping(master);
+		if (result < 0) {
+			master_set_fault(master, MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED);
 			master_release_resources(master);
 			sm_transition(sm, master_state_fault);
 			break;
@@ -207,7 +224,7 @@ void master_state_ready(struct statemachine *sm)
 	switch (sm->phase) {
 	case SM_PHASE_ENTER:
 		if (master) {
-			master->process.image.active = 0;
+			master->pdo_mapping.active = 0;
 		}
 		sm->phase = SM_PHASE_START;
 		break;
@@ -283,7 +300,7 @@ void master_state_fault(struct statemachine *sm)
 	switch (sm->phase) {
 	case SM_PHASE_ENTER:
 		if (master) {
-			master->process.image.active = 0;
+			master->pdo_mapping.active = 0;
 		}
 		sm->phase = SM_PHASE_START;
 		break;

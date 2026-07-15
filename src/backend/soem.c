@@ -16,10 +16,11 @@
 struct soem_backend_ctx {
 	ecx_contextt context;
 	uint8_t iomap[MO_ECAT_SOEM_IOMAP_SIZE];
-	size_t mapped_size;
+	size_t pdo_image_size;
 	uint32_t expected_wkc;
 	int opened;
-	int configured;
+	int dc_configured;
+	int pdo_mapping_ready;
 };
 
 static struct soem_backend_ctx s_soem_ctx;
@@ -271,10 +272,14 @@ static int soem_backend_read_pdo_entries(struct backend_instance *backend,
 	return 0;
 }
 
-static int soem_backend_configure(struct backend_instance *backend)
+/**
+ * 检查 SOEM 扫描结果中的 DC 能力并配置 DC 拓扑。
+ *
+ * 当前产品策略要求全部从站支持 DC；此处不建立 IOmap，也不请求从站进入 OP。
+ */
+static int soem_backend_configure_dc(struct backend_instance *backend)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
-	int mapped_size;
 
 	if (!ctx || !ctx->opened) {
 		return -1;
@@ -291,6 +296,35 @@ static int soem_backend_configure(struct backend_instance *backend)
 		return -1;
 	}
 
+	ctx->dc_configured = 1;
+	return 0;
+}
+
+static int soem_resolve_pdo_entry_offsets(
+	struct soem_backend_ctx *ctx,
+	struct mo_ecat_pdo_entry_mapping *entries,
+	size_t entry_count);
+
+/**
+ * 使用 SOEM 建立 IOmap，并将每个 PDO entry 的地址偏移写入 entries。
+ *
+ * 该函数依赖 DC 已配置成功。只有 IOmap 创建和全部 entry 偏移解析成功后，
+ * 才将 pdo_mapping_ready 置位。
+ */
+static int soem_backend_build_pdo_mapping(struct backend_instance *backend,
+					  struct mo_ecat_pdo_entry_mapping *entries,
+					  size_t entry_count)
+{
+	struct soem_backend_ctx *ctx = soem_ctx(backend);
+	int mapped_size;
+
+	if (!ctx || !ctx->opened || !ctx->dc_configured ||
+	    (entry_count > 0 && !entries)) {
+		return -1;
+	}
+	ctx->pdo_mapping_ready = 0;
+	ctx->pdo_image_size = 0;
+
 	/* 执行 PDO 映射。 */
 	mapped_size = ecx_config_map_group(&ctx->context, ctx->iomap, 0);
 	if (mapped_size <= 0 || (size_t)mapped_size > MO_ECAT_SOEM_IOMAP_SIZE) {
@@ -298,13 +332,17 @@ static int soem_backend_configure(struct backend_instance *backend)
 		return -1;
 	}
 
-	ctx->mapped_size = (size_t)mapped_size;
+	ctx->pdo_image_size = (size_t)mapped_size;
 
-	/* 计算期望 WKC */
+	/* 计算期望 WKC。 */
 	ctx->expected_wkc = (uint32_t)ctx->context.grouplist[0].outputsWKC * 2U +
 			    ctx->context.grouplist[0].inputsWKC;
 
-	ctx->configured = 1;
+	if (soem_resolve_pdo_entry_offsets(ctx, entries, entry_count) < 0) {
+		return -1;
+	}
+
+	ctx->pdo_mapping_ready = 1;
 
 	printf("SOEM backend: %d slaves, IOmap %d bytes, expected WKC %u\n",
 	       ctx->context.slavecount, mapped_size, ctx->expected_wkc);
@@ -312,32 +350,36 @@ static int soem_backend_configure(struct backend_instance *backend)
 	return 0;
 }
 
-static int soem_backend_get_process_image(struct backend_instance *backend,
-					  struct mo_ecat_process_image *image)
+/** 返回 SOEM 持有的 IOmap，不转移其内存所有权。 */
+static int soem_backend_get_pdo_image(struct backend_instance *backend,
+				      struct master_pdo_image *image)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 
-	if (!ctx || !ctx->configured || !image) {
+	if (!ctx || !ctx->pdo_mapping_ready || !image) {
 		return -1;
 	}
 
 	image->memory = ctx->iomap;
-	image->size = ctx->mapped_size;
-	image->active = 0;
+	image->size = ctx->pdo_image_size;
 	return 0;
 }
 
-static int soem_backend_fill_pdo_refs(struct backend_instance *backend,
-				      struct mo_ecat_slave_pdo_ref *refs, size_t ref_count,
-				      uint32_t generation)
+/**
+ * 根据 SOEM 为每个从站分配的 inputs/outputs 指针，解析 entry 的字节和位偏移。
+ *
+ * 输出与输入分别累计已使用位数，避免两种方向的 PDO 彼此影响偏移计算。
+ */
+static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
+					  struct mo_ecat_pdo_entry_mapping *entries,
+					  size_t entry_count)
 {
-	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	int slavecount;
 	uint32_t *used_out_bits = NULL;
 	uint32_t *used_in_bits = NULL;
 	int result = -1;
 
-	if (!ctx || !ctx->configured || (ref_count > 0 && !refs)) {
+	if (!ctx || (entry_count > 0 && !entries)) {
 		return -1;
 	}
 
@@ -354,8 +396,8 @@ static int soem_backend_fill_pdo_refs(struct backend_instance *backend,
 		}
 	}
 
-	for (size_t i = 0; i < ref_count; ++i) {
-		struct mo_ecat_slave_pdo_ref *ref = &refs[i];
+	for (size_t i = 0; i < entry_count; ++i) {
+		struct mo_ecat_pdo_entry_mapping *mapping = &entries[i];
 		const ec_slavet *soem_slave;
 		uint32_t *used_bits;
 		uint32_t available_bits;
@@ -363,36 +405,35 @@ static int soem_backend_fill_pdo_refs(struct backend_instance *backend,
 		size_t start_bit;
 		size_t end_bit;
 
-		if (ref->slave_index >= (size_t)slavecount) {
+		if (mapping->slave_index >= (size_t)slavecount) {
 			goto cleanup;
 		}
-		soem_slave = &ctx->context.slavelist[ref->slave_index + 1];
+		soem_slave = &ctx->context.slavelist[mapping->slave_index + 1];
 
-		if (ref->direction == MO_ECAT_PDO_OUTPUT) {
-			used_bits = &used_out_bits[ref->slave_index];
+		if (mapping->direction == MO_ECAT_PDO_OUTPUT) {
+			used_bits = &used_out_bits[mapping->slave_index];
 			available_bits = soem_slave->Obits;
 			base = soem_slave->outputs;
 		} else {
-			used_bits = &used_in_bits[ref->slave_index];
+			used_bits = &used_in_bits[mapping->slave_index];
 			available_bits = soem_slave->Ibits;
 			base = soem_slave->inputs;
 		}
 
-		if (!base || (*used_bits + ref->bit_length) > available_bits) {
+		if (!base || (*used_bits + mapping->bit_length) > available_bits) {
 			goto cleanup;
 		}
 
-		ref->generation = generation;
-		ref->byte_offset = (uint32_t)(base - ctx->iomap) + (*used_bits / 8);
-		ref->bit_offset = (uint8_t)(*used_bits % 8);
+		mapping->byte_offset = (uint32_t)(base - ctx->iomap) + (*used_bits / 8);
+		mapping->bit_offset = (uint8_t)(*used_bits % 8);
 
-		start_bit = (size_t)ref->byte_offset * 8U + ref->bit_offset;
-		end_bit = start_bit + ref->bit_length;
-		if (end_bit < start_bit || end_bit > ctx->mapped_size * 8U) {
+		start_bit = (size_t)mapping->byte_offset * 8U + mapping->bit_offset;
+		end_bit = start_bit + mapping->bit_length;
+		if (end_bit < start_bit || end_bit > ctx->pdo_image_size * 8U) {
 			goto cleanup;
 		}
 
-		*used_bits += ref->bit_length;
+		*used_bits += mapping->bit_length;
 	}
 
 	result = 0;
@@ -475,7 +516,7 @@ static int soem_backend_cycle_end(struct backend_instance *backend,
 }
 
 static int soem_backend_read_all_slave_states(struct backend_instance *backend,
-					  struct mo_ecat_slave *slaves, size_t slave_count)
+					      struct mo_ecat_slave *slaves, size_t slave_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	if (!ctx) {
@@ -502,8 +543,8 @@ static int soem_backend_read_all_slave_states(struct backend_instance *backend,
 }
 
 static int soem_backend_read_single_slave_state(struct backend_instance *backend,
-							size_t slave_index,
-							struct mo_ecat_slave_state *state)
+						size_t slave_index,
+						struct mo_ecat_slave_state *state)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	ec_alstatust alstatus;
@@ -515,8 +556,8 @@ static int soem_backend_read_single_slave_state(struct backend_instance *backend
 	}
 
 	configadr = ctx->context.slavelist[slave_index + 1].configadr;
-	wkc = ecx_FPRD(&ctx->context.port, configadr, ECT_REG_ALSTAT,
-		       sizeof(alstatus), &alstatus, EC_TIMEOUTRET);
+	wkc = ecx_FPRD(&ctx->context.port, configadr, ECT_REG_ALSTAT, sizeof(alstatus), &alstatus,
+		       EC_TIMEOUTRET);
 	if (wkc <= 0) {
 		return -1;
 	}
@@ -561,14 +602,14 @@ static void soem_backend_close(struct backend_instance *backend)
 static const struct backend_translation_ops soem_translation_ops = {
 	.read_pdo_entries = soem_backend_read_pdo_entries,
 	.translate_slave_info = soem_backend_translate_slave_info,
-	.fill_pdo_refs = soem_backend_fill_pdo_refs,
-	.get_process_image = soem_backend_get_process_image,
+	.get_pdo_image = soem_backend_get_pdo_image,
 };
 
 static const struct backend_ops soem_ops = {
 	.open = soem_backend_open,
 	.load_slave_info = soem_backend_load_slave_info,
-	.configure = soem_backend_configure,
+	.configure_dc = soem_backend_configure_dc,
+	.build_pdo_mapping = soem_backend_build_pdo_mapping,
 	.activate = soem_backend_activate,
 	.cycle_begin = soem_backend_cycle_begin,
 	.cycle_end = soem_backend_cycle_end,

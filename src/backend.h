@@ -7,7 +7,7 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_slave.h"
-#include "process_image.h"
+#include "pdo_image.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,13 +55,34 @@ int backend_translate_slave_info(struct backend_instance *backend,
 int backend_read_pdo_entries(struct backend_instance *backend,
                              struct mo_ecat_slave *slaves,
                              size_t slave_count);
-int backend_configure(struct backend_instance *backend);
-int backend_get_process_image(struct backend_instance *backend,
-                              struct mo_ecat_process_image *image);
-int backend_fill_pdo_refs(struct backend_instance *backend,
-                          struct mo_ecat_slave_pdo_ref *refs,
-                          size_t ref_count,
-                          uint32_t generation);
+
+/**
+ * @brief 配置后端的分布式时钟。
+ *
+ * 只能在从站扫描完成、建立 PDO 映射前调用。该函数只完成 DC 配置，
+ * 不建立 PDO 数据区域，也不启动周期通信。
+ */
+int backend_configure_dc(struct backend_instance *backend);
+
+/**
+ * @brief 建立 PDO 映射并填写 PDO entry 的地址偏移。
+ *
+ * entries 由核心层根据扫描得到的 PDO 描述创建。后端建立 IOmap/domain 后，
+ * 必须将每项对应的 byte_offset 与 bit_offset 写回 entries。
+ * 成功后可通过 backend_get_pdo_image() 取得 PDO 数据区域。
+ */
+int backend_build_pdo_mapping(struct backend_instance *backend,
+                              struct mo_ecat_pdo_entry_mapping *entries,
+                              size_t entry_count);
+
+/**
+ * @brief 获取已建立 PDO 映射的数据区域。
+ *
+ * 仅能在 backend_build_pdo_mapping() 成功后调用。image 指向后端管理的
+ * IOmap/domain 数据，不转移内存所有权。
+ */
+int backend_get_pdo_image(struct backend_instance *backend,
+                          struct master_pdo_image *image);
 int backend_activate(struct backend_instance *backend);
 int backend_cycle_begin(struct backend_instance *backend,
                         struct mo_ecat_cycle_result *result);

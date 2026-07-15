@@ -58,20 +58,35 @@ int backend_read_pdo_entries(struct backend_instance *backend,
 	return backend->translation_ops->read_pdo_entries(backend, slaves, slave_count);
 }
 
-int backend_configure(struct backend_instance *backend)
+int backend_configure_dc(struct backend_instance *backend)
 {
-	if (!backend || !backend->ops || !backend->ops->configure) {
+	if (!backend || !backend->ops || !backend->ops->configure_dc) {
 		return -1;
 	}
 
-	return backend->ops->configure(backend);
+	return backend->ops->configure_dc(backend);
 }
 
-int backend_get_process_image(struct backend_instance *backend,
-			      struct mo_ecat_process_image *image)
+int backend_build_pdo_mapping(struct backend_instance *backend,
+			      struct mo_ecat_pdo_entry_mapping *entries,
+			      size_t entry_count)
+{
+	if (!backend || !backend->ops || !backend->ops->build_pdo_mapping) {
+		return -1;
+	}
+
+	if (entry_count > 0 && !entries) {
+		return -1;
+	}
+
+	return backend->ops->build_pdo_mapping(backend, entries, entry_count);
+}
+
+int backend_get_pdo_image(struct backend_instance *backend,
+			  struct master_pdo_image *image)
 {
 	if (!backend || !backend->translation_ops ||
-	    !backend->translation_ops->get_process_image) {
+	    !backend->translation_ops->get_pdo_image) {
 		return -1;
 	}
 
@@ -79,23 +94,7 @@ int backend_get_process_image(struct backend_instance *backend,
 		return -1;
 	}
 
-	return backend->translation_ops->get_process_image(backend, image);
-}
-
-int backend_fill_pdo_refs(struct backend_instance *backend,
-			  struct mo_ecat_slave_pdo_ref *refs,
-			  size_t ref_count, uint32_t generation)
-{
-	if (!backend || !backend->translation_ops ||
-	    !backend->translation_ops->fill_pdo_refs) {
-		return -1;
-	}
-
-	if (ref_count > 0 && !refs) {
-		return -1;
-	}
-
-	return backend->translation_ops->fill_pdo_refs(backend, refs, ref_count, generation);
+	return backend->translation_ops->get_pdo_image(backend, image);
 }
 
 int backend_activate(struct backend_instance *backend)

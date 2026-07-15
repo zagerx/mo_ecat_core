@@ -19,20 +19,22 @@ void master_clear_cmd(struct mo_ecat_master *master)
 
 void master_release_resources(struct mo_ecat_master *master)
 {
+	uint32_t generation;
+
 	if (!master) {
 		return;
 	}
 
+	generation = master->pdo_mapping.generation;
 	backend_close(&master->backend);
 
-	free(master->process.pdo_refs.refs);
+	free(master->pdo_mapping.entries);
 	free(master->slave_table.slaves);
 	memset(&master->backend, 0, sizeof(master->backend));
-	memset(&master->process.image, 0, sizeof(master->process.image));
+	memset(&master->pdo_mapping, 0, sizeof(master->pdo_mapping));
+	master->pdo_mapping.generation = generation;
 	master->slave_table.slaves = NULL;
 	master->slave_table.count = 0;
-	master->process.pdo_refs.refs = NULL;
-	master->process.pdo_refs.count = 0;
 }
 
 int master_build_slave_table(struct mo_ecat_master *master)
@@ -77,19 +79,8 @@ int master_read_all_slave_states(struct mo_ecat_master *master)
 					     master->slave_table.count);
 }
 
-static size_t master_count_pdo_refs(const struct mo_ecat_master *master)
-{
-	size_t count = 0;
-
-	for (size_t i = 0; i < master->slave_table.count; ++i) {
-		count += master->slave_table.slaves[i].pdo_entry_count;
-	}
-
-	return count;
-}
-
-static void master_build_pdo_refs(const struct mo_ecat_master *master,
-				  struct mo_ecat_slave_pdo_ref *refs)
+static void master_build_pdo_entry_mappings(const struct mo_ecat_master *master,
+					    struct mo_ecat_pdo_entry_mapping *entries)
 {
 	size_t idx = 0;
 
@@ -98,60 +89,85 @@ static void master_build_pdo_refs(const struct mo_ecat_master *master,
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
 			const struct mo_ecat_slave_pdo_entry *entry = &slave->pdo_entries[j];
-			struct mo_ecat_slave_pdo_ref *ref = &refs[idx++];
+			struct mo_ecat_pdo_entry_mapping *mapping = &entries[idx++];
 
-			ref->slave_index = i;
-			ref->object_index = entry->object_index;
-			ref->object_subindex = entry->object_subindex;
-			ref->bit_length = entry->bit_length;
-			ref->direction = entry->direction;
+			mapping->slave_index = i;
+			mapping->object_index = entry->object_index;
+			mapping->object_subindex = entry->object_subindex;
+			mapping->bit_length = entry->bit_length;
+			mapping->direction = entry->direction;
 		}
 	}
 }
 
-int master_configure(struct mo_ecat_master *master)
+/** 为同一批已解析地址的 PDO entry 标记所属映射版本。 */
+static void master_set_pdo_entry_mapping_generation(struct mo_ecat_pdo_entry_mapping *entries,
+						    size_t entry_count, uint32_t generation)
 {
-	size_t pdo_ref_count;
-	struct mo_ecat_slave_pdo_ref *refs = NULL;
+	for (size_t i = 0; i < entry_count; ++i) {
+		entries[i].generation = generation;
+	}
+}
+
+/**
+ * 建立主站 PDO 映射并一次性提交结果。
+ *
+ * 调用前 DC 必须已由状态机配置成功。从站 PDO 描述先被展开为 entries，
+ * 后端在建立 IOmap/domain 时回填地址偏移；仅当映射、PDO 数据区域和从站
+ * 信息刷新均成功时，才替换 master->pdo_mapping 中的旧映射。
+ */
+int master_build_pdo_mapping(struct mo_ecat_master *master)
+{
+	struct master_pdo_image image = {0};
+	struct mo_ecat_pdo_entry_mapping *entries = NULL;
+	size_t entry_count;
+	uint32_t generation;
 
 	if (!master) {
 		return -1;
 	}
 
-	pdo_ref_count = master_count_pdo_refs(master);
-	if (pdo_ref_count > 0) {
-		refs = calloc(pdo_ref_count, sizeof(*refs));
-		if (!refs) {
-			return -1;
-		}
-		master_build_pdo_refs(master, refs);
+	entry_count = 0;
+	for (size_t i = 0; i < master->slave_table.count; ++i) {
+		entry_count += master->slave_table.slaves[i].pdo_entry_count;
 	}
 
-	if (backend_configure(&master->backend) < 0) {
-		free(refs);
+	if (entry_count > 0) {
+		entries = calloc(entry_count, sizeof(*entries));
+		if (!entries) {
+			return -1;
+		}
+		master_build_pdo_entry_mappings(master, entries);
+	}
+
+	if (backend_build_pdo_mapping(&master->backend, entries, entry_count) < 0) {
+		free(entries);
 		return -1;
 	}
 
-	if (backend_get_process_image(&master->backend, &master->process.image) < 0) {
-		free(refs);
+	if (backend_get_pdo_image(&master->backend, &image) < 0) {
+		free(entries);
 		return -1;
 	}
-	master->process.image.generation++;
 
-	if (pdo_ref_count > 0) {
-		if (backend_fill_pdo_refs(&master->backend, refs, pdo_ref_count,
-					  master->process.image.generation) < 0) {
-			free(refs);
-			return -1;
-		}
+	if (backend_translate_slave_info(&master->backend, master->slave_table.slaves,
+					 master->slave_table.count) < 0) {
+		free(entries);
+		return -1;
 	}
 
-	backend_translate_slave_info(&master->backend, master->slave_table.slaves,
-				     master->slave_table.count);
+	generation = master->pdo_mapping.generation + 1U;
+	if (generation == 0U) {
+		generation = 1U;
+	}
+	master_set_pdo_entry_mapping_generation(entries, entry_count, generation);
 
-	free(master->process.pdo_refs.refs);
-	master->process.pdo_refs.refs = refs;
-	master->process.pdo_refs.count = pdo_ref_count;
+	free(master->pdo_mapping.entries);
+	master->pdo_mapping.image = image;
+	master->pdo_mapping.entries = entries;
+	master->pdo_mapping.entry_count = entry_count;
+	master->pdo_mapping.generation = generation;
+	master->pdo_mapping.active = 0;
 	return 0;
 }
 
@@ -165,7 +181,7 @@ int master_activate(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	master->process.image.active = 1;
+	master->pdo_mapping.active = 1;
 	return 0;
 }
 
@@ -179,6 +195,6 @@ int master_deactivate(struct mo_ecat_master *master)
 		return -1;
 	}
 
-	master->process.image.active = 0;
+	master->pdo_mapping.active = 0;
 	return 0;
 }
