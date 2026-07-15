@@ -67,6 +67,18 @@ int backend_configure_dc(struct backend_instance *backend)
 	return backend->ops->configure_dc(backend);
 }
 
+/**
+ * 调用后端建立 PDO 映射。
+ *
+ * 后端会根据 entries 中描述的 PDO entry（从站索引、对象索引、位长度、
+ * 方向等）建立 IOmap/domain，并回填每个 entry 在 PDO 数据区域中的
+ * byte_offset 和 bit_offset。
+ *
+ * @param backend     后端实例
+ * @param entries     PDO entry 映射数组，由调用者分配
+ * @param entry_count entries 数组元素个数，允许为 0
+ * @return 0 成功，非 0 失败
+ */
 int backend_build_pdo_mapping(struct backend_instance *backend,
 			      struct mo_ecat_pdo_entry_mapping *entries,
 			      size_t entry_count)

@@ -300,10 +300,9 @@ static int soem_backend_configure_dc(struct backend_instance *backend)
 	return 0;
 }
 
-static int soem_resolve_pdo_entry_offsets(
-	struct soem_backend_ctx *ctx,
-	struct mo_ecat_pdo_entry_mapping *entries,
-	size_t entry_count);
+static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
+					  struct mo_ecat_pdo_entry_mapping *entries,
+					  size_t entry_count);
 
 /**
  * 使用 SOEM 建立 IOmap，并将每个 PDO entry 的地址偏移写入 entries。
@@ -318,8 +317,7 @@ static int soem_backend_build_pdo_mapping(struct backend_instance *backend,
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	int mapped_size;
 
-	if (!ctx || !ctx->opened || !ctx->dc_configured ||
-	    (entry_count > 0 && !entries)) {
+	if (!ctx || !ctx->opened || !ctx->dc_configured || (entry_count > 0 && !entries)) {
 		return -1;
 	}
 	ctx->pdo_mapping_ready = 0;

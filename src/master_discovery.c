@@ -8,6 +8,7 @@
 
 #include "master_priv.h"
 
+/** 清除主站当前请求命令。 */
 void master_clear_cmd(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -17,6 +18,12 @@ void master_clear_cmd(struct mo_ecat_master *master)
 	master->command = MO_ECAT_MASTER_CMD_NONE;
 }
 
+/**
+ * 释放主站占用的扫描与映射资源。
+ *
+ * 关闭后端、释放 PDO entry 映射数组和从站表，但保留 generation
+ * 以便后续重新映射时能够区分旧映射。
+ */
 void master_release_resources(struct mo_ecat_master *master)
 {
 	uint32_t generation;
@@ -37,6 +44,12 @@ void master_release_resources(struct mo_ecat_master *master)
 	master->slave_table.count = 0;
 }
 
+/**
+ * 构建主站从站表。
+ *
+ * 从后端获取扫描到的从站数量，分配从站信息数组，并由后端将
+ * 适配层从站信息翻译到核心层结构。
+ */
 int master_build_slave_table(struct mo_ecat_master *master)
 {
 	size_t slave_count;
@@ -69,6 +82,7 @@ int master_build_slave_table(struct mo_ecat_master *master)
 	return 0;
 }
 
+/** 读取所有从站当前状态到从站表。 */
 int master_read_all_slave_states(struct mo_ecat_master *master)
 {
 	if (!master || (master->slave_table.count > 0 && !master->slave_table.slaves)) {
@@ -79,6 +93,12 @@ int master_read_all_slave_states(struct mo_ecat_master *master)
 					     master->slave_table.count);
 }
 
+/**
+ * 将所有从站的 PDO entry 描述展开为扁平映射数组。
+ *
+ * 本函数只填充 slave_index、object_index、object_subindex、bit_length
+ * 和 direction；字节/位偏移由后端在建立 IOmap/domain 时回填。
+ */
 static void master_build_pdo_entry_mappings(const struct mo_ecat_master *master,
 					    struct mo_ecat_pdo_entry_mapping *entries)
 {
@@ -171,6 +191,11 @@ int master_build_pdo_mapping(struct mo_ecat_master *master)
 	return 0;
 }
 
+/**
+ * 激活主站 PDO 周期交换。
+ *
+ * 激活成功后，cycle_begin/cycle_end 与 PDO 数据访问接口方可使用。
+ */
 int master_activate(struct mo_ecat_master *master)
 {
 	if (!master) {
@@ -185,6 +210,7 @@ int master_activate(struct mo_ecat_master *master)
 	return 0;
 }
 
+/** 停止主站 PDO 周期交换。 */
 int master_deactivate(struct mo_ecat_master *master)
 {
 	if (!master) {

@@ -10,16 +10,23 @@ extern "C" {
 
 struct mo_ecat_master;
 
-/** 一个 PDO entry 在 PDO 数据区域中的映射。 */
+/**
+ * 单个 PDO entry 在主站 PDO 数据区域中的映射描述。
+ *
+ * 该结构连接从站的 CoE 对象字典条目与过程数据映像中的实际位置。
+ * slave_index / object_index / object_subindex / bit_length / direction
+ * 在映射建立时由核心层从从站描述填充；byte_offset / bit_offset 由
+ * 后端在建立 IOmap/domain 后回填；generation 用于标识该映射所属版本。
+ */
 struct mo_ecat_pdo_entry_mapping {
-    size_t slave_index;
-    uint16_t object_index;
-    uint8_t object_subindex;
-    uint8_t bit_length;
-    uint32_t byte_offset;
-    uint8_t bit_offset;
-    enum mo_ecat_pdo_direction direction;
-    uint32_t generation;
+    size_t slave_index;          /**< 从站在主站从站表中的索引 */
+    uint16_t object_index;       /**< CoE 对象字典索引 */
+    uint8_t object_subindex;     /**< CoE 对象字典子索引 */
+    uint8_t bit_length;          /**< 该 PDO entry 占用的位数 */
+    uint32_t byte_offset;        /**< 在 PDO 数据区域中的字节偏移 */
+    uint8_t bit_offset;          /**< 在字节内的起始位偏移 */
+    enum mo_ecat_pdo_direction direction; /**< PDO 方向：输入或输出 */
+    uint32_t generation;         /**< 所属 PDO 映射版本号 */
 };
 
 /**
