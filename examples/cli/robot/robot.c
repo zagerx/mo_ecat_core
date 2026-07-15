@@ -1,6 +1,6 @@
 /**
  * @file robot.c
- * @brief 机器人运行时对象构建
+ * @brief CLI 机器人运行时对象构建
  *
  * 后续在这里完成扫描从站与 robot_config 的匹配和校验。
  */

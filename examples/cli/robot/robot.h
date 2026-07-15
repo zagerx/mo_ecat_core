@@ -7,7 +7,7 @@
 #include "mo_ecat/mo_ecat_master.h"
 
 /**
- * @brief 已与扫描从站匹配的运行时关节
+ * @brief CLI 中已与扫描从站匹配的运行时关节
  */
 struct robot_joint {
 	const char *name;                     /**< 关节逻辑名称 */

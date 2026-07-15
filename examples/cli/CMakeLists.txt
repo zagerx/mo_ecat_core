@@ -14,6 +14,8 @@ if(NOT TARGET mo_ecat_core)
     )
 endif()
 
+add_subdirectory(robot)
+
 add_executable(ecat_cli
     main.c
     threads.c
@@ -22,4 +24,4 @@ add_executable(ecat_cli
     config/robot_config.c
 )
 
-target_link_libraries(ecat_cli PRIVATE mo_ecat_core mo_robot pthread)
+target_link_libraries(ecat_cli PRIVATE mo_ecat_core ecat_cli_robot pthread)

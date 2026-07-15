@@ -58,8 +58,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-add_subdirectory(applications/robot)
-
 if(MO_ECAT_BUILD_EXAMPLES)
     add_subdirectory(examples/cli)
 endif()

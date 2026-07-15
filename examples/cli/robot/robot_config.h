@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 /**
- * @brief 机器人功能组标识
+ * @brief CLI 机器人功能组标识
  *
  * 该枚举属于应用层，不应泄漏到 EtherCAT 核心库。
  * 后续由 YAML 配置文件统一管理。
