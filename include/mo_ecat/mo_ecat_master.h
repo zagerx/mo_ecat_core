@@ -4,6 +4,7 @@
 #include "mo_ecat/mo_ecat_common.h"
 #include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master_state.h"
+#include "mo_ecat/mo_ecat_cyclic.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,31 +46,9 @@ enum mo_ecat_master_error {
  */
 
 /**
- * @brief 初始化主站对象
- *
- * 该函数只初始化对象字段、绑定配置、注册周期控制回调并初始化内部状态机，
- * 不打开后端、不配置总线。config 由调用者保证生命周期。
- *
- * callback 允许为 NULL，此时 RUNNING 状态中只进行 PDO 收发而不执行控制逻辑。
- *
- * @return 0 成功，非 0 失败
- */
-int mo_ecat_master_init(struct mo_ecat_master *master,
-                        const struct mo_ecat_master_config *config,
-                        mo_ecat_cycle_callback callback,
-                        void *user_data);
-
-/**
- * @brief 反初始化主站对象
- *
- * 释放运行期资源并关闭后端，不释放 master 对象本身。
- */
-void mo_ecat_master_deinit(struct mo_ecat_master *master);
-
-/**
  * @brief 创建并初始化单主站对象
  *
- * 该函数为主站对象分配内存，并调用 mo_ecat_master_init() 完成
+ * 该函数为主站对象分配内存，并完成
  * 字段初始化、配置指针绑定和周期回调注册。单主站场景下，重复调用会失败并返回 NULL。
  */
 struct mo_ecat_master *mo_ecat_master_create(
@@ -113,17 +92,6 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master,
  */
 enum mo_ecat_master_error mo_ecat_master_get_error_code(
     const struct mo_ecat_master *master);
-
-/**
- * @brief 设置用户数据
- */
-void mo_ecat_master_set_user_data(struct mo_ecat_master *master,
-                                  void *user_data);
-
-/**
- * @brief 获取用户数据
- */
-void *mo_ecat_master_get_user_data(const struct mo_ecat_master *master);
 
 #ifdef __cplusplus
 }

@@ -5,9 +5,10 @@
 
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat/mo_ecat_pdo.h"
-#include "mo_ecat/mo_ecat_slave.h"
+#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_topology.h"
 #include "pdo_image.h"
+#include "pdo_mapping_priv.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +19,7 @@ extern "C" {
 struct backend_instance;          /* 后端实例前向声明 */
 struct backend_ops;              /* 后端生命周期/运行时 ops 前向声明 */
 struct backend_translation_ops;  /* 后端数据转换 ops 前向声明 */
+struct mo_ecat_slave;            /* 核心层内部从站缓存 */
 
 /**
  * @brief 后端实例
@@ -72,7 +74,7 @@ int backend_configure_dc(struct backend_instance *backend);
  * 成功后可通过 backend_get_pdo_image() 取得 PDO 数据区域。
  */
 int backend_build_pdo_mapping(struct backend_instance *backend,
-                              struct mo_ecat_pdo_entry_mapping *entries,
+                              struct master_pdo_entry_mapping *entries,
                               size_t entry_count);
 
 /**
@@ -93,7 +95,7 @@ int backend_read_all_slave_states(struct backend_instance *backend,
                                   size_t slave_count);
 int backend_read_single_slave_state(struct backend_instance *backend,
                                     size_t slave_index,
-                                    struct mo_ecat_slave_state *state);
+                                    struct mo_ecat_node_state *state);
 int backend_deactivate(struct backend_instance *backend);
 void backend_close(struct backend_instance *backend);
 

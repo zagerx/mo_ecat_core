@@ -12,8 +12,8 @@ add_subdirectory(third_party/SOEM)
 set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_master.c
     src/master_discovery.c
-    src/mo_ecat_pdo.c
-    src/mo_ecat_slave.c
+    src/cyclic.c
+    src/topology.c
     src/master_states.c
     src/common/statemachine/statemachine.c
     src/backend.c

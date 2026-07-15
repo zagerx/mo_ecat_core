@@ -6,7 +6,7 @@
 规划流程：
 
 ```text
-DISCOVERED
+扫描完成后，主站仍保持 IDLE
   → 读取机器人配置
   → 匹配已扫描从站
   → 构建 `struct robot robot_instance`

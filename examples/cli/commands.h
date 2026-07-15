@@ -53,10 +53,10 @@ void cmd_diag(void);
 void cmd_topology(void);
 
 /**
- * @brief 处理 pdo 命令
+ * @brief 处理 cyclic 命令
  * @param arg 索引字符串
  */
-void cmd_pdo(const char *arg);
+void cmd_cyclic(const char *arg);
 
 /**
  * @brief 处理 help 命令

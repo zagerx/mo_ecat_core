@@ -80,7 +80,7 @@ int backend_configure_dc(struct backend_instance *backend)
  * @return 0 成功，非 0 失败
  */
 int backend_build_pdo_mapping(struct backend_instance *backend,
-			      struct mo_ecat_pdo_entry_mapping *entries,
+			      struct master_pdo_entry_mapping *entries,
 			      size_t entry_count)
 {
 	if (!backend || !backend->ops || !backend->ops->build_pdo_mapping) {
@@ -162,7 +162,7 @@ int backend_read_all_slave_states(struct backend_instance *backend,
 
 int backend_read_single_slave_state(struct backend_instance *backend,
 				    size_t slave_index,
-				    struct mo_ecat_slave_state *state)
+				    struct mo_ecat_node_state *state)
 {
 	if (!backend || !backend->ops || !backend->ops->read_single_slave_state || !state) {
 		return -1;

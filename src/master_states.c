@@ -45,7 +45,7 @@ void master_state_idle(struct statemachine *sm)
 		MASTER_PHASE_SCAN_BUILD,
 		MASTER_PHASE_READ_STATE,
 		MASTER_PHASE_READ_PDO,
-		MASTER_PHASE_DISCOVERED,
+		MASTER_PHASE_WAIT_CONFIGURE,
 		MASTER_PHASE_CONFIGURE_DC,
 		MASTER_PHASE_BUILD_PDO_MAPPING,
 	};
@@ -131,10 +131,9 @@ void master_state_idle(struct statemachine *sm)
 			sm_transition(sm, master_state_fault);
 			break;
 		}
-		sm->phase = MASTER_PHASE_DISCOVERED;
-		atomic_store(&master->state, MO_ECAT_MASTER_STATE_DISCOVERED);
+		sm->phase = MASTER_PHASE_WAIT_CONFIGURE;
 		break;
-	case MASTER_PHASE_DISCOVERED:
+	case MASTER_PHASE_WAIT_CONFIGURE:
 		cmd = master_take_cmd(master);
 		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
 			break;

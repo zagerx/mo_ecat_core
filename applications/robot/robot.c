@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat/mo_ecat_slave.h"
+#include "mo_ecat/mo_ecat_topology.h"
 
 static const char *group_name(enum robot_group_id group)
 {
@@ -32,13 +32,12 @@ static const char *group_name(enum robot_group_id group)
 	}
 }
 
-static int slave_matches(const struct mo_ecat_slave_info *slave,
+static int node_matches(const struct mo_ecat_node_info *node,
 			 const struct robot_slave_identity *identity)
 {
-	return slave && identity &&
-	       slave->base_info.position == identity->position &&
-	       slave->base_info.vendor_id == identity->vendor_id &&
-	       slave->base_info.product_code == identity->product_code;
+	return node && identity && node->position == identity->position &&
+	       node->vendor_id == identity->vendor_id &&
+	       node->product_code == identity->product_code;
 }
 
 static int find_slave(struct mo_ecat_master *master, const struct robot_slave_identity *identity,
@@ -52,14 +51,14 @@ static int find_slave(struct mo_ecat_master *master, const struct robot_slave_id
 		return -1;
 	}
 
-	count = mo_ecat_master_get_slave_count(master);
+	count = mo_ecat_master_get_node_count(master);
 	for (size_t i = 0; i < count; ++i) {
-		struct mo_ecat_slave_info slave;
+		struct mo_ecat_node_info node;
 
-		if (mo_ecat_master_get_slave_info(master, i, &slave) < 0) {
+		if (mo_ecat_master_get_node_info(master, i, &node) < 0) {
 			continue;
 		}
-		if (!slave_matches(&slave, identity)) {
+		if (!node_matches(&node, identity)) {
 			continue;
 		}
 		if (found) {
@@ -107,8 +106,7 @@ int robot_build(struct robot *robot, struct mo_ecat_master *master,
 		enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
 		if (!robot || !master || !config || !config->name || !config->joints ||
 		    config->joint_count == 0 ||
-		    (state != MO_ECAT_MASTER_STATE_DISCOVERED &&
-		     state != MO_ECAT_MASTER_STATE_IDLE)) {
+		    state != MO_ECAT_MASTER_STATE_IDLE) {
 			return -1;
 		}
 	}

@@ -1,0 +1,19 @@
+#ifndef PDO_MAPPING_PRIV_H
+#define PDO_MAPPING_PRIV_H
+
+#include "mo_ecat/mo_ecat_cyclic.h"
+
+/**
+ * @brief PDO entry 的内部物理映射
+ *
+ * 逻辑对象身份可提供给应用层；IOmap/domain 中的物理地址与代际只限核心层和
+ * 后端使用。
+ */
+struct master_pdo_entry_mapping {
+	struct mo_ecat_cyclic_entry entry;
+	uint32_t byte_offset;
+	uint8_t bit_offset;
+	uint32_t generation;
+};
+
+#endif /* PDO_MAPPING_PRIV_H */

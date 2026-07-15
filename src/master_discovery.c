@@ -8,7 +8,6 @@
 
 #include "master_priv.h"
 
-/** 清除主站当前请求命令。 */
 /**
  * 释放主站占用的扫描与映射资源。
  *
@@ -33,6 +32,15 @@ void master_release_resources(struct mo_ecat_master *master)
 	master->pdo_mapping.generation = generation;
 	master->slave_table.slaves = NULL;
 	master->slave_table.count = 0;
+}
+
+/** 为同一批已解析地址的 PDO entry 标记所属映射版本。 */
+static void master_set_pdo_entry_mapping_generation(struct master_pdo_entry_mapping *entries,
+						    size_t entry_count, uint32_t generation)
+{
+	for (size_t i = 0; i < entry_count; ++i) {
+		entries[i].generation = generation;
+	}
 }
 
 /**
@@ -91,7 +99,7 @@ int master_read_all_slave_states(struct mo_ecat_master *master)
  * 和 direction；字节/位偏移由后端在建立 IOmap/domain 时回填。
  */
 static void master_build_pdo_entry_mappings(const struct mo_ecat_master *master,
-					    struct mo_ecat_pdo_entry_mapping *entries)
+					    struct master_pdo_entry_mapping *entries)
 {
 	size_t idx = 0;
 
@@ -99,24 +107,17 @@ static void master_build_pdo_entry_mappings(const struct mo_ecat_master *master,
 		const struct mo_ecat_slave *slave = &master->slave_table.slaves[i];
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
-			const struct mo_ecat_slave_pdo_entry *entry = &slave->pdo_entries[j];
-			struct mo_ecat_pdo_entry_mapping *mapping = &entries[idx++];
+			const struct master_slave_pdo_entry *entry = &slave->pdo_entries[j];
+			struct master_pdo_entry_mapping *mapping = &entries[idx];
 
-			mapping->slave_index = i;
-			mapping->object_index = entry->object_index;
-			mapping->object_subindex = entry->object_subindex;
-			mapping->bit_length = entry->bit_length;
-			mapping->direction = entry->direction;
+			mapping->entry.id = (uint32_t)idx;
+			mapping->entry.node_index = i;
+			mapping->entry.object_index = entry->object_index;
+			mapping->entry.object_subindex = entry->object_subindex;
+			mapping->entry.bit_length = entry->bit_length;
+			mapping->entry.direction = entry->direction;
+			++idx;
 		}
-	}
-}
-
-/** 为同一批已解析地址的 PDO entry 标记所属映射版本。 */
-static void master_set_pdo_entry_mapping_generation(struct mo_ecat_pdo_entry_mapping *entries,
-						    size_t entry_count, uint32_t generation)
-{
-	for (size_t i = 0; i < entry_count; ++i) {
-		entries[i].generation = generation;
 	}
 }
 
@@ -130,7 +131,7 @@ static void master_set_pdo_entry_mapping_generation(struct mo_ecat_pdo_entry_map
 int master_build_pdo_mapping(struct mo_ecat_master *master)
 {
 	struct master_pdo_image image = {0};
-	struct mo_ecat_pdo_entry_mapping *entries = NULL;
+	struct master_pdo_entry_mapping *entries = NULL;
 	size_t entry_count;
 	uint32_t generation;
 
@@ -141,6 +142,9 @@ int master_build_pdo_mapping(struct mo_ecat_master *master)
 	entry_count = 0;
 	for (size_t i = 0; i < master->slave_table.count; ++i) {
 		entry_count += master->slave_table.slaves[i].pdo_entry_count;
+	}
+	if (entry_count > UINT32_MAX) {
+		return -1;
 	}
 
 	if (entry_count > 0) {

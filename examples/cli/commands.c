@@ -81,20 +81,20 @@ void cmd_topology(void)
 
 	robot_release(&g_robot);
 	if (robot_build(&g_robot, g_master, config) < 0) {
-		printf("Failed to build robot. Check DISCOVERED state and configuration.\n");
+		printf("Failed to build robot. Scan the bus and check configuration.\n");
 		return;
 	}
 
 	print_robot(&g_robot);
 }
 
-void cmd_pdo(const char *arg)
+void cmd_cyclic(const char *arg)
 {
 	if (!arg || arg[0] == '\0') {
-		printf("usage: pdo <idx>\n");
+		printf("usage: cyclic <idx>\n");
 		return;
 	}
-	print_pdo_entry_mapping(g_master, (size_t)atoi(arg));
+	print_cyclic_entry(g_master, (size_t)atoi(arg));
 }
 
 void cmd_help(void)

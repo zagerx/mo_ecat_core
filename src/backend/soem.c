@@ -10,6 +10,7 @@
 #include "soem/soem.h"
 #include "backend.h"
 #include "backend_ops.h"
+#include "slave_priv.h"
 
 #define MO_ECAT_SOEM_IOMAP_SIZE 2048
 
@@ -30,21 +31,21 @@ static struct soem_backend_ctx *soem_ctx(struct backend_instance *backend)
 	return (struct soem_backend_ctx *)backend->ctx;
 }
 
-static enum mo_ecat_slave_al_state soem_to_al_state(uint16_t soem_state)
+static enum mo_ecat_node_al_state soem_to_al_state(uint16_t soem_state)
 {
 	switch (soem_state & 0x0F) {
 	case EC_STATE_INIT:
-		return MO_ECAT_AL_STATE_INIT;
+		return MO_ECAT_NODE_AL_STATE_INIT;
 	case EC_STATE_PRE_OP:
-		return MO_ECAT_AL_STATE_PRE_OP;
+		return MO_ECAT_NODE_AL_STATE_PRE_OP;
 	case EC_STATE_SAFE_OP:
-		return MO_ECAT_AL_STATE_SAFE_OP;
+		return MO_ECAT_NODE_AL_STATE_SAFE_OP;
 	case EC_STATE_OPERATIONAL:
-		return MO_ECAT_AL_STATE_OP;
+		return MO_ECAT_NODE_AL_STATE_OP;
 	case EC_STATE_BOOT:
-		return MO_ECAT_AL_STATE_BOOTSTRAP;
+		return MO_ECAT_NODE_AL_STATE_BOOTSTRAP;
 	default:
-		return MO_ECAT_AL_STATE_UNKNOWN;
+		return MO_ECAT_NODE_AL_STATE_UNKNOWN;
 	}
 }
 
@@ -173,7 +174,7 @@ static int soem_backend_translate_slave_info(struct backend_instance *backend,
 }
 
 static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
-				    uint16_t assignment_index, enum mo_ecat_pdo_direction direction,
+				    uint16_t assignment_index, enum mo_ecat_cyclic_direction direction,
 				    struct mo_ecat_slave *slave)
 {
 	uint8_t pdo_count = 0;
@@ -210,9 +211,9 @@ static int soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number
 
 		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count; ++entry_subindex) {
 			uint32_t mapping = 0;
-			struct mo_ecat_slave_pdo_entry *entry;
+			struct master_slave_pdo_entry *entry;
 
-			if (slave->pdo_entry_count >= MO_ECAT_MAX_PDO_ENTRIES) {
+			if (slave->pdo_entry_count >= MASTER_MAX_PDO_ENTRIES) {
 				return -1;
 			}
 
@@ -262,9 +263,9 @@ static int soem_backend_read_pdo_entries(struct backend_instance *backend,
 		}
 
 		if (soem_read_pdo_assignment(&ctx->context, (uint16_t)(i + 1), 0x1c12,
-					     MO_ECAT_PDO_OUTPUT, slave) < 0 ||
+					     MO_ECAT_CYCLIC_OUTPUT, slave) < 0 ||
 		    soem_read_pdo_assignment(&ctx->context, (uint16_t)(i + 1), 0x1c13,
-					     MO_ECAT_PDO_INPUT, slave) < 0) {
+					     MO_ECAT_CYCLIC_INPUT, slave) < 0) {
 			return -1;
 		}
 	}
@@ -301,7 +302,7 @@ static int soem_backend_configure_dc(struct backend_instance *backend)
 }
 
 static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
-					  struct mo_ecat_pdo_entry_mapping *entries,
+					  struct master_pdo_entry_mapping *entries,
 					  size_t entry_count);
 
 /**
@@ -311,7 +312,7 @@ static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
  * 才将 pdo_mapping_ready 置位。
  */
 static int soem_backend_build_pdo_mapping(struct backend_instance *backend,
-					  struct mo_ecat_pdo_entry_mapping *entries,
+					  struct master_pdo_entry_mapping *entries,
 					  size_t entry_count)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
@@ -369,7 +370,7 @@ static int soem_backend_get_pdo_image(struct backend_instance *backend,
  * 输出与输入分别累计已使用位数，避免两种方向的 PDO 彼此影响偏移计算。
  */
 static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
-					  struct mo_ecat_pdo_entry_mapping *entries,
+					  struct master_pdo_entry_mapping *entries,
 					  size_t entry_count)
 {
 	int slavecount;
@@ -395,7 +396,7 @@ static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
 	}
 
 	for (size_t i = 0; i < entry_count; ++i) {
-		struct mo_ecat_pdo_entry_mapping *mapping = &entries[i];
+		struct master_pdo_entry_mapping *mapping = &entries[i];
 		const ec_slavet *soem_slave;
 		uint32_t *used_bits;
 		uint32_t available_bits;
@@ -403,22 +404,22 @@ static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
 		size_t start_bit;
 		size_t end_bit;
 
-		if (mapping->slave_index >= (size_t)slavecount) {
+		if (mapping->entry.node_index >= (size_t)slavecount) {
 			goto cleanup;
 		}
-		soem_slave = &ctx->context.slavelist[mapping->slave_index + 1];
+		soem_slave = &ctx->context.slavelist[mapping->entry.node_index + 1];
 
-		if (mapping->direction == MO_ECAT_PDO_OUTPUT) {
-			used_bits = &used_out_bits[mapping->slave_index];
+		if (mapping->entry.direction == MO_ECAT_CYCLIC_OUTPUT) {
+			used_bits = &used_out_bits[mapping->entry.node_index];
 			available_bits = soem_slave->Obits;
 			base = soem_slave->outputs;
 		} else {
-			used_bits = &used_in_bits[mapping->slave_index];
+			used_bits = &used_in_bits[mapping->entry.node_index];
 			available_bits = soem_slave->Ibits;
 			base = soem_slave->inputs;
 		}
 
-		if (!base || (*used_bits + mapping->bit_length) > available_bits) {
+		if (!base || (*used_bits + mapping->entry.bit_length) > available_bits) {
 			goto cleanup;
 		}
 
@@ -426,12 +427,12 @@ static int soem_resolve_pdo_entry_offsets(struct soem_backend_ctx *ctx,
 		mapping->bit_offset = (uint8_t)(*used_bits % 8);
 
 		start_bit = (size_t)mapping->byte_offset * 8U + mapping->bit_offset;
-		end_bit = start_bit + mapping->bit_length;
+		end_bit = start_bit + mapping->entry.bit_length;
 		if (end_bit < start_bit || end_bit > ctx->pdo_image_size * 8U) {
 			goto cleanup;
 		}
 
-		*used_bits += mapping->bit_length;
+		*used_bits += mapping->entry.bit_length;
 	}
 
 	result = 0;
@@ -534,7 +535,7 @@ static int soem_backend_read_all_slave_states(struct backend_instance *backend,
 		slaves[i].state.al_status_code = soem_slave->ALstatuscode;
 		slaves[i].state.online = 1;
 		slaves[i].state.operational =
-			(slaves[i].state.al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
+			(slaves[i].state.al_state == MO_ECAT_NODE_AL_STATE_OP) ? 1 : 0;
 	}
 
 	return 0;
@@ -542,7 +543,7 @@ static int soem_backend_read_all_slave_states(struct backend_instance *backend,
 
 static int soem_backend_read_single_slave_state(struct backend_instance *backend,
 						size_t slave_index,
-						struct mo_ecat_slave_state *state)
+						struct mo_ecat_node_state *state)
 {
 	struct soem_backend_ctx *ctx = soem_ctx(backend);
 	ec_alstatust alstatus;
@@ -564,7 +565,7 @@ static int soem_backend_read_single_slave_state(struct backend_instance *backend
 	state->error = (etohs(alstatus.alstatus) & EC_STATE_ERROR) ? 1 : 0;
 	state->al_status_code = etohs(alstatus.alstatuscode);
 	state->online = 1;
-	state->operational = (state->al_state == MO_ECAT_AL_STATE_OP) ? 1 : 0;
+	state->operational = (state->al_state == MO_ECAT_NODE_AL_STATE_OP) ? 1 : 0;
 
 	return 0;
 }

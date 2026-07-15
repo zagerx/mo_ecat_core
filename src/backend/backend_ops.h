@@ -58,7 +58,7 @@ struct backend_ops {
 
     /** 建立 PDO 映射并填充每个 PDO entry 的 byte/bit offset。 */
     int  (*build_pdo_mapping)(struct backend_instance *backend,
-                              struct mo_ecat_pdo_entry_mapping *entries,
+                              struct master_pdo_entry_mapping *entries,
                               size_t entry_count);
 
     int  (*activate)(struct backend_instance *backend);
@@ -75,7 +75,7 @@ struct backend_ops {
 
     int  (*read_single_slave_state)(struct backend_instance *backend,
                                     size_t slave_index,
-                                    struct mo_ecat_slave_state *state);
+                                    struct mo_ecat_node_state *state);
 
     int  (*deactivate)(struct backend_instance *backend);
     void (*close)(struct backend_instance *backend);

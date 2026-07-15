@@ -11,10 +11,10 @@ extern "C" {
 #define MO_ECAT_MAX_NAME_LEN   80
 #define MO_ECAT_MAX_IFNAME_LEN 64
 
-/** 主站视角的 PDO 数据方向。 */
-enum mo_ecat_pdo_direction {
-    MO_ECAT_PDO_INPUT,
-    MO_ECAT_PDO_OUTPUT
+/** 主站视角的周期数据方向。 */
+enum mo_ecat_cyclic_direction {
+    MO_ECAT_CYCLIC_INPUT,
+    MO_ECAT_CYCLIC_OUTPUT
 };
 
 #ifdef __cplusplus
