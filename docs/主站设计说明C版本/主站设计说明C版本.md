@@ -144,5 +144,5 @@ void mo_ecat_master_state_running(struct statemachine *sm)
 
 - `src/mo_ecat_master_states.h`
 - `src/mo_ecat_master_states.c`
-- `src/common/statemachine/statemachine.h`
+- `include/mo_ecat/statemachine.h`
 - `src/common/statemachine/statemachine.c`
