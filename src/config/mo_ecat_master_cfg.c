@@ -4,5 +4,5 @@
 #include "mo_ecat_master_cfg.h"
 
 const struct mo_ecat_master_config g_master_config = {
-    .interface_name = "enp0s31f6",
+    .interface_name = "enP1p1s0",
 };

@@ -33,7 +33,7 @@ static const char *group_name(enum robot_group_id group)
 }
 
 static int node_matches(const struct mo_ecat_node_info *node,
-			 const struct robot_slave_identity *identity)
+			const struct robot_slave_identity *identity)
 {
 	return node && identity && node->position == identity->position &&
 	       node->vendor_id == identity->vendor_id &&
@@ -105,8 +105,7 @@ int robot_build(struct robot *robot, struct mo_ecat_master *master,
 	{
 		enum mo_ecat_master_state state = mo_ecat_master_get_state(master);
 		if (!robot || !master || !config || !config->name || !config->joints ||
-		    config->joint_count == 0 ||
-		    state != MO_ECAT_MASTER_STATE_IDLE) {
+		    config->joint_count == 0 || state != MO_ECAT_MASTER_STATE_IDLE) {
 			return -1;
 		}
 	}

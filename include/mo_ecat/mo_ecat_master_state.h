@@ -22,15 +22,14 @@ struct mo_ecat_master;
  * @MO_ECAT_MASTER_STATE_FAULT:   故障状态，必须先 RESET
  */
 enum mo_ecat_master_state {
-    MO_ECAT_MASTER_STATE_INIT,
-    MO_ECAT_MASTER_STATE_IDLE,
-    MO_ECAT_MASTER_STATE_READY,
-    MO_ECAT_MASTER_STATE_RUNNING,
-    MO_ECAT_MASTER_STATE_FAULT
+	MO_ECAT_MASTER_STATE_INIT,
+	MO_ECAT_MASTER_STATE_IDLE,
+	MO_ECAT_MASTER_STATE_READY,
+	MO_ECAT_MASTER_STATE_RUNNING,
+	MO_ECAT_MASTER_STATE_FAULT
 };
 
-enum mo_ecat_master_state mo_ecat_master_get_state(
-    const struct mo_ecat_master *master);
+enum mo_ecat_master_state mo_ecat_master_get_state(const struct mo_ecat_master *master);
 
 #ifdef __cplusplus
 }
