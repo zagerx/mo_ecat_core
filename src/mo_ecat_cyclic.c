@@ -212,3 +212,64 @@ void *mo_ecat_cyclic_output(struct mo_ecat_master *master,
 	data = &master->pdo_mapping.image.memory[mapping->byte_offset];
 	return data;
 }
+
+/**
+ * cyclic_handle_resolve - 常数时间校验并解析句柄数据地址
+ * @master: 主站对象指针
+ * @handle: 已绑定的访问句柄
+ * @direction: 本次访问期望的方向
+ *
+ * 校验：句柄有效、代际匹配、映射存在、周期活动、方向一致。
+ *
+ * Return: 成功返回数据地址，失败返回 NULL
+ */
+static void *cyclic_handle_resolve(const struct mo_ecat_master *master,
+				   const struct mo_ecat_cyclic_handle *handle,
+				   enum mo_ecat_cyclic_direction direction)
+{
+	if (!master || !handle || !handle->data ||
+	    handle->generation == 0U ||
+	    handle->generation != master->pdo_mapping.generation ||
+	    handle->direction != (uint8_t)direction ||
+	    !master->pdo_mapping.image.memory ||
+	    !master->pdo_mapping.is_active) {
+		return NULL;
+	}
+
+	return handle->data;
+}
+
+int mo_ecat_cyclic_bind(struct mo_ecat_master *master,
+			const struct mo_ecat_cyclic_entry *entry,
+			struct mo_ecat_cyclic_handle *handle)
+{
+	const struct master_pdo_entry_mapping *mapping;
+
+	if (!master || !entry || !handle) {
+		return -1;
+	}
+	mapping = master_resolve_pdo_entry_mapping(master, entry);
+	if (!mapping || mapping->generation != master->pdo_mapping.generation ||
+	    !pdo_entry_mapping_in_bounds(&master->pdo_mapping.image, mapping)) {
+		return -1;
+	}
+
+	handle->data = &master->pdo_mapping.image.memory[mapping->byte_offset];
+	handle->generation = mapping->generation;
+	handle->bit_length = mapping->entry.bit_length;
+	handle->bit_offset = mapping->bit_offset;
+	handle->direction = (uint8_t)mapping->entry.direction;
+	return 0;
+}
+
+const void *mo_ecat_cyclic_read(const struct mo_ecat_master *master,
+				const struct mo_ecat_cyclic_handle *handle)
+{
+	return cyclic_handle_resolve(master, handle, MO_ECAT_CYCLIC_INPUT);
+}
+
+void *mo_ecat_cyclic_write(struct mo_ecat_master *master,
+			   const struct mo_ecat_cyclic_handle *handle)
+{
+	return cyclic_handle_resolve(master, handle, MO_ECAT_CYCLIC_OUTPUT);
+}
