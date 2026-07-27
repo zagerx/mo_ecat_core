@@ -5,7 +5,7 @@
  * 负责处理外部命令、总线扫描、DC 配置、PDO 映射建立以及周期数据交换。
  */
 
-#include "mo_ecat/statemachine.h"
+#include "common/statemachine/statemachine.h"
 #include "master_states.h"
 #include "master_priv.h"
 

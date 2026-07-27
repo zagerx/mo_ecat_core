@@ -16,7 +16,7 @@
 #include "mo_ecat/mo_ecat_cyclic.h"
 #include "mo_ecat/mo_ecat_topology.h"
 #include "backend/backend.h"
-#include "mo_ecat/statemachine.h"
+#include "common/statemachine/statemachine.h"
 #include "master_states.h"
 #include "master_resources.h"
 #include "master_topology.h"

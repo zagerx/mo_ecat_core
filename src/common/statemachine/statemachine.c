@@ -2,7 +2,7 @@
  * statemachine.c - 轻量级有限状态机框架实现
  */
 
-#include "mo_ecat/statemachine.h"
+#include "statemachine.h"
 #include <stdint.h>
 
 /**
