@@ -10,7 +10,7 @@
 
 #include <stddef.h>
 
-#include "config/master_config.h"
+#include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_cyclic.h"

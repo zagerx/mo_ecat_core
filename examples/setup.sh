@@ -2,30 +2,21 @@
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+MASTER_YAML="${SCRIPT_DIR}/cli/config/master.yaml"
 BUILD_SH="${SCRIPT_DIR}/build.sh"
 CLI_BIN="${SCRIPT_DIR}/cli/build/ecat_cli"
 
-# 如果用户传了参数，直接用；否则自动检测第一个可用的有线以太网口
-if [ -n "$1" ]; then
-    IFNAME="$1"
-else
-    # 优先选状态为 UP 的 en*/eth* 接口
-    IFNAME=$(ip -o link show | awk -F': ' '$2 ~ /^(en|eth)/ && /state UP/ {print $2; exit}')
-
-    # 如果没找到 UP 的，退而求其次选任意 en*/eth* 接口
-    if [ -z "${IFNAME}" ]; then
-        IFNAME=$(ip -o link show | awk -F': ' '$2 ~ /^(en|eth)/ {print $2; exit}')
-    fi
-fi
+# 网口不做自动探测，来源是 cli/config/master.yaml 的 master.interface；
+# 由应用层（ecat_cli）通过命令行参数接收，创建 master 时绑定
+IFNAME=$(grep -m1 -E '^[[:space:]]*interface:' "${MASTER_YAML}" \
+    | sed -E 's/^[[:space:]]*interface:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')
 
 if [ -z "${IFNAME}" ]; then
-    echo "Error: No wired Ethernet interface found."
-    echo "Available interfaces:"
-    ip -br link show
+    echo "Error: master.interface not found in ${MASTER_YAML}"
     exit 1
 fi
 
-echo "Detected interface: ${IFNAME}"
+echo "Interface from config: ${IFNAME} (${MASTER_YAML})"
 echo ""
 
 # 1. 先构建

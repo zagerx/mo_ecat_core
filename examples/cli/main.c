@@ -55,17 +55,28 @@ static void parse_line(char *line, char *cmd, size_t cmd_size, char *arg, size_t
 
 int main(int argc, char *argv[])
 {
-	(void)argc;
-	(void)argv;
+	/* 主站配置由应用层持有并保证唯一；主站只记录指针，不复制内容 */
+	static struct mo_ecat_master_config s_master_config;
+
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s <interface>\n", argv[0]);
+		return -1;
+	}
+	if (strlen(argv[1]) > MO_ECAT_MAX_IFNAME_LEN) {
+		fprintf(stderr, "Interface name too long: %s\n", argv[1]);
+		return -1;
+	}
 
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 
+	strcpy(s_master_config.interface_name, argv[1]);
+
 	printf("mo_ecat CLI\n");
-	printf("Starting EtherCAT CLI.\n");
+	printf("Starting EtherCAT CLI on interface: %s\n", s_master_config.interface_name);
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(NULL, NULL);
+	g_master = mo_ecat_master_create(&s_master_config, NULL, NULL);
 	if (!g_master) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;

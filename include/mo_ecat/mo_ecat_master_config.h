@@ -1,12 +1,12 @@
 /*
- * config/master_config.h - 主站内部配置模型
+ * mo_ecat_master_config.h - 主站配置
  *
- * 本文件只包含主站运行所需的配置数据结构定义。
- * 具体配置值由构建期的代码生成器从 YAML 生成，目标程序运行时不解析 YAML。
+ * 配置结构由核心库公开，配置实例由应用层持有并保证唯一；
+ * 主站只在创建时记录指针，不复制内容。
  */
 
-#ifndef MASTER_CONFIG_H
-#define MASTER_CONFIG_H
+#ifndef MO_ECAT_MASTER_CONFIG_H
+#define MO_ECAT_MASTER_CONFIG_H
 
 #include "mo_ecat/mo_ecat_common.h"
 
@@ -28,4 +28,4 @@ struct mo_ecat_master_config {
 }
 #endif
 
-#endif /* MASTER_CONFIG_H */
+#endif /* MO_ECAT_MASTER_CONFIG_H */

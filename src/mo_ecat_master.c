@@ -7,12 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "config/mo_ecat_master_cfg.h"
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "master_priv.h"
-
-static int s_master_instance_in_use;
 
 /**
  * master_take_cmd - 取出主站当前命令
@@ -44,21 +41,23 @@ void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd
 /**
  * master_init - 初始化主站对象
  * @master: 主站对象指针
+ * @config: 主站配置指针，由调用方持有；主站不复制内容
  * @callback: 周期控制回调
  * @user_data: 用户私有数据
  *
  * Return: 0 成功，非 0 失败
  */
 static int master_init(struct mo_ecat_master *master,
+		       const struct mo_ecat_master_config *config,
 		       mo_ecat_cyclic_callback callback,
 		       void *user_data)
 {
-	if (!master || g_master_config.interface_name[0] == '\0') {
+	if (!master || !config || config->interface_name[0] == '\0') {
 		return -1;
 	}
 
 	memset(master, 0, sizeof(*master));
-	master->config = &g_master_config;
+	master->config = config;
 	master->cyclic_callback = callback;
 	master->user_data = user_data;
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
@@ -88,33 +87,32 @@ static void master_deinit(struct mo_ecat_master *master)
 
 /**
  * mo_ecat_master_create - 创建主站对象
+ * @config: 主站配置指针，由调用方持有并保证唯一；主站不复制内容，
+ *          配置对象必须比主站存活更久
  * @callback: 周期控制回调
  * @user_data: 用户私有数据
  *
- * 当前仅支持单个主站实例同时存在。
+ * 实例数量不受限制；每个实例持有独立的状态与后端上下文，
+ * 通常一个实例绑定一块网卡。
  *
  * Return: 成功返回主站对象指针，失败返回 NULL
  */
-struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
+struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config,
+					     mo_ecat_cyclic_callback callback,
 					     void *user_data)
 {
 	struct mo_ecat_master *master;
-
-	if (s_master_instance_in_use) {
-		return NULL;
-	}
 
 	master = calloc(1, sizeof(*master));
 	if (!master) {
 		return NULL;
 	}
 
-	if (master_init(master, callback, user_data) < 0) {
+	if (master_init(master, config, callback, user_data) < 0) {
 		free(master);
 		return NULL;
 	}
 
-	s_master_instance_in_use = 1;
 	return master;
 }
 
@@ -130,7 +128,6 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
 
 	master_deinit(master);
 	free(master);
-	s_master_instance_in_use = 0;
 }
 
 /**

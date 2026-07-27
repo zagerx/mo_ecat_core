@@ -9,6 +9,7 @@
 #define MO_ECAT_MASTER_H
 
 #include "mo_ecat/mo_ecat_common.h"
+#include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_cyclic.h"
 
@@ -56,7 +57,20 @@ enum mo_ecat_master_error {
     MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };
 
-struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
+/**
+ * mo_ecat_master_create - 创建主站对象
+ * @config: 主站配置指针，由调用方持有；主站不复制内容，
+ *          配置对象必须比主站存活更久
+ * @callback: 周期控制回调，仅在 RUNNING 状态下每个周期调用
+ * @user_data: 用户私有数据，随周期回调传回
+ *
+ * 实例数量不受限制；每个实例持有独立的状态与后端上下文，
+ * 通常一个实例绑定一块网卡。
+ *
+ * Return: 成功返回主站对象指针，失败返回 NULL
+ */
+struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config,
+                                              mo_ecat_cyclic_callback callback,
                                               void *user_data);
 
 void mo_ecat_master_destroy(struct mo_ecat_master *master);

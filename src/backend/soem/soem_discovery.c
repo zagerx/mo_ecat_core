@@ -5,6 +5,7 @@
  * 到核心层结构的转换。
  */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "soem_backend.h"
@@ -149,7 +150,7 @@ enum backend_error soem_backend_translate_slave_info(struct backend_instance *ba
 }
 
 /**
- * soem_backend_close - 关闭 SOEM 后端
+ * soem_backend_close - 关闭 SOEM 后端并释放后端上下文
  * @backend: 后端实例指针
  */
 void soem_backend_close(struct backend_instance *backend)
@@ -163,5 +164,6 @@ void soem_backend_close(struct backend_instance *backend)
 		ecx_close(&context->context);
 		context->opened = 0;
 	}
+	free(context);
 	backend->ctx = NULL;
 }

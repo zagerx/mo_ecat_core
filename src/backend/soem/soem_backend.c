@@ -4,12 +4,10 @@
  * 初始化 SOEM 后端实例，将后端回调表注册到 backend_instance。
  */
 
-#include <string.h>
+#include <stdlib.h>
 
 #include "../backend_ops.h"
 #include "soem_backend.h"
-
-static struct soem_backend_context s_soem_context;
 
 /**
  * soem_translation_ops - SOEM 后端数据转换回调表
@@ -46,19 +44,26 @@ static const struct backend_ops soem_ops = {
  * @backend: 后端实例指针
  *
  * 当前实现固定装配 SOEM 后端。
+ * 每次调用分配独立的 SOEM 后端上下文，由 backend_close 释放。
  *
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_init(struct backend_instance *backend)
 {
+	struct soem_backend_context *context;
+
 	if (!backend) {
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
-	memset(&s_soem_context, 0, sizeof(s_soem_context));
+	context = calloc(1, sizeof(*context));
+	if (!context) {
+		return BACKEND_ERROR_NO_MEMORY;
+	}
+
 	backend->name = "soem";
 	backend->ops = &soem_ops;
 	backend->translation_ops = &soem_translation_ops;
-	backend->ctx = &s_soem_context;
+	backend->ctx = context;
 	return BACKEND_ERROR_NONE;
 }

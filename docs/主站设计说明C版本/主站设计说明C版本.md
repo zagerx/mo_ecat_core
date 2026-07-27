@@ -71,6 +71,8 @@ typedef struct ec_master {
 | 故障状态 `FAULT` | 发生严重或连续错误，需复位、释放资源或重新创建 |
 | 受控状态 `CONTROLLED` | 可选扩展：被外部控制器接管后的状态，第一版不实现 |
 
+> 当前实现为五态：`INIT / IDLE / READY / RUNNING / FAULT`；`DEGRADED`、`CONTROLLED` 为预留设计，尚未实现。
+
 约束：
 
 - 主站运行时必须处于上述某一个状态。
