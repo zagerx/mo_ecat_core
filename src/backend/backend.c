@@ -21,6 +21,9 @@ enum backend_error backend_open(struct backend_instance *backend,
 	if (!backend || !backend->ops || !backend->ops->open) {
 		return BACKEND_ERROR_NOT_READY;
 	}
+	if (!config) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
 
 	return backend->ops->open(backend, config);
 }

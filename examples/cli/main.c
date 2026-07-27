@@ -76,8 +76,8 @@ int main(int argc, char *argv[])
 	printf("Starting EtherCAT CLI on interface: %s\n", s_master_config.interface_name);
 	printf("Type 'help' for commands.\n");
 
-	g_master = mo_ecat_master_create(&s_master_config, NULL, NULL);
-	if (!g_master) {
+	g_master = mo_ecat_master_create(NULL, NULL);
+	if (!g_master || mo_ecat_master_binding(g_master, &s_master_config) != 0) {
 		fprintf(stderr, "Failed to create master\n");
 		return -1;
 	}

@@ -23,12 +23,12 @@ struct mo_ecat_master;
  * @MO_ECAT_NODE_AL_STATE_UNKNOWN:    未知或无法识别
  */
 enum mo_ecat_node_al_state {
-    MO_ECAT_NODE_AL_STATE_INIT,
-    MO_ECAT_NODE_AL_STATE_PRE_OP,
-    MO_ECAT_NODE_AL_STATE_SAFE_OP,
-    MO_ECAT_NODE_AL_STATE_OP,
-    MO_ECAT_NODE_AL_STATE_BOOTSTRAP,
-    MO_ECAT_NODE_AL_STATE_UNKNOWN
+	MO_ECAT_NODE_AL_STATE_INIT,
+	MO_ECAT_NODE_AL_STATE_PRE_OP,
+	MO_ECAT_NODE_AL_STATE_SAFE_OP,
+	MO_ECAT_NODE_AL_STATE_OP,
+	MO_ECAT_NODE_AL_STATE_BOOTSTRAP,
+	MO_ECAT_NODE_AL_STATE_UNKNOWN
 };
 
 /**
@@ -40,11 +40,11 @@ enum mo_ecat_node_al_state {
  * @is_operational:  是否处于 OP 状态
  */
 struct mo_ecat_node_state {
-    enum mo_ecat_node_al_state al_state;
-    int has_error;
-    uint16_t al_status_code;
-    int is_online;
-    int is_operational;
+	enum mo_ecat_node_al_state al_state;
+	int has_error;
+	uint16_t al_status_code;
+	int is_online;
+	int is_operational;
 };
 
 /**
@@ -61,20 +61,20 @@ struct mo_ecat_node_state {
  * 由 mo_ecat_master_get_node_info() 复制返回，避免向应用层暴露内部数组指针。
  */
 struct mo_ecat_node_info {
-    uint16_t position;
-    uint16_t alias;
-    uint32_t vendor_id;
-    uint32_t product_code;
-    uint32_t revision_number;
-    char name[MO_ECAT_MAX_NAME_LEN + 1];
-    int dc_supported;
-    struct mo_ecat_node_state state;
+	uint16_t position;
+	uint16_t alias;
+	uint32_t vendor_id;
+	uint32_t product_code;
+	uint32_t revision_number;
+	char name[MO_ECAT_MAX_NAME_LEN + 1];
+	int dc_supported;
+	struct mo_ecat_node_state state;
 };
 
 size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master);
 
-int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
-                                 size_t index, struct mo_ecat_node_info *info);
+int mo_ecat_master_get_node_info(const struct mo_ecat_master *master, size_t index,
+				 struct mo_ecat_node_info *info);
 
 #ifdef __cplusplus
 }

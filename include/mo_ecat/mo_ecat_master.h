@@ -59,19 +59,28 @@ enum mo_ecat_master_error {
 
 /**
  * mo_ecat_master_create - 创建主站对象
- * @config: 主站配置指针，由调用方持有；主站不复制内容，
- *          配置对象必须比主站存活更久
  * @callback: 周期控制回调，仅在 RUNNING 状态下每个周期调用
  * @user_data: 用户私有数据，随周期回调传回
  *
- * 实例数量不受限制；每个实例持有独立的状态与后端上下文，
- * 通常一个实例绑定一块网卡。
+ * 实例数量不受限制；每个实例持有独立的状态与后端上下文。
+ * 创建后必须通过 mo_ecat_master_binding() 绑定主站配置，
+ * 未绑定配置的主站无法接受 SCAN 命令。
  *
  * Return: 成功返回主站对象指针，失败返回 NULL
  */
-struct mo_ecat_master *mo_ecat_master_create(const struct mo_ecat_master_config *config,
-                                              mo_ecat_cyclic_callback callback,
-                                              void *user_data);
+struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
+                                             void *user_data);
+
+/**
+ * mo_ecat_master_binding - 绑定主站配置
+ * @master: 主站对象指针
+ * @config: 主站配置指针（含EtherCAT网口），由调用方持有并保证唯一；
+ *          主站不复制内容，配置对象必须比主站存活更久
+ *
+ * Return: 0 成功，非 0 失败
+ */
+int mo_ecat_master_binding(struct mo_ecat_master *master,
+                           const struct mo_ecat_master_config *config);
 
 void mo_ecat_master_destroy(struct mo_ecat_master *master);
 
