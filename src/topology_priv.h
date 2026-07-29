@@ -32,19 +32,29 @@
 #define MASTER_MAX_FMMU        4
 
 /**
- * struct master_slave_pdo_entry - 从站 PDO entry 扫描缓存
- * @pdo_index: PDO 索引
+ * struct pdo_entry - PDO 映射条目的固有描述
  * @object_index: 映射对象索引
  * @object_subindex: 映射对象子索引
  * @bit_length: 位长度
  * @direction: 方向（输入/输出）
  */
-struct master_slave_pdo_entry {
-	uint16_t pdo_index;
+struct pdo_entry {
 	uint16_t object_index;
 	uint8_t object_subindex;
 	uint8_t bit_length;
 	enum mo_ecat_cyclic_direction direction;
+};
+
+/**
+ * struct slave_pdo_entry - 单个从站扫描得到的 PDO entry
+ * @pdo_index: entry 所属 PDO 的对象索引
+ * @pdo_subindex: entry 在 PDO 映射对象中的子索引
+ * @entry: PDO 映射条目的固有描述
+ */
+struct slave_pdo_entry {
+	uint16_t pdo_index;
+	uint8_t pdo_subindex;
+	struct pdo_entry entry;
 };
 
 /**
@@ -133,7 +143,7 @@ struct master_slave_base_info {
 struct master_slave {
 	struct master_slave_base_info base_info;
 	struct mo_ecat_node_state state;
-	struct master_slave_pdo_entry pdo_entries[MASTER_MAX_PDO_ENTRIES];
+	struct slave_pdo_entry pdo_entries[MASTER_MAX_PDO_ENTRIES];
 	size_t pdo_entry_count;
 };
 

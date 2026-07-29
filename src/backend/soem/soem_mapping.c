@@ -80,7 +80,7 @@ static enum backend_error soem_read_pdo_assignment(
 
 		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count; ++entry_subindex) {
 			uint32_t mapping = 0;
-			struct master_slave_pdo_entry *entry;
+			struct slave_pdo_entry *entry;
 
 			if (slave->pdo_entry_count >= MASTER_MAX_PDO_ENTRIES) {
 				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
@@ -95,10 +95,11 @@ static enum backend_error soem_read_pdo_assignment(
 			mapping = etohl(mapping);
 			entry = &slave->pdo_entries[slave->pdo_entry_count++];
 			entry->pdo_index = pdo_index;
-			entry->object_index = (uint16_t)(mapping >> 16);
-			entry->object_subindex = (uint8_t)(mapping >> 8);
-			entry->bit_length = (uint8_t)mapping;
-			entry->direction = direction;
+			entry->pdo_subindex = entry_subindex;
+			entry->entry.object_index = (uint16_t)(mapping >> 16);
+			entry->entry.object_subindex = (uint8_t)(mapping >> 8);
+			entry->entry.bit_length = (uint8_t)mapping;
+			entry->entry.direction = direction;
 		}
 	}
 

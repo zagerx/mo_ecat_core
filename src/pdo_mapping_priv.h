@@ -20,7 +20,7 @@
  * 后端使用。
  */
 struct master_pdo_entry_mapping {
-	struct mo_ecat_cyclic_entry entry;
+	struct mo_ecat_pdo_entry entry;
 	uint32_t byte_offset;
 	uint8_t bit_offset;
 	uint32_t generation;

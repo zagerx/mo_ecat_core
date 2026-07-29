@@ -112,7 +112,7 @@ size_t mo_ecat_master_get_cyclic_entry_count(const struct mo_ecat_master *master
 int mo_ecat_master_get_cyclic_entry(
 	const struct mo_ecat_master *master,
 	size_t index,
-	struct mo_ecat_cyclic_entry *entry)
+	struct mo_ecat_pdo_entry *entry)
 {
 	if (!master || !entry) {
 		return -1;
@@ -134,7 +134,7 @@ int mo_ecat_master_get_cyclic_entry(
  * Return: 成功返回映射指针，失败返回 NULL
  */
 static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
-    const struct mo_ecat_master *master, const struct mo_ecat_cyclic_entry *entry)
+    const struct mo_ecat_master *master, const struct mo_ecat_pdo_entry *entry)
 {
 	const struct master_pdo_entry_mapping *mapping;
 
@@ -167,7 +167,7 @@ static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
  * Return: 成功返回数据指针，失败返回 NULL
  */
 const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
-				 const struct mo_ecat_cyclic_entry *entry)
+				 const struct mo_ecat_pdo_entry *entry)
 {
 	const struct master_pdo_entry_mapping *mapping;
 	const void *data;
@@ -194,7 +194,7 @@ const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
  * Return: 成功返回可写数据指针，失败返回 NULL
  */
 void *mo_ecat_cyclic_output(struct mo_ecat_master *master,
-			    const struct mo_ecat_cyclic_entry *entry)
+			    const struct mo_ecat_pdo_entry *entry)
 {
 	const struct master_pdo_entry_mapping *mapping;
 	void *data;
@@ -240,7 +240,7 @@ static void *cyclic_handle_resolve(const struct mo_ecat_master *master,
 }
 
 int mo_ecat_cyclic_bind(struct mo_ecat_master *master,
-			const struct mo_ecat_cyclic_entry *entry,
+			const struct mo_ecat_pdo_entry *entry,
 			struct mo_ecat_cyclic_handle *handle)
 {
 	const struct master_pdo_entry_mapping *mapping;

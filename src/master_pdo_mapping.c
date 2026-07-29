@@ -25,6 +25,25 @@ static void master_pdo_entry_mappings_set_generation(
 }
 
 /**
+ * master_pdo_entry_export - 将从站私有扫描条目转换为公开 PDO entry
+ * @destination: 公开 PDO entry 输出
+ * @source: 从站私有扫描条目
+ * @entry_id: Master 全局 entry 标识
+ * @node_index: entry 所属拓扑节点下标
+ */
+static void master_pdo_entry_export(struct mo_ecat_pdo_entry *destination,
+				    const struct pdo_entry *source, uint32_t entry_id,
+				    size_t node_index)
+{
+	destination->entry_id = entry_id;
+	destination->node_index = node_index;
+	destination->object_index = source->object_index;
+	destination->object_subindex = source->object_subindex;
+	destination->bit_length = source->bit_length;
+	destination->direction = source->direction;
+}
+
+/**
  * master_pdo_entry_mappings_build - 根据拓扑信息构建 PDO entry 逻辑映射
  * @master: 主站对象指针
  * @entries: PDO entry 映射输出数组，已由调用者分配
@@ -41,15 +60,10 @@ static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
 		const struct master_slave *slave = &master->topology.slaves[i];
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
-			const struct master_slave_pdo_entry *entry = &slave->pdo_entries[j];
+			const struct slave_pdo_entry *entry = &slave->pdo_entries[j];
 			struct master_pdo_entry_mapping *mapping = &entries[index];
 
-			mapping->entry.entry_id = (uint32_t)index;
-			mapping->entry.node_index = i;
-			mapping->entry.object_index = entry->object_index;
-			mapping->entry.object_subindex = entry->object_subindex;
-			mapping->entry.bit_length = entry->bit_length;
-			mapping->entry.direction = entry->direction;
+			master_pdo_entry_export(&mapping->entry, &entry->entry, (uint32_t)index, i);
 			++index;
 		}
 	}

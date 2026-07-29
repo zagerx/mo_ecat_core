@@ -36,7 +36,7 @@ typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
                                         void *user_data);
 
 /**
- * struct mo_ecat_cyclic_entry - 单个周期数据项的逻辑描述
+ * struct mo_ecat_pdo_entry - Master 公开的单个 PDO entry 逻辑描述
  * @entry_id:       核心分配的周期数据项标识；不可由应用自行构造
  * @node_index:     节点在主站拓扑数组中的下标，不是 EtherCAT 站地址
  * @object_index:   CoE 对象字典索引
@@ -47,7 +47,7 @@ typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
  * 该结构标识一个节点 CoE 对象字典条目。其在周期数据区域内的物理偏移由
  * 核心层保存，应用层不直接访问。
  */
-struct mo_ecat_cyclic_entry {
+struct mo_ecat_pdo_entry {
     uint32_t entry_id;
     size_t node_index;
     uint16_t object_index;
@@ -61,13 +61,13 @@ size_t mo_ecat_master_get_cyclic_entry_count(const struct mo_ecat_master *master
 int mo_ecat_master_get_cyclic_entry(
     const struct mo_ecat_master *master,
     size_t index,
-    struct mo_ecat_cyclic_entry *entry);
+    struct mo_ecat_pdo_entry *entry);
 
 const void *mo_ecat_cyclic_input(const struct mo_ecat_master *master,
-                                 const struct mo_ecat_cyclic_entry *entry);
+                                 const struct mo_ecat_pdo_entry *entry);
 
 void *mo_ecat_cyclic_output(struct mo_ecat_master *master,
-                            const struct mo_ecat_cyclic_entry *entry);
+                            const struct mo_ecat_pdo_entry *entry);
 
 /**
  * struct mo_ecat_cyclic_handle - 已绑定的周期数据访问句柄
@@ -99,7 +99,7 @@ struct mo_ecat_cyclic_handle {
  * Return: 0 成功，非 0 失败
  */
 int mo_ecat_cyclic_bind(struct mo_ecat_master *master,
-                        const struct mo_ecat_cyclic_entry *entry,
+                        const struct mo_ecat_pdo_entry *entry,
                         struct mo_ecat_cyclic_handle *handle);
 
 /**

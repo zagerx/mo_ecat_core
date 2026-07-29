@@ -115,7 +115,7 @@ void print_cyclic_entry(struct mo_ecat_master *master, size_t idx)
 		return;
 	}
 
-	struct mo_ecat_cyclic_entry entry;
+	struct mo_ecat_pdo_entry entry;
 	if (mo_ecat_master_get_cyclic_entry(master, idx, &entry) < 0) {
 		printf("Cyclic entry index out of range (count=%zu)\n", count);
 		return;
