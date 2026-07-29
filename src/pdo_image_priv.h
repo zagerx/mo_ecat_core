@@ -11,7 +11,7 @@
 #include <stdint.h>
 
 /**
- * struct master_pdo_image - 主站 PDO 过程数据映像（Process Data Image）
+ * struct pdo_image - PDO 过程数据映像（Process Data Image）
  * @memory: 适配层持有的 PDO 数据内存起始地址
  * @size: PDO 数据内存总字节数
  *
@@ -19,7 +19,7 @@
  * memory 指向一片连续内存，按 PDO 映射顺序包含所有从站的
  * 输入/输出过程数据；size 为该片内存的总字节数。
  */
-struct master_pdo_image {
+struct pdo_image {
     uint8_t *memory;
     size_t size;
 };

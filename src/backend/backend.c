@@ -118,7 +118,7 @@ enum backend_error backend_configure_dc(struct backend_instance *backend)
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_build_pdo_mapping(struct backend_instance *backend,
-					     struct pdo_entry_mapping *entries,
+					     struct pdo_image_entry *entries,
 					     size_t entry_count)
 {
 	if (!backend || !backend->ops || !backend->ops->build_pdo_mapping) {
@@ -140,7 +140,7 @@ enum backend_error backend_build_pdo_mapping(struct backend_instance *backend,
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_get_pdo_image(struct backend_instance *backend,
-					struct master_pdo_image *image)
+					struct pdo_image *image)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->get_pdo_image) {

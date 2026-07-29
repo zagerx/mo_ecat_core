@@ -80,7 +80,7 @@ static enum backend_error soem_read_pdo_assignment(
 
 		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count; ++entry_subindex) {
 			uint32_t mapping = 0;
-			struct slave_pdo_entry *entry;
+			struct pdo_entry *entry;
 
 			if (slave->pdo_entry_count >= SLAVE_MAX_PDO_ENTRIES) {
 				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
@@ -94,12 +94,10 @@ static enum backend_error soem_read_pdo_assignment(
 
 			mapping = etohl(mapping);
 			entry = &slave->pdo_entries[slave->pdo_entry_count++];
-			entry->pdo_index = pdo_index;
-			entry->pdo_subindex = entry_subindex;
-			entry->entry.object_index = (uint16_t)(mapping >> 16);
-			entry->entry.object_subindex = (uint8_t)(mapping >> 8);
-			entry->entry.bit_length = (uint8_t)mapping;
-			entry->entry.direction = direction;
+			entry->object_index = (uint16_t)(mapping >> 16);
+			entry->object_subindex = (uint8_t)(mapping >> 8);
+			entry->bit_length = (uint8_t)mapping;
+			entry->direction = direction;
 		}
 	}
 
@@ -189,7 +187,7 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
  * Return: 0 成功，非 0 失败
  */
 static enum backend_error soem_resolve_pdo_entry_offsets(
-	struct soem_backend_context *context, struct pdo_entry_mapping *entries,
+	struct soem_backend_context *context, struct pdo_image_entry *entries,
 	size_t entry_count)
 {
 	uint32_t *used_output_bits = NULL;
@@ -214,7 +212,7 @@ static enum backend_error soem_resolve_pdo_entry_offsets(
 	}
 
 	for (size_t i = 0; i < entry_count; ++i) {
-		struct pdo_entry_mapping *mapping = &entries[i];
+		struct pdo_image_entry *entry = &entries[i];
 		const ec_slavet *slave;
 		uint32_t *used_bits;
 		uint32_t available_bits;
@@ -222,31 +220,31 @@ static enum backend_error soem_resolve_pdo_entry_offsets(
 		size_t start_bit;
 		size_t end_bit;
 
-		if (mapping->entry.slave_index >= (size_t)slave_count) {
+		if (entry->record.slave_index >= (size_t)slave_count) {
 			goto cleanup;
 		}
-		slave = &context->context.slavelist[mapping->entry.slave_index + 1];
-		if (mapping->entry.direction == MO_ECAT_PDO_OUTPUT) {
-			used_bits = &used_output_bits[mapping->entry.slave_index];
+		slave = &context->context.slavelist[entry->record.slave_index + 1];
+		if (entry->record.spec.direction == MO_ECAT_PDO_OUTPUT) {
+			used_bits = &used_output_bits[entry->record.slave_index];
 			available_bits = slave->Obits;
 			base = slave->outputs;
 		} else {
-			used_bits = &used_input_bits[mapping->entry.slave_index];
+			used_bits = &used_input_bits[entry->record.slave_index];
 			available_bits = slave->Ibits;
 			base = slave->inputs;
 		}
-		if (!base || (*used_bits + mapping->entry.bit_length) > available_bits) {
+		if (!base || (*used_bits + entry->record.spec.bit_length) > available_bits) {
 			goto cleanup;
 		}
 
-		mapping->byte_offset = (uint32_t)(base - context->iomap) + (*used_bits / 8);
-		mapping->bit_offset = (uint8_t)(*used_bits % 8);
-		start_bit = (size_t)mapping->byte_offset * 8U + mapping->bit_offset;
-		end_bit = start_bit + mapping->entry.bit_length;
+		entry->byte_offset = (uint32_t)(base - context->iomap) + (*used_bits / 8);
+		entry->bit_offset = (uint8_t)(*used_bits % 8);
+		start_bit = (size_t)entry->byte_offset * 8U + entry->bit_offset;
+		end_bit = start_bit + entry->record.spec.bit_length;
 		if (end_bit < start_bit || end_bit > context->pdo_image_size * 8U) {
 			goto cleanup;
 		}
-		*used_bits += mapping->entry.bit_length;
+		*used_bits += entry->record.spec.bit_length;
 	}
 
 	result = BACKEND_ERROR_NONE;
@@ -267,7 +265,7 @@ cleanup:
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
-						   struct pdo_entry_mapping *entries, size_t entry_count)
+						   struct pdo_image_entry *entries, size_t entry_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	enum backend_error error;
@@ -307,7 +305,7 @@ enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backe
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_get_pdo_image(struct backend_instance *backend,
-					      struct master_pdo_image *image)
+					      struct pdo_image *image)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 

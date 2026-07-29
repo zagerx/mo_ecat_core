@@ -20,10 +20,10 @@
 #include "master_states.h"
 #include "master_resources.h"
 #include "master_topology.h"
-#include "master_pdo_mapping.h"
+#include "master_pdo_layout.h"
 #include "master_error.h"
 #include "pdo_image_priv.h"
-#include "pdo_mapping_priv.h"
+#include "pdo_image_entry_priv.h"
 #include "topology_priv.h"
 
 #ifdef __cplusplus
@@ -43,19 +43,19 @@ struct master_topology {
 };
 
 /**
- * struct master_pdo_mapping - PDO 映射管理
+ * struct pdo_image_layout - PDO 数据映像布局
  * @image: PDO 数据区域
- * @entry_mappings: PDO entry 内部映射数组；每个元素保存逻辑描述、
- *                  IOmap 字节/位偏移和所属映射代际
+ * @entries: PDO 映像条目数组；每个元素保存条目记录、数据映像字节/位偏移
+ *           和所属布局代际
  * @entry_count: PDO entry 映射数量
  * @generation: 当前映射版本
  * @is_active: 是否允许周期读写
  *
  * 保存主站 PDO 数据区域、所有 PDO entry 的地址映射以及映射运行状态。
  */
-struct master_pdo_mapping {
-	struct master_pdo_image image;
-	struct pdo_entry_mapping *entry_mappings;
+struct pdo_image_layout {
+	struct pdo_image image;
+	struct pdo_image_entry *entries;
 	size_t entry_count;
 	uint32_t generation;
 	int is_active;
@@ -69,7 +69,7 @@ struct master_pdo_mapping {
  * @error_code: 向外发布的故障码
  * @backend: 后端实例
  * @config: 主站配置指针，由应用层持有；核心层只读引用，不复制不拥有
- * @pdo_mapping: 主站 PDO 映射
+ * @pdo_layout: 主站 PDO 数据映像布局
  * @topology: 从站拓扑
  * @user_data: 用户私有数据
  * @cyclic_callback: 周期控制回调，仅在 RUNNING 调用
@@ -83,7 +83,7 @@ struct mo_ecat_master {
 	struct master_error_record last_error;
 	struct backend_instance backend;
 	const struct mo_ecat_master_config *config;
-	struct master_pdo_mapping pdo_mapping;
+	struct pdo_image_layout pdo_layout;
 	struct master_topology topology;
 
 	void *user_data;

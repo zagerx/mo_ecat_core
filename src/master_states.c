@@ -110,7 +110,7 @@ void master_state_idle(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_IDLE);
-			master->pdo_mapping.is_active = 0;
+			master->pdo_layout.is_active = 0;
 		}
 		sm->phase = MASTER_PHASE_START;
 		break;
@@ -205,7 +205,7 @@ void master_state_idle(struct statemachine *sm)
 	case MASTER_PHASE_BUILD_PDO_MAPPING:
 		/* 后端建立 PDO 数据区域并回填所有 PDO entry 的地址偏移。 */
 		{
-			error = master_pdo_mapping_build(master);
+			error = master_pdo_layout_build(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_idle_fail(
 					sm, master,
@@ -243,7 +243,7 @@ void master_state_ready(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_READY);
-			master->pdo_mapping.is_active = 0;
+			master->pdo_layout.is_active = 0;
 		}
 		sm->phase = SM_PHASE_START;
 		break;
@@ -256,7 +256,7 @@ void master_state_ready(struct statemachine *sm)
 			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
 		} else if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
-			error = master_pdo_mapping_activate(master);
+			error = master_pdo_layout_activate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
 				master_resources_release(master);
@@ -305,7 +305,7 @@ void master_state_running(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_DEACTIVATE) {
-			error = master_pdo_mapping_deactivate(master);
+			error = master_pdo_layout_deactivate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 				master_resources_release(master);
@@ -361,7 +361,7 @@ void master_state_fault(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_FAULT);
-			master->pdo_mapping.is_active = 0;
+			master->pdo_layout.is_active = 0;
 		}
 		sm->phase = SM_PHASE_START;
 		break;

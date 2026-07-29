@@ -10,27 +10,41 @@
 #include "master_priv.h"
 
 /**
- * pdo_entry_mapping_in_bounds - 检查 PDO entry 映射是否在数据映像范围内
+ * pdo_entry_equal - 比较两个 PDO entry 最小规格是否相同
+ * @left: 左侧 PDO entry 规格
+ * @right: 右侧 PDO entry 规格
+ *
+ * Return: 所有协议字段相同返回非 0，否则返回 0
+ */
+static int pdo_entry_equal(const struct pdo_entry *left, const struct pdo_entry *right)
+{
+	return left && right && left->object_index == right->object_index &&
+	       left->object_subindex == right->object_subindex &&
+	       left->bit_length == right->bit_length && left->direction == right->direction;
+}
+
+/**
+ * pdo_image_entry_in_bounds - 检查 PDO 映像条目是否在数据映像范围内
  * @image: PDO 数据映像
- * @mapping: PDO entry 物理映射
+ * @entry: PDO 映像条目
  *
  * Return: 在范围内返回非 0，否则返回 0
  */
-static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
-				       const struct pdo_entry_mapping *mapping)
+static int pdo_image_entry_in_bounds(const struct pdo_image *image,
+				     const struct pdo_image_entry *entry)
 {
 	size_t image_bits;
 	size_t start_bit;
 	size_t end_bit;
 
-	if (!image || !mapping || !image->memory || mapping->entry.bit_length == 0 ||
-	    mapping->byte_offset >= image->size) {
+	if (!image || !entry || !image->memory || entry->record.spec.bit_length == 0 ||
+	    entry->byte_offset >= image->size) {
 		return 0;
 	}
 
 	image_bits = image->size * 8U;
-	start_bit = (size_t)mapping->byte_offset * 8U + mapping->bit_offset;
-	end_bit = start_bit + mapping->entry.bit_length;
+	start_bit = (size_t)entry->byte_offset * 8U + entry->bit_offset;
+	end_bit = start_bit + entry->record.spec.bit_length;
 	return end_bit >= start_bit && end_bit <= image_bits;
 }
 
@@ -42,7 +56,7 @@ static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
  * Return: 0 成功，非 0 失败
  */
 enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
-							struct mo_ecat_cyclic_result *result)
+					       struct mo_ecat_cyclic_result *result)
 {
 	enum backend_error error;
 
@@ -50,7 +64,7 @@ enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
 		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
-	if (!master->pdo_mapping.is_active) {
+	if (!master->pdo_layout.is_active) {
 		return MASTER_ERROR_INVALID_STATE;
 	}
 
@@ -67,7 +81,7 @@ enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
  * Return: 0 成功，非 0 失败
  */
 enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
-						 struct mo_ecat_cyclic_result *result)
+					    struct mo_ecat_cyclic_result *result)
 {
 	enum backend_error error;
 
@@ -75,7 +89,7 @@ enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
 		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
-	if (!master->pdo_mapping.is_active) {
+	if (!master->pdo_layout.is_active) {
 		return MASTER_ERROR_INVALID_STATE;
 	}
 
@@ -97,7 +111,7 @@ size_t mo_ecat_master_get_pdo_entry_count(const struct mo_ecat_master *master)
 		return 0;
 	}
 
-	count = master->pdo_mapping.entry_count;
+	count = master->pdo_layout.entry_count;
 	return count;
 }
 
@@ -105,111 +119,106 @@ size_t mo_ecat_master_get_pdo_entry_count(const struct mo_ecat_master *master)
  * mo_ecat_master_get_pdo_entry - 获取指定 PDO entry 逻辑描述
  * @master: 主站对象指针
  * @index: PDO entry 索引
- * @entry: PDO entry 输出缓冲区
+ * @record: PDO entry 记录输出缓冲区
  *
  * Return: 0 成功，非 0 失败
  */
-int mo_ecat_master_get_pdo_entry(
-	const struct mo_ecat_master *master,
-	size_t index,
-	struct mo_ecat_pdo_entry *entry)
+int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t index,
+				 struct pdo_entry_record *record)
 {
-	if (!master || !entry) {
+	if (!master || !record) {
 		return -1;
 	}
 
-	if (index >= master->pdo_mapping.entry_count) {
+	if (index >= master->pdo_layout.entry_count) {
 		return -1;
 	}
 
-	*entry = master->pdo_mapping.entry_mappings[index].entry;
+	*record = master->pdo_layout.entries[index].record;
 	return 0;
 }
 
 /**
- * master_resolve_pdo_entry_mapping - 根据逻辑 entry 解析物理映射
+ * master_resolve_pdo_image_entry - 根据 PDO 记录解析数据映像条目
  * @master: 主站对象指针
- * @entry: PDO entry 逻辑描述
+ * @record: Master 发现的 PDO entry 记录
  *
  * Return: 成功返回映射指针，失败返回 NULL
  */
-static const struct pdo_entry_mapping *master_resolve_pdo_entry_mapping(
-    const struct mo_ecat_master *master, const struct mo_ecat_pdo_entry *entry)
+static const struct pdo_image_entry *
+master_resolve_pdo_image_entry(const struct mo_ecat_master *master,
+			       const struct pdo_entry_record *record)
 {
-	const struct pdo_entry_mapping *mapping;
+	const struct pdo_image_entry *entry;
 
-	if (!master || !entry) {
+	if (!master || !record) {
 		return NULL;
 	}
 
-	if ((size_t)entry->entry_id >= master->pdo_mapping.entry_count) {
+	if ((size_t)record->entry_id >= master->pdo_layout.entry_count) {
 		return NULL;
 	}
 
-	mapping = &master->pdo_mapping.entry_mappings[entry->entry_id];
-	if (mapping->entry.entry_id != entry->entry_id ||
-	    mapping->entry.slave_index != entry->slave_index ||
-	    mapping->entry.object_index != entry->object_index ||
-	    mapping->entry.object_subindex != entry->object_subindex ||
-	    mapping->entry.bit_length != entry->bit_length ||
-	    mapping->entry.direction != entry->direction) {
+	entry = &master->pdo_layout.entries[record->entry_id];
+	if (entry->record.entry_id != record->entry_id ||
+	    entry->record.slave_index != record->slave_index ||
+	    !pdo_entry_equal(&entry->record.spec, &record->spec)) {
 		return NULL;
 	}
 
-	return mapping;
+	return entry;
 }
 
 /**
  * mo_ecat_pdo_input - 获取输入 PDO entry 数据指针
  * @master: 主站对象指针
- * @entry: PDO entry 逻辑描述
+ * @record: Master 发现的 PDO entry 记录
  *
  * Return: 成功返回数据指针，失败返回 NULL
  */
 const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
-				 const struct mo_ecat_pdo_entry *entry)
+			      const struct pdo_entry_record *record)
 {
-	const struct pdo_entry_mapping *mapping;
+	const struct pdo_image_entry *entry;
 	const void *data;
 
-	if (!master || !entry || entry->direction != MO_ECAT_PDO_INPUT) {
+	if (!master || !record || record->spec.direction != MO_ECAT_PDO_INPUT) {
 		return NULL;
 	}
-	mapping = master_resolve_pdo_entry_mapping(master, entry);
+	entry = master_resolve_pdo_image_entry(master, record);
 
-	if (!mapping || mapping->generation != master->pdo_mapping.generation ||
-	    !pdo_entry_mapping_in_bounds(&master->pdo_mapping.image, mapping)) {
+	if (!entry || entry->generation != master->pdo_layout.generation ||
+	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
 		return NULL;
 	}
 
-	data = &master->pdo_mapping.image.memory[mapping->byte_offset];
+	data = &master->pdo_layout.image.memory[entry->byte_offset];
 	return data;
 }
 
 /**
  * mo_ecat_pdo_output - 获取输出 PDO entry 数据指针
  * @master: 主站对象指针
- * @entry: PDO entry 逻辑描述
+ * @record: Master 发现的 PDO entry 记录
  *
  * Return: 成功返回可写数据指针，失败返回 NULL
  */
-void *mo_ecat_pdo_output(struct mo_ecat_master *master,
-			    const struct mo_ecat_pdo_entry *entry)
+void *mo_ecat_pdo_output(struct mo_ecat_master *master, const struct pdo_entry_record *record)
 {
-	const struct pdo_entry_mapping *mapping;
+	const struct pdo_image_entry *entry;
 	void *data;
 
-	if (!master || !entry || entry->direction != MO_ECAT_PDO_OUTPUT) {
+	if (!master || !record || record->spec.direction != MO_ECAT_PDO_OUTPUT) {
 		return NULL;
 	}
-	mapping = master_resolve_pdo_entry_mapping(master, entry);
+	entry = master_resolve_pdo_image_entry(master, record);
 
-	if (!mapping || mapping->generation != master->pdo_mapping.generation ||
-	    !pdo_entry_mapping_in_bounds(&master->pdo_mapping.image, mapping)) {
+	if (!entry || entry->generation != master->pdo_layout.generation ||
+	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
 		return NULL;
 	}
 
-	data = &master->pdo_mapping.image.memory[mapping->byte_offset];
+	data = &master->pdo_layout.image.memory[entry->byte_offset];
 	return data;
 }
 
@@ -227,49 +236,45 @@ static void *pdo_handle_resolve(const struct mo_ecat_master *master,
 				const struct mo_ecat_pdo_handle *handle,
 				enum mo_ecat_pdo_direction direction)
 {
-	if (!master || !handle || !handle->data ||
-	    handle->generation == 0U ||
-	    handle->generation != master->pdo_mapping.generation ||
-	    handle->direction != (uint8_t)direction ||
-	    !master->pdo_mapping.image.memory ||
-	    !master->pdo_mapping.is_active) {
+	if (!master || !handle || !handle->data || handle->generation == 0U ||
+	    handle->generation != master->pdo_layout.generation ||
+	    handle->direction != (uint8_t)direction || !master->pdo_layout.image.memory ||
+	    !master->pdo_layout.is_active) {
 		return NULL;
 	}
 
 	return handle->data;
 }
 
-int mo_ecat_pdo_bind(struct mo_ecat_master *master,
-			const struct mo_ecat_pdo_entry *entry,
-			struct mo_ecat_pdo_handle *handle)
+int mo_ecat_pdo_bind(struct mo_ecat_master *master, const struct pdo_entry_record *record,
+		     struct mo_ecat_pdo_handle *handle)
 {
-	const struct pdo_entry_mapping *mapping;
+	const struct pdo_image_entry *entry;
 
-	if (!master || !entry || !handle) {
+	if (!master || !record || !handle) {
 		return -1;
 	}
-	mapping = master_resolve_pdo_entry_mapping(master, entry);
-	if (!mapping || mapping->generation != master->pdo_mapping.generation ||
-	    !pdo_entry_mapping_in_bounds(&master->pdo_mapping.image, mapping)) {
+	entry = master_resolve_pdo_image_entry(master, record);
+	if (!entry || entry->generation != master->pdo_layout.generation ||
+	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
 		return -1;
 	}
 
-	handle->data = &master->pdo_mapping.image.memory[mapping->byte_offset];
-	handle->generation = mapping->generation;
-	handle->bit_length = mapping->entry.bit_length;
-	handle->bit_offset = mapping->bit_offset;
-	handle->direction = (uint8_t)mapping->entry.direction;
+	handle->data = &master->pdo_layout.image.memory[entry->byte_offset];
+	handle->generation = entry->generation;
+	handle->bit_length = entry->record.spec.bit_length;
+	handle->bit_offset = entry->bit_offset;
+	handle->direction = (uint8_t)entry->record.spec.direction;
 	return 0;
 }
 
 const void *mo_ecat_pdo_read(const struct mo_ecat_master *master,
-				const struct mo_ecat_pdo_handle *handle)
+			     const struct mo_ecat_pdo_handle *handle)
 {
 	return pdo_handle_resolve(master, handle, MO_ECAT_PDO_INPUT);
 }
 
-void *mo_ecat_pdo_write(struct mo_ecat_master *master,
-			   const struct mo_ecat_pdo_handle *handle)
+void *mo_ecat_pdo_write(struct mo_ecat_master *master, const struct mo_ecat_pdo_handle *handle)
 {
 	return pdo_handle_resolve(master, handle, MO_ECAT_PDO_OUTPUT);
 }

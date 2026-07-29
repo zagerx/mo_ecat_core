@@ -25,14 +25,14 @@ void master_resources_release(struct mo_ecat_master *master)
 		return;
 	}
 
-	generation = master->pdo_mapping.generation;
+	generation = master->pdo_layout.generation;
 	backend_close(&master->backend);
 
-	free(master->pdo_mapping.entry_mappings);
+	free(master->pdo_layout.entries);
 	free(master->topology.slaves);
 	memset(&master->backend, 0, sizeof(master->backend));
-	memset(&master->pdo_mapping, 0, sizeof(master->pdo_mapping));
-	master->pdo_mapping.generation = generation;
+	memset(&master->pdo_layout, 0, sizeof(master->pdo_layout));
+	master->pdo_layout.generation = generation;
 	master->topology.slaves = NULL;
 	master->topology.slave_count = 0;
 }

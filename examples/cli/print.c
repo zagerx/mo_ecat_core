@@ -115,17 +115,17 @@ void print_pdo_entry(struct mo_ecat_master *master, size_t idx)
 		return;
 	}
 
-	struct mo_ecat_pdo_entry entry;
-	if (mo_ecat_master_get_pdo_entry(master, idx, &entry) < 0) {
+	struct pdo_entry_record record;
+	if (mo_ecat_master_get_pdo_entry(master, idx, &record) < 0) {
 		printf("PDO entry index out of range (count=%zu)\n", count);
 		return;
 	}
-	const char *dir = (entry.direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
+	const char *dir = (record.spec.direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
 
 	printf("PDO entry[%zu]: slave=%zu, object_index=0x%04X, object_subindex=%u, "
 	       "dir=%s, bits=%u\n",
-	       idx, entry.slave_index, entry.object_index, entry.object_subindex,
-	       dir, entry.bit_length);
+	       idx, record.slave_index, record.spec.object_index, record.spec.object_subindex,
+	       dir, record.spec.bit_length);
 }
 
 void print_help(void)
