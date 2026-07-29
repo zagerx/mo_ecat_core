@@ -13,7 +13,7 @@
 #include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_topology.h"
 #include "backend_error.h"
 #include "pdo_image_priv.h"
@@ -28,7 +28,7 @@ extern "C" {
 struct backend_instance;	  /* 后端实例前向声明 */
 struct backend_ops;		  /* 后端生命周期/运行时 ops 前向声明 */
 struct backend_translation_ops;  /* 后端数据转换 ops 前向声明 */
-struct master_slave;		  /* 核心层内部从站缓存 */
+struct slave;		  /* 核心层内部从站缓存 */
 
 /**
  * struct backend_instance - 后端实例
@@ -55,11 +55,11 @@ enum backend_error backend_open(struct backend_instance *backend,
 enum backend_error backend_load_slave_info(struct backend_instance *backend, size_t *slave_count);
 
 enum backend_error backend_translate_slave_info(struct backend_instance *backend,
-					  struct master_slave *slaves,
+					  struct slave *slaves,
 					  size_t slave_count);
 
 enum backend_error backend_read_pdo_entries(struct backend_instance *backend,
-				    struct master_slave *slaves,
+				    struct slave *slaves,
 				    size_t slave_count);
 
 enum backend_error backend_configure_dc(struct backend_instance *backend);
@@ -80,7 +80,7 @@ enum backend_error backend_cyclic_send(struct backend_instance *backend,
 			       struct mo_ecat_cyclic_result *result);
 
 enum backend_error backend_read_all_slave_states(struct backend_instance *backend,
-					 struct master_slave *slaves,
+					 struct slave *slaves,
 					 size_t slave_count);
 
 enum backend_error backend_read_single_slave_state(struct backend_instance *backend,

@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_topology.h"
 
 #ifdef __cplusplus
@@ -40,9 +40,9 @@ void print_diagnostics(struct mo_ecat_master *master);
 void print_robot(const struct robot *robot);
 
 /**
- * @brief 打印单个周期数据项信息
+ * @brief 打印单个 PDO entry 信息
  */
-void print_cyclic_entry(struct mo_ecat_master *master, size_t idx);
+void print_pdo_entry(struct mo_ecat_master *master, size_t idx);
 
 /**
  * @brief 打印命令帮助

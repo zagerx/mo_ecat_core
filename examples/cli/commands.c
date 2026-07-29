@@ -87,13 +87,13 @@ void cmd_topology(void)
 	print_robot(&g_robot);
 }
 
-void cmd_cyclic(const char *arg)
+void cmd_pdo(const char *arg)
 {
 	if (!arg || arg[0] == '\0') {
-		printf("usage: cyclic <idx>\n");
+		printf("usage: pdo <idx>\n");
 		return;
 	}
-	print_cyclic_entry(g_master, (size_t)atoi(arg));
+	print_pdo_entry(g_master, (size_t)atoi(arg));
 }
 
 void cmd_help(void)

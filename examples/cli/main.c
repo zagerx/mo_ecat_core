@@ -126,8 +126,8 @@ int main(int argc, char *argv[])
 			cmd_diag();
 		} else if (strcmp(cmd, "topology") == 0) {
 			cmd_topology();
-		} else if (strcmp(cmd, "cyclic") == 0) {
-			cmd_cyclic(arg);
+		} else if (strcmp(cmd, "pdo") == 0) {
+			cmd_pdo(arg);
 		} else if (strcmp(cmd, "exit") == 0 || strcmp(cmd, "quit") == 0) {
 			break;
 		} else {

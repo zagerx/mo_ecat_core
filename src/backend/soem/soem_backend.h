@@ -48,10 +48,10 @@ enum backend_error soem_backend_load_slave_info(struct backend_instance *backend
 void soem_backend_close(struct backend_instance *backend);
 
 enum backend_error soem_backend_translate_slave_info(struct backend_instance *backend,
-						     struct master_slave *slaves, size_t slave_count);
+						     struct slave *slaves, size_t slave_count);
 
 enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backend,
-					  struct master_slave *slaves, size_t slave_count);
+					  struct slave *slaves, size_t slave_count);
 
 enum backend_error soem_backend_configure_dc(struct backend_instance *backend);
 
@@ -71,7 +71,7 @@ enum backend_error soem_backend_cyclic_send(struct backend_instance *backend,
 					     struct mo_ecat_cyclic_result *result);
 
 enum backend_error soem_backend_read_all_slave_states(struct backend_instance *backend,
-						      struct master_slave *slaves, size_t slave_count);
+						      struct slave *slaves, size_t slave_count);
 
 enum backend_error soem_backend_read_single_slave_state(struct backend_instance *backend,
 							 size_t slave_index,

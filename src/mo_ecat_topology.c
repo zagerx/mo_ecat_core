@@ -38,7 +38,7 @@ size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master)
 int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 				 size_t index, struct mo_ecat_node_info *info)
 {
-	const struct master_slave *slave;
+	const struct slave *slave;
 
 	if (!master || !info) {
 		return -1;

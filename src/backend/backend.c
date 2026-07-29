@@ -53,7 +53,7 @@ enum backend_error backend_load_slave_info(struct backend_instance *backend, siz
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_translate_slave_info(struct backend_instance *backend,
-					struct master_slave *slaves, size_t slave_count)
+					struct slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->translate_slave_info) {
@@ -76,7 +76,7 @@ enum backend_error backend_translate_slave_info(struct backend_instance *backend
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_read_pdo_entries(struct backend_instance *backend,
-					struct master_slave *slaves, size_t slave_count)
+					struct slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->read_pdo_entries) {
@@ -220,7 +220,7 @@ enum backend_error backend_cyclic_send(struct backend_instance *backend,
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_read_all_slave_states(struct backend_instance *backend,
-						 struct master_slave *slaves, size_t slave_count)
+						 struct slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->ops || !backend->ops->read_all_slave_states) {
 		return BACKEND_ERROR_NOT_READY;

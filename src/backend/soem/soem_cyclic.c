@@ -92,7 +92,7 @@ enum backend_error soem_backend_cyclic_send(struct backend_instance *backend,
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_read_all_slave_states(struct backend_instance *backend,
-						      struct master_slave *slaves, size_t slave_count)
+						      struct slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 

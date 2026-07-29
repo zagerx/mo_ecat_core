@@ -26,7 +26,7 @@ static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_
 			 detail == MASTER_ERROR_NO_MEMORY) ?
 				MASTER_ERROR_SOURCE_CORE : MASTER_ERROR_SOURCE_BACKEND;
 		master->last_error.native_code = 0;
-		master->last_error.node_index = SIZE_MAX;
+		master->last_error.slave_index = SIZE_MAX;
 		master->last_error.object_index = 0;
 		master->last_error.object_subindex = 0;
 	}
@@ -169,7 +169,7 @@ void master_state_idle(struct statemachine *sm)
 			&master->backend, master->topology.slaves, master->topology.slave_count));
 		if (error != MASTER_ERROR_NONE) {
 			master_idle_fail(sm, master,
-					 MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED, error);
+					 MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED, error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_WAIT_CONFIGURE;
@@ -209,7 +209,7 @@ void master_state_idle(struct statemachine *sm)
 			if (error != MASTER_ERROR_NONE) {
 				master_idle_fail(
 					sm, master,
-					MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED, error);
+					MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED, error);
 				break;
 			}
 			sm_transition(sm, master_state_ready);

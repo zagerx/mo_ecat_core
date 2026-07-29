@@ -97,7 +97,7 @@ enum backend_error soem_backend_load_slave_info(struct backend_instance *backend
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_translate_slave_info(struct backend_instance *backend,
-						     struct master_slave *slaves, size_t slave_count)
+						     struct slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *backend_context = soem_backend_context_get(backend);
 	ecx_contextt *context;
@@ -109,7 +109,7 @@ enum backend_error soem_backend_translate_slave_info(struct backend_instance *ba
 
 	context = &backend_context->context;
 	for (size_t i = 0; i < slave_count; ++i) {
-		struct master_slave *slave = &slaves[i];
+		struct slave *slave = &slaves[i];
 		const ec_slavet *soem_slave = &context->slavelist[i + 1];
 
 		slave->base_info.position = soem_slave->configadr - EC_NODEOFFSET;

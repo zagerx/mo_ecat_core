@@ -8,7 +8,7 @@
 #include "print.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_topology.h"
-#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 #include "robot.h"
 
 const char *state_name(enum mo_ecat_master_state state)
@@ -107,24 +107,24 @@ void print_robot(const struct robot *robot)
 	}
 }
 
-void print_cyclic_entry(struct mo_ecat_master *master, size_t idx)
+void print_pdo_entry(struct mo_ecat_master *master, size_t idx)
 {
-	size_t count = mo_ecat_master_get_cyclic_entry_count(master);
+	size_t count = mo_ecat_master_get_pdo_entry_count(master);
 	if (idx >= count) {
-		printf("Cyclic entry index out of range (count=%zu)\n", count);
+		printf("PDO entry index out of range (count=%zu)\n", count);
 		return;
 	}
 
 	struct mo_ecat_pdo_entry entry;
-	if (mo_ecat_master_get_cyclic_entry(master, idx, &entry) < 0) {
-		printf("Cyclic entry index out of range (count=%zu)\n", count);
+	if (mo_ecat_master_get_pdo_entry(master, idx, &entry) < 0) {
+		printf("PDO entry index out of range (count=%zu)\n", count);
 		return;
 	}
-	const char *dir = (entry.direction == MO_ECAT_CYCLIC_INPUT) ? "IN" : "OUT";
+	const char *dir = (entry.direction == MO_ECAT_PDO_INPUT) ? "IN" : "OUT";
 
-	printf("Cyclic entry[%zu]: node=%zu, object_index=0x%04X, object_subindex=%u, "
+	printf("PDO entry[%zu]: slave=%zu, object_index=0x%04X, object_subindex=%u, "
 	       "dir=%s, bits=%u\n",
-	       idx, entry.node_index, entry.object_index, entry.object_subindex,
+	       idx, entry.slave_index, entry.object_index, entry.object_subindex,
 	       dir, entry.bit_length);
 }
 
@@ -140,6 +140,6 @@ void print_help(void)
 	       "  reset             release resources and return to IDLE\n"
 	       "  diag              print discovered node information\n"
 	       "  topology          build and print robot\n"
-	       "  cyclic <idx>      print cyclic entry information\n"
+	       "  pdo <idx>         print PDO entry information\n"
 	       "  exit              quit\n");
 }

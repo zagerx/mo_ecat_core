@@ -46,7 +46,7 @@ struct master_error_record {
 	enum master_error_detail detail;
 	enum master_error_source source;
 	int native_code;
-	size_t node_index;
+	size_t slave_index;
 	uint16_t object_index;
 	uint8_t object_subindex;
 };

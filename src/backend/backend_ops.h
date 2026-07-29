@@ -26,11 +26,11 @@ extern "C" {
  */
 struct backend_translation_ops {
     enum backend_error (*translate_slave_info)(struct backend_instance *backend,
-                                   struct master_slave *slaves,
+                                   struct slave *slaves,
                                    size_t slave_count);
 
     enum backend_error (*read_pdo_entries)(struct backend_instance *backend,
-                             struct master_slave *slaves,
+                             struct slave *slaves,
                              size_t slave_count);
 
     enum backend_error (*get_pdo_image)(struct backend_instance *backend,
@@ -74,7 +74,7 @@ struct backend_ops {
                         struct mo_ecat_cyclic_result *result);
 
     enum backend_error (*read_all_slave_states)(struct backend_instance *backend,
-                                  struct master_slave *slaves,
+                                  struct slave *slaves,
                                   size_t slave_count);
 
     enum backend_error (*read_single_slave_state)(struct backend_instance *backend,

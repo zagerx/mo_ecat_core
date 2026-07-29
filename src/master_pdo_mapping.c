@@ -29,14 +29,14 @@ static void master_pdo_entry_mappings_set_generation(
  * @destination: 公开 PDO entry 输出
  * @source: 从站私有扫描条目
  * @entry_id: Master 全局 entry 标识
- * @node_index: entry 所属拓扑节点下标
+ * @slave_index: entry 所属拓扑从站下标
  */
 static void master_pdo_entry_export(struct mo_ecat_pdo_entry *destination,
 				    const struct pdo_entry *source, uint32_t entry_id,
-				    size_t node_index)
+				    size_t slave_index)
 {
 	destination->entry_id = entry_id;
-	destination->node_index = node_index;
+	destination->slave_index = slave_index;
 	destination->object_index = source->object_index;
 	destination->object_subindex = source->object_subindex;
 	destination->bit_length = source->bit_length;
@@ -48,7 +48,7 @@ static void master_pdo_entry_export(struct mo_ecat_pdo_entry *destination,
  * @master: 主站对象指针
  * @entries: PDO entry 映射输出数组，已由调用者分配
  *
- * 遍历所有从站的 PDO entry 扫描缓存，填充逻辑描述（entry_id、node_index、
+ * 遍历所有从站的 PDO entry 扫描缓存，填充逻辑描述（entry_id、slave_index、
  * 对象索引、位长度、方向等）。
  */
 static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
@@ -57,7 +57,7 @@ static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
 	size_t index = 0;
 
 	for (size_t i = 0; i < master->topology.slave_count; ++i) {
-		const struct master_slave *slave = &master->topology.slaves[i];
+		const struct slave *slave = &master->topology.slaves[i];
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
 			const struct slave_pdo_entry *entry = &slave->pdo_entries[j];

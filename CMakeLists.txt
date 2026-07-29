@@ -15,7 +15,7 @@ set(MO_ECAT_CORE_SOURCES
     src/master_error.c
     src/master_topology.c
     src/master_pdo_mapping.c
-    src/mo_ecat_cyclic.c
+    src/mo_ecat_pdo.c
     src/mo_ecat_topology.c
     src/master_states.c
     src/common/statemachine/statemachine.c

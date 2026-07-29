@@ -44,7 +44,7 @@ static enum backend_error soem_check_dc_support(ecx_contextt *context)
  */
 static enum backend_error soem_read_pdo_assignment(
 	ecx_contextt *context, uint16_t slave_number, uint16_t assignment_index,
-	enum mo_ecat_cyclic_direction direction, struct master_slave *slave)
+	enum mo_ecat_pdo_direction direction, struct slave *slave)
 {
 	uint8_t pdo_count = 0;
 	int size = sizeof(pdo_count);
@@ -82,7 +82,7 @@ static enum backend_error soem_read_pdo_assignment(
 			uint32_t mapping = 0;
 			struct slave_pdo_entry *entry;
 
-			if (slave->pdo_entry_count >= MASTER_MAX_PDO_ENTRIES) {
+			if (slave->pdo_entry_count >= SLAVE_MAX_PDO_ENTRIES) {
 				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
 			}
 			size = sizeof(mapping);
@@ -115,7 +115,7 @@ static enum backend_error soem_read_pdo_assignment(
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backend,
-						  struct master_slave *slaves, size_t slave_count)
+						  struct slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	enum backend_error error;
@@ -126,7 +126,7 @@ enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backen
 	}
 
 	for (size_t i = 0; i < slave_count; ++i) {
-		struct master_slave *slave = &slaves[i];
+		struct slave *slave = &slaves[i];
 
 		slave->pdo_entry_count = 0;
 		if (!slave->base_info.has_coe) {
@@ -137,12 +137,12 @@ enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backen
 			return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 		}
 		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c12,
-						 MO_ECAT_CYCLIC_OUTPUT, slave);
+						 MO_ECAT_PDO_OUTPUT, slave);
 		if (error != BACKEND_ERROR_NONE) {
 			return error;
 		}
 		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c13,
-						 MO_ECAT_CYCLIC_INPUT, slave);
+						 MO_ECAT_PDO_INPUT, slave);
 		if (error != BACKEND_ERROR_NONE) {
 			return error;
 		}
@@ -222,16 +222,16 @@ static enum backend_error soem_resolve_pdo_entry_offsets(
 		size_t start_bit;
 		size_t end_bit;
 
-		if (mapping->entry.node_index >= (size_t)slave_count) {
+		if (mapping->entry.slave_index >= (size_t)slave_count) {
 			goto cleanup;
 		}
-		slave = &context->context.slavelist[mapping->entry.node_index + 1];
-		if (mapping->entry.direction == MO_ECAT_CYCLIC_OUTPUT) {
-			used_bits = &used_output_bits[mapping->entry.node_index];
+		slave = &context->context.slavelist[mapping->entry.slave_index + 1];
+		if (mapping->entry.direction == MO_ECAT_PDO_OUTPUT) {
+			used_bits = &used_output_bits[mapping->entry.slave_index];
 			available_bits = slave->Obits;
 			base = slave->outputs;
 		} else {
-			used_bits = &used_input_bits[mapping->entry.node_index];
+			used_bits = &used_input_bits[mapping->entry.slave_index];
 			available_bits = slave->Ibits;
 			base = slave->inputs;
 		}

@@ -11,7 +11,7 @@
 #include "mo_ecat/mo_ecat_common.h"
 #include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +23,7 @@ struct mo_ecat_master;
  * enum mo_ecat_master_cmd - 主站状态机请求命令
  * @MO_ECAT_MASTER_CMD_NONE:       无命令
  * @MO_ECAT_MASTER_CMD_SCAN:       扫描总线
- * @MO_ECAT_MASTER_CMD_CONFIGURE:  配置 DC 并建立周期数据映射
+ * @MO_ECAT_MASTER_CMD_CONFIGURE:  配置 DC 并建立 PDO 映射
  * @MO_ECAT_MASTER_CMD_ACTIVATE:   激活周期运行
  * @MO_ECAT_MASTER_CMD_DEACTIVATE: 停止周期运行
  * @MO_ECAT_MASTER_CMD_RESET:      复位到空闲
@@ -41,18 +41,18 @@ enum mo_ecat_master_cmd {
  * enum mo_ecat_master_error - 主站最近一次进入 FAULT 的原因
  * @MO_ECAT_MASTER_ERROR_NONE:                         无错误
  * @MO_ECAT_MASTER_ERROR_DISCOVER_FAILED:              扫描总线失败
- * @MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED: 读取周期数据描述失败
+ * @MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED:     读取 PDO 描述失败
  * @MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED:          配置 DC 失败
- * @MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED: 建立周期数据映射失败
+ * @MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED:    建立 PDO 映射失败
  * @MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED:              激活周期运行失败
  * @MO_ECAT_MASTER_ERROR_BUS_FAULT:                    总线故障
  */
 enum mo_ecat_master_error {
     MO_ECAT_MASTER_ERROR_NONE,
     MO_ECAT_MASTER_ERROR_DISCOVER_FAILED,
-    MO_ECAT_MASTER_ERROR_READ_CYCLIC_DESCRIPTION_FAILED,
+    MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED,
     MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED,
-    MO_ECAT_MASTER_ERROR_CONFIGURE_CYCLIC_MAPPING_FAILED,
+    MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED,
     MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED,
     MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };

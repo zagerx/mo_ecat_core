@@ -13,7 +13,7 @@
 
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
-#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_topology.h"
 #include "backend/backend.h"
 #include "common/statemachine/statemachine.h"
@@ -38,7 +38,7 @@ extern "C" {
  * 保存已发现从站信息，运行时状态由后端直接更新到 slaves[].state。
  */
 struct master_topology {
-	struct master_slave *slaves;
+	struct slave *slaves;
 	size_t slave_count;
 };
 

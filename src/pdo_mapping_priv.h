@@ -7,7 +7,7 @@
 #ifndef PDO_MAPPING_PRIV_H
 #define PDO_MAPPING_PRIV_H
 
-#include "mo_ecat/mo_ecat_cyclic.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 
 /**
  * struct master_pdo_entry_mapping - PDO entry 的内部物理映射
