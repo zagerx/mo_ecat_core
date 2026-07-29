@@ -28,7 +28,7 @@ void master_resources_release(struct mo_ecat_master *master)
 	generation = master->pdo_mapping.generation;
 	backend_close(&master->backend);
 
-	free(master->pdo_mapping.entries);
+	free(master->pdo_mapping.entry_mappings);
 	free(master->topology.slaves);
 	memset(&master->backend, 0, sizeof(master->backend));
 	memset(&master->pdo_mapping, 0, sizeof(master->pdo_mapping));

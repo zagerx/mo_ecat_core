@@ -189,7 +189,7 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
  * Return: 0 成功，非 0 失败
  */
 static enum backend_error soem_resolve_pdo_entry_offsets(
-	struct soem_backend_context *context, struct master_pdo_entry_mapping *entries,
+	struct soem_backend_context *context, struct pdo_entry_mapping *entries,
 	size_t entry_count)
 {
 	uint32_t *used_output_bits = NULL;
@@ -214,7 +214,7 @@ static enum backend_error soem_resolve_pdo_entry_offsets(
 	}
 
 	for (size_t i = 0; i < entry_count; ++i) {
-		struct master_pdo_entry_mapping *mapping = &entries[i];
+		struct pdo_entry_mapping *mapping = &entries[i];
 		const ec_slavet *slave;
 		uint32_t *used_bits;
 		uint32_t available_bits;
@@ -267,7 +267,7 @@ cleanup:
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
-						   struct master_pdo_entry_mapping *entries, size_t entry_count)
+						   struct pdo_entry_mapping *entries, size_t entry_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	enum backend_error error;

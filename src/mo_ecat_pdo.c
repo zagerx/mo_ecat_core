@@ -17,7 +17,7 @@
  * Return: 在范围内返回非 0，否则返回 0
  */
 static int pdo_entry_mapping_in_bounds(const struct master_pdo_image *image,
-				       const struct master_pdo_entry_mapping *mapping)
+				       const struct pdo_entry_mapping *mapping)
 {
 	size_t image_bits;
 	size_t start_bit;
@@ -122,7 +122,7 @@ int mo_ecat_master_get_pdo_entry(
 		return -1;
 	}
 
-	*entry = master->pdo_mapping.entries[index].entry;
+	*entry = master->pdo_mapping.entry_mappings[index].entry;
 	return 0;
 }
 
@@ -133,10 +133,10 @@ int mo_ecat_master_get_pdo_entry(
  *
  * Return: 成功返回映射指针，失败返回 NULL
  */
-static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
+static const struct pdo_entry_mapping *master_resolve_pdo_entry_mapping(
     const struct mo_ecat_master *master, const struct mo_ecat_pdo_entry *entry)
 {
-	const struct master_pdo_entry_mapping *mapping;
+	const struct pdo_entry_mapping *mapping;
 
 	if (!master || !entry) {
 		return NULL;
@@ -146,7 +146,7 @@ static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
 		return NULL;
 	}
 
-	mapping = &master->pdo_mapping.entries[entry->entry_id];
+	mapping = &master->pdo_mapping.entry_mappings[entry->entry_id];
 	if (mapping->entry.entry_id != entry->entry_id ||
 	    mapping->entry.slave_index != entry->slave_index ||
 	    mapping->entry.object_index != entry->object_index ||
@@ -169,7 +169,7 @@ static const struct master_pdo_entry_mapping *master_resolve_pdo_entry_mapping(
 const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
 				 const struct mo_ecat_pdo_entry *entry)
 {
-	const struct master_pdo_entry_mapping *mapping;
+	const struct pdo_entry_mapping *mapping;
 	const void *data;
 
 	if (!master || !entry || entry->direction != MO_ECAT_PDO_INPUT) {
@@ -196,7 +196,7 @@ const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
 void *mo_ecat_pdo_output(struct mo_ecat_master *master,
 			    const struct mo_ecat_pdo_entry *entry)
 {
-	const struct master_pdo_entry_mapping *mapping;
+	const struct pdo_entry_mapping *mapping;
 	void *data;
 
 	if (!master || !entry || entry->direction != MO_ECAT_PDO_OUTPUT) {
@@ -243,7 +243,7 @@ int mo_ecat_pdo_bind(struct mo_ecat_master *master,
 			const struct mo_ecat_pdo_entry *entry,
 			struct mo_ecat_pdo_handle *handle)
 {
-	const struct master_pdo_entry_mapping *mapping;
+	const struct pdo_entry_mapping *mapping;
 
 	if (!master || !entry || !handle) {
 		return -1;

@@ -17,7 +17,7 @@
  * @generation: 代际值
  */
 static void master_pdo_entry_mappings_set_generation(
-	struct master_pdo_entry_mapping *entries, size_t entry_count, uint32_t generation)
+	struct pdo_entry_mapping *entries, size_t entry_count, uint32_t generation)
 {
 	for (size_t i = 0; i < entry_count; ++i) {
 		entries[i].generation = generation;
@@ -52,7 +52,7 @@ static void master_pdo_entry_export(struct mo_ecat_pdo_entry *destination,
  * 对象索引、位长度、方向等）。
  */
 static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
-					    struct master_pdo_entry_mapping *entries)
+					    struct pdo_entry_mapping *entries)
 {
 	size_t index = 0;
 
@@ -61,7 +61,7 @@ static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
 			const struct slave_pdo_entry *entry = &slave->pdo_entries[j];
-			struct master_pdo_entry_mapping *mapping = &entries[index];
+			struct pdo_entry_mapping *mapping = &entries[index];
 
 			master_pdo_entry_export(&mapping->entry, &entry->entry, (uint32_t)index, i);
 			++index;
@@ -81,7 +81,7 @@ static void master_pdo_entry_mappings_build(const struct mo_ecat_master *master,
 enum master_error_detail master_pdo_mapping_build(struct mo_ecat_master *master)
 {
 	struct master_pdo_image image = {0};
-	struct master_pdo_entry_mapping *entries = NULL;
+	struct pdo_entry_mapping *entries = NULL;
 	enum backend_error error;
 	size_t entry_count = 0;
 	uint32_t generation;
@@ -128,9 +128,9 @@ enum master_error_detail master_pdo_mapping_build(struct mo_ecat_master *master)
 	}
 	master_pdo_entry_mappings_set_generation(entries, entry_count, generation);
 
-	free(master->pdo_mapping.entries);
+	free(master->pdo_mapping.entry_mappings);
 	master->pdo_mapping.image = image;
-	master->pdo_mapping.entries = entries;
+	master->pdo_mapping.entry_mappings = entries;
 	master->pdo_mapping.entry_count = entry_count;
 	master->pdo_mapping.generation = generation;
 	master->pdo_mapping.is_active = 0;

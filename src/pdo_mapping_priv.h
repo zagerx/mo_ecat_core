@@ -10,7 +10,7 @@
 #include "mo_ecat/mo_ecat_pdo.h"
 
 /**
- * struct master_pdo_entry_mapping - PDO entry 的内部物理映射
+ * struct pdo_entry_mapping - 单个 PDO entry 的内部物理映射
  * @entry: PDO entry 逻辑描述
  * @byte_offset: 在 PDO 数据区域中的字节偏移
  * @bit_offset: 在 PDO 数据区域中的位偏移
@@ -19,7 +19,7 @@
  * 逻辑对象身份可提供给应用层；IOmap/domain 中的物理地址与代际只限核心层和
  * 后端使用。
  */
-struct master_pdo_entry_mapping {
+struct pdo_entry_mapping {
 	struct mo_ecat_pdo_entry entry;
 	uint32_t byte_offset;
 	uint8_t bit_offset;

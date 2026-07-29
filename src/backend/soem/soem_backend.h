@@ -56,7 +56,7 @@ enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backen
 enum backend_error soem_backend_configure_dc(struct backend_instance *backend);
 
 enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
-						   struct master_pdo_entry_mapping *entries,
+						   struct pdo_entry_mapping *entries,
 						   size_t entry_count);
 
 enum backend_error soem_backend_get_pdo_image(struct backend_instance *backend,

@@ -45,7 +45,8 @@ struct master_topology {
 /**
  * struct master_pdo_mapping - PDO 映射管理
  * @image: PDO 数据区域
- * @entries: PDO entry 内部映射数组
+ * @entry_mappings: PDO entry 内部映射数组；每个元素保存逻辑描述、
+ *                  IOmap 字节/位偏移和所属映射代际
  * @entry_count: PDO entry 映射数量
  * @generation: 当前映射版本
  * @is_active: 是否允许周期读写
@@ -54,7 +55,7 @@ struct master_topology {
  */
 struct master_pdo_mapping {
 	struct master_pdo_image image;
-	struct master_pdo_entry_mapping *entries;
+	struct pdo_entry_mapping *entry_mappings;
 	size_t entry_count;
 	uint32_t generation;
 	int is_active;
@@ -94,10 +95,10 @@ enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 
 enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
-							struct mo_ecat_cyclic_result *result);
+					       struct mo_ecat_cyclic_result *result);
 
 enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
-						 struct mo_ecat_cyclic_result *result);
+					    struct mo_ecat_cyclic_result *result);
 
 #ifdef __cplusplus
 }

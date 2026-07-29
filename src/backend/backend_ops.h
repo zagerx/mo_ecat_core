@@ -62,7 +62,7 @@ struct backend_ops {
     enum backend_error (*configure_dc)(struct backend_instance *backend);
 
     enum backend_error (*build_pdo_mapping)(struct backend_instance *backend,
-                              struct master_pdo_entry_mapping *entries,
+                              struct pdo_entry_mapping *entries,
                               size_t entry_count);
 
     enum backend_error (*activate)(struct backend_instance *backend);
