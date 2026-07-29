@@ -14,16 +14,14 @@
  * @record: Master 发现的 PDO entry 记录
  * @byte_offset: 在 PDO 数据区域中的字节偏移
  * @bit_offset: 在 PDO 数据区域中的位偏移
- * @generation: 当前映射代际
  *
- * 逻辑对象身份可提供给应用层；IOmap/domain 中的物理地址与代际只限核心层和
- * 后端使用。
+ * 逻辑对象身份可提供给应用层；IOmap/domain 中的物理地址只限核心层和
+ * 后端使用。布局代际统一保存在 pdo_image_layout 中。
  */
 struct pdo_image_entry {
 	struct pdo_entry_record record;
 	uint32_t byte_offset;
 	uint8_t bit_offset;
-	uint32_t generation;
 };
 
 #endif /* PDO_IMAGE_ENTRY_PRIV_H */

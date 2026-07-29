@@ -19,8 +19,8 @@ struct mo_ecat_master;
  * @MO_ECAT_PDO_OUTPUT: 输出方向，数据从主站流向节点（RxPDO，如 0x1600）
  */
 enum mo_ecat_pdo_direction {
-    MO_ECAT_PDO_INPUT,
-    MO_ECAT_PDO_OUTPUT
+	MO_ECAT_PDO_INPUT,
+	MO_ECAT_PDO_OUTPUT
 };
 
 /**
@@ -39,10 +39,10 @@ enum mo_ecat_pdo_direction {
  * direction=MO_ECAT_PDO_OUTPUT。
  */
 struct pdo_entry {
-    uint16_t object_index;
-    uint8_t object_subindex;
-    uint8_t bit_length;
-    enum mo_ecat_pdo_direction direction;
+	uint16_t object_index;
+	uint8_t object_subindex;
+	uint8_t bit_length;
+	enum mo_ecat_pdo_direction direction;
 };
 
 /**
@@ -55,17 +55,17 @@ struct pdo_entry {
  * @diagnostics_required: 是否需要刷新节点诊断状态
  */
 struct mo_ecat_cyclic_result {
-    int link_up;
-    uint32_t expected_wkc;
-    uint32_t actual_wkc;
-    int64_t dc_time_ns;
-    int dc_time_valid;
-    int diagnostics_required;
+	int link_up;
+	uint32_t expected_wkc;
+	uint32_t actual_wkc;
+	int64_t dc_time_ns;
+	int dc_time_valid;
+	int diagnostics_required;
 };
 
 typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
-                                        const struct mo_ecat_cyclic_result *result,
-                                        void *user_data);
+					const struct mo_ecat_cyclic_result *result,
+					void *user_data);
 
 /**
  * struct pdo_entry_record - Master 发现的单个 PDO entry 记录
@@ -89,81 +89,49 @@ typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
  * 保存，应用层不直接访问。
  */
 struct pdo_entry_record {
-    uint32_t entry_id;
-    size_t slave_index;
-    struct pdo_entry spec;
+	uint32_t entry_id;
+	size_t slave_index;
+	struct pdo_entry spec;
 };
 
 size_t mo_ecat_master_get_pdo_entry_count(const struct mo_ecat_master *master);
 
-int mo_ecat_master_get_pdo_entry(
-    const struct mo_ecat_master *master,
-    size_t index,
-    struct pdo_entry_record *record);
-
-const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
-                             const struct pdo_entry_record *record);
-
-void *mo_ecat_pdo_output(struct mo_ecat_master *master,
-                         const struct pdo_entry_record *record);
+int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t index,
+				 struct pdo_entry_record *record);
 
 /**
- * struct mo_ecat_pdo_handle - 已绑定的 PDO 数据访问句柄
- * @data: PDO 映像内的数据地址，由 Core 解析，调用方不得直接解引用
- * @generation: 绑定时的布局代际，0 表示无效句柄
- * @bit_length: 该周期数据项占用的位数
- * @bit_offset: 在 PDO 数据区域中的位偏移
- * @direction: PDO 数据方向，取 enum mo_ecat_pdo_direction 的值
- *
- * 非拥有值对象，可复制，无需显式销毁。句柄与其数据地址只允许在
- * 调度线程（dispatch/周期回调所在线程）使用；PDO 布局重建后，
- * generation 不再匹配，旧句柄自动失效。
- */
-struct mo_ecat_pdo_handle {
-    void *data;
-    uint32_t generation;
-    uint16_t bit_length;
-    uint8_t bit_offset;
-    uint8_t direction;
-};
-
-/**
- * mo_ecat_pdo_bind - 绑定 PDO entry 并解析访问句柄
+ * mo_ecat_master_get_pdo_generation - 获取当前 PDO 数据映像布局代际
  * @master: 主站对象指针
- * @record: Master 发现的 PDO entry 记录
- * @handle: 输出访问句柄
  *
- * 仅在管理阶段调用：完成 entry 全量校验与地址解析。
+ * 每次成功重建 PDO 布局后递增；0 表示尚未建立有效布局。应用可在绑定
+ * 阶段保存该值，并在周期开始时检查绑定是否仍属于当前布局。
  *
- * Return: 0 成功，非 0 失败
+ * Return: 当前布局代际；@master 为 NULL 时返回 0
  */
-int mo_ecat_pdo_bind(struct mo_ecat_master *master,
-                     const struct pdo_entry_record *record,
-                     struct mo_ecat_pdo_handle *handle);
+uint32_t mo_ecat_master_get_pdo_generation(const struct mo_ecat_master *master);
 
 /**
- * mo_ecat_pdo_read - 经句柄获取输入 PDO 数据指针
+ * mo_ecat_pdo_read - 根据 entry_id 获取输入 PDO 数据指针
  * @master: 主站对象指针
- * @handle: 已绑定的访问句柄
+ * @entry_id: Master 当前 PDO 布局中的全局条目编号
  *
- * 仅常数时间校验：句柄有效、代际匹配、映射存在且周期活动、方向为输入。
+ * 仅执行数组边界、布局活动状态、映像边界和输入方向校验。调用方必须确保
+ * 绑定时保存的 generation 与当前布局一致。
  *
  * Return: 成功返回数据指针，失败返回 NULL
  */
-const void *mo_ecat_pdo_read(const struct mo_ecat_master *master,
-                            const struct mo_ecat_pdo_handle *handle);
+const void *mo_ecat_pdo_read(const struct mo_ecat_master *master, uint32_t entry_id);
 
 /**
- * mo_ecat_pdo_write - 经句柄获取输出 PDO 数据可写指针
+ * mo_ecat_pdo_write - 根据 entry_id 获取输出 PDO 数据可写指针
  * @master: 主站对象指针
- * @handle: 已绑定的访问句柄
+ * @entry_id: Master 当前 PDO 布局中的全局条目编号
  *
  * 校验同 mo_ecat_pdo_read，方向为输出。
  *
  * Return: 成功返回可写数据指针，失败返回 NULL
  */
-void *mo_ecat_pdo_write(struct mo_ecat_master *master,
-                        const struct mo_ecat_pdo_handle *handle);
+void *mo_ecat_pdo_write(struct mo_ecat_master *master, uint32_t entry_id);
 
 #ifdef __cplusplus
 }

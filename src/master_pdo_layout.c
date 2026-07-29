@@ -11,20 +11,6 @@
 #include "master_priv.h"
 
 /**
- * pdo_image_entries_set_generation - 为所有 PDO 映像条目设置代际
- * @entries: PDO entry 映射数组
- * @entry_count: 数组元素个数
- * @generation: 代际值
- */
-static void pdo_image_entries_set_generation(
-	struct pdo_image_entry *entries, size_t entry_count, uint32_t generation)
-{
-	for (size_t i = 0; i < entry_count; ++i) {
-		entries[i].generation = generation;
-	}
-}
-
-/**
  * master_pdo_entry_export - 将从站私有扫描条目转换为公开 PDO entry
  * @destination: 公开 PDO entry 输出
  * @source: 从站扫描得到的最小 PDO entry 规格
@@ -123,8 +109,6 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 	if (generation == 0U) {
 		generation = 1U;
 	}
-	pdo_image_entries_set_generation(entries, entry_count, generation);
-
 	free(master->pdo_layout.entries);
 	master->pdo_layout.image = image;
 	master->pdo_layout.entries = entries;

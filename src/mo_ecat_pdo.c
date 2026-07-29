@@ -10,20 +10,6 @@
 #include "master_priv.h"
 
 /**
- * pdo_entry_equal - 比较两个 PDO entry 最小规格是否相同
- * @left: 左侧 PDO entry 规格
- * @right: 右侧 PDO entry 规格
- *
- * Return: 所有协议字段相同返回非 0，否则返回 0
- */
-static int pdo_entry_equal(const struct pdo_entry *left, const struct pdo_entry *right)
-{
-	return left && right && left->object_index == right->object_index &&
-	       left->object_subindex == right->object_subindex &&
-	       left->bit_length == right->bit_length && left->direction == right->direction;
-}
-
-/**
  * pdo_image_entry_in_bounds - 检查 PDO 映像条目是否在数据映像范围内
  * @image: PDO 数据映像
  * @entry: PDO 映像条目
@@ -139,142 +125,64 @@ int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t ind
 }
 
 /**
- * master_resolve_pdo_image_entry - 根据 PDO 记录解析数据映像条目
+ * mo_ecat_master_get_pdo_generation - 获取当前 PDO 数据映像布局代际
  * @master: 主站对象指针
- * @record: Master 发现的 PDO entry 记录
  *
- * Return: 成功返回映射指针，失败返回 NULL
+ * Return: 当前布局代际；@master 为 NULL 时返回 0
  */
-static const struct pdo_image_entry *
-master_resolve_pdo_image_entry(const struct mo_ecat_master *master,
-			       const struct pdo_entry_record *record)
+uint32_t mo_ecat_master_get_pdo_generation(const struct mo_ecat_master *master)
 {
-	const struct pdo_image_entry *entry;
-
-	if (!master || !record) {
-		return NULL;
-	}
-
-	if ((size_t)record->entry_id >= master->pdo_layout.entry_count) {
-		return NULL;
-	}
-
-	entry = &master->pdo_layout.entries[record->entry_id];
-	if (entry->record.entry_id != record->entry_id ||
-	    entry->record.slave_index != record->slave_index ||
-	    !pdo_entry_equal(&entry->record.spec, &record->spec)) {
-		return NULL;
-	}
-
-	return entry;
+	return master ? master->pdo_layout.generation : 0U;
 }
 
 /**
- * mo_ecat_pdo_input - 获取输入 PDO entry 数据指针
+ * pdo_image_entry_data - 根据 entry_id 和方向解析 PDO 数据地址
  * @master: 主站对象指针
- * @record: Master 发现的 PDO entry 记录
+ * @entry_id: Master 当前 PDO 布局中的全局条目编号
+ * @direction: 期望的数据方向
  *
  * Return: 成功返回数据指针，失败返回 NULL
  */
-const void *mo_ecat_pdo_input(const struct mo_ecat_master *master,
-			      const struct pdo_entry_record *record)
+static void *pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t entry_id,
+				  enum mo_ecat_pdo_direction direction)
 {
 	const struct pdo_image_entry *entry;
-	const void *data;
 
-	if (!master || !record || record->spec.direction != MO_ECAT_PDO_INPUT) {
+	if (!master || !master->pdo_layout.is_active || !master->pdo_layout.image.memory ||
+	    (size_t)entry_id >= master->pdo_layout.entry_count) {
 		return NULL;
 	}
-	entry = master_resolve_pdo_image_entry(master, record);
 
-	if (!entry || entry->generation != master->pdo_layout.generation ||
+	entry = &master->pdo_layout.entries[entry_id];
+	if (entry->record.entry_id != entry_id || entry->record.spec.direction != direction ||
+	    entry->bit_offset != 0U ||
 	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
 		return NULL;
 	}
 
-	data = &master->pdo_layout.image.memory[entry->byte_offset];
-	return data;
+	return &master->pdo_layout.image.memory[entry->byte_offset];
 }
 
 /**
- * mo_ecat_pdo_output - 获取输出 PDO entry 数据指针
+ * mo_ecat_pdo_read - 根据 entry_id 获取输入 PDO 数据指针
  * @master: 主站对象指针
- * @record: Master 发现的 PDO entry 记录
+ * @entry_id: Master 当前 PDO 布局中的全局条目编号
+ *
+ * Return: 成功返回数据指针，失败返回 NULL
+ */
+const void *mo_ecat_pdo_read(const struct mo_ecat_master *master, uint32_t entry_id)
+{
+	return pdo_image_entry_data(master, entry_id, MO_ECAT_PDO_INPUT);
+}
+
+/**
+ * mo_ecat_pdo_write - 根据 entry_id 获取输出 PDO 数据可写指针
+ * @master: 主站对象指针
+ * @entry_id: Master 当前 PDO 布局中的全局条目编号
  *
  * Return: 成功返回可写数据指针，失败返回 NULL
  */
-void *mo_ecat_pdo_output(struct mo_ecat_master *master, const struct pdo_entry_record *record)
+void *mo_ecat_pdo_write(struct mo_ecat_master *master, uint32_t entry_id)
 {
-	const struct pdo_image_entry *entry;
-	void *data;
-
-	if (!master || !record || record->spec.direction != MO_ECAT_PDO_OUTPUT) {
-		return NULL;
-	}
-	entry = master_resolve_pdo_image_entry(master, record);
-
-	if (!entry || entry->generation != master->pdo_layout.generation ||
-	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
-		return NULL;
-	}
-
-	data = &master->pdo_layout.image.memory[entry->byte_offset];
-	return data;
-}
-
-/**
- * pdo_handle_resolve - 常数时间校验并解析 PDO 句柄数据地址
- * @master: 主站对象指针
- * @handle: 已绑定的访问句柄
- * @direction: 本次访问期望的方向
- *
- * 校验：句柄有效、代际匹配、映射存在、周期活动、方向一致。
- *
- * Return: 成功返回数据地址，失败返回 NULL
- */
-static void *pdo_handle_resolve(const struct mo_ecat_master *master,
-				const struct mo_ecat_pdo_handle *handle,
-				enum mo_ecat_pdo_direction direction)
-{
-	if (!master || !handle || !handle->data || handle->generation == 0U ||
-	    handle->generation != master->pdo_layout.generation ||
-	    handle->direction != (uint8_t)direction || !master->pdo_layout.image.memory ||
-	    !master->pdo_layout.is_active) {
-		return NULL;
-	}
-
-	return handle->data;
-}
-
-int mo_ecat_pdo_bind(struct mo_ecat_master *master, const struct pdo_entry_record *record,
-		     struct mo_ecat_pdo_handle *handle)
-{
-	const struct pdo_image_entry *entry;
-
-	if (!master || !record || !handle) {
-		return -1;
-	}
-	entry = master_resolve_pdo_image_entry(master, record);
-	if (!entry || entry->generation != master->pdo_layout.generation ||
-	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
-		return -1;
-	}
-
-	handle->data = &master->pdo_layout.image.memory[entry->byte_offset];
-	handle->generation = entry->generation;
-	handle->bit_length = entry->record.spec.bit_length;
-	handle->bit_offset = entry->bit_offset;
-	handle->direction = (uint8_t)entry->record.spec.direction;
-	return 0;
-}
-
-const void *mo_ecat_pdo_read(const struct mo_ecat_master *master,
-			     const struct mo_ecat_pdo_handle *handle)
-{
-	return pdo_handle_resolve(master, handle, MO_ECAT_PDO_INPUT);
-}
-
-void *mo_ecat_pdo_write(struct mo_ecat_master *master, const struct mo_ecat_pdo_handle *handle)
-{
-	return pdo_handle_resolve(master, handle, MO_ECAT_PDO_OUTPUT);
+	return pdo_image_entry_data(master, entry_id, MO_ECAT_PDO_OUTPUT);
 }
