@@ -57,7 +57,6 @@ struct pdo_image_layout {
 	struct pdo_image image;
 	struct pdo_image_entry *entries;
 	size_t entry_count;
-	uint32_t generation;
 	int is_active;
 };
 

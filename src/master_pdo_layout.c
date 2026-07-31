@@ -57,7 +57,7 @@ static void pdo_image_entries_build(const struct mo_ecat_master *master,
  * @master: 主站对象指针
  *
  * 统计所有从站的 PDO entry 总数，分配逻辑映射数组，调用后端建立物理映射，
- * 并获取 PDO 数据映像。新的映射会刷新代际计数器。
+ * 并获取 PDO 数据映像。
  *
  * Return: 0 成功，非 0 失败
  */
@@ -67,7 +67,6 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 	struct pdo_image_entry *entries = NULL;
 	enum backend_error error;
 	size_t entry_count = 0;
-	uint32_t generation;
 
 	if (!master) {
 		return MASTER_ERROR_INVALID_ARGUMENT;
@@ -105,15 +104,10 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 		return master_error_from_backend(error);
 	}
 
-	generation = master->pdo_layout.generation + 1U;
-	if (generation == 0U) {
-		generation = 1U;
-	}
 	free(master->pdo_layout.entries);
 	master->pdo_layout.image = image;
 	master->pdo_layout.entries = entries;
 	master->pdo_layout.entry_count = entry_count;
-	master->pdo_layout.generation = generation;
 	master->pdo_layout.is_active = 0;
 	return MASTER_ERROR_NONE;
 }

@@ -125,17 +125,6 @@ int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t ind
 }
 
 /**
- * mo_ecat_master_get_pdo_generation - 获取当前 PDO 数据映像布局代际
- * @master: 主站对象指针
- *
- * Return: 当前布局代际；@master 为 NULL 时返回 0
- */
-uint32_t mo_ecat_master_get_pdo_generation(const struct mo_ecat_master *master)
-{
-	return master ? master->pdo_layout.generation : 0U;
-}
-
-/**
  * pdo_image_entry_data - 根据 entry_id 和方向解析 PDO 数据地址
  * @master: 主站对象指针
  * @entry_id: Master 当前 PDO 布局中的全局条目编号

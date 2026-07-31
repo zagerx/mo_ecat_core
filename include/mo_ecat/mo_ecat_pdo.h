@@ -100,17 +100,6 @@ int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t ind
 				 struct pdo_entry_record *record);
 
 /**
- * mo_ecat_master_get_pdo_generation - 获取当前 PDO 数据映像布局代际
- * @master: 主站对象指针
- *
- * 每次成功重建 PDO 布局后递增；0 表示尚未建立有效布局。应用可在绑定
- * 阶段保存该值，并在周期开始时检查绑定是否仍属于当前布局。
- *
- * Return: 当前布局代际；@master 为 NULL 时返回 0
- */
-uint32_t mo_ecat_master_get_pdo_generation(const struct mo_ecat_master *master);
-
-/**
  * mo_ecat_pdo_read - 根据 entry_id 获取输入 PDO 数据指针
  * @master: 主站对象指针
  * @entry_id: Master 当前 PDO 布局中的全局条目编号

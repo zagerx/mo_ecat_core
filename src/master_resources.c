@@ -15,24 +15,19 @@
  * @master: 主站对象指针
  *
  * 关闭后端并释放主站持有的拓扑与 PDO 映射资源。
- * 映射代际计数器会保留，用于识别旧的 PDO entry 引用。
  */
 void master_resources_release(struct mo_ecat_master *master)
 {
-	uint32_t generation;
-
 	if (!master) {
 		return;
 	}
 
-	generation = master->pdo_layout.generation;
 	backend_close(&master->backend);
 
 	free(master->pdo_layout.entries);
 	free(master->topology.slaves);
 	memset(&master->backend, 0, sizeof(master->backend));
 	memset(&master->pdo_layout, 0, sizeof(master->pdo_layout));
-	master->pdo_layout.generation = generation;
 	master->topology.slaves = NULL;
 	master->topology.slave_count = 0;
 }
