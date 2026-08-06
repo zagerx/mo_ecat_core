@@ -9,6 +9,8 @@
 
 struct mo_ecat_master;
 
+void master_runtime_release(struct mo_ecat_master *master);
+
 void master_resources_release(struct mo_ecat_master *master);
 
 #endif /* MASTER_RESOURCES_H */

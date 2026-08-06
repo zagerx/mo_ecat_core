@@ -25,17 +25,14 @@ extern "C" {
  * 标识依赖核心层类型的接口边界。
  */
 struct backend_translation_ops {
-    enum backend_error (*translate_slave_info)(struct backend_instance *backend,
-                                   struct slave *slaves,
-                                   size_t slave_count);
+	enum backend_error (*translate_slave_info)(struct backend_instance *backend,
+						   struct slave *slaves, size_t slave_count);
 
-    enum backend_error (*read_pdo_entries)(struct backend_instance *backend,
-                             struct slave *slaves,
-                             size_t slave_count);
+	enum backend_error (*read_pdo_entries)(struct backend_instance *backend,
+					       struct slave *slaves, size_t slave_count);
 
-    enum backend_error (*get_pdo_image)(struct backend_instance *backend,
-                          struct pdo_image *image);
-
+	enum backend_error (*get_pdo_image)(struct backend_instance *backend,
+					    struct pdo_image *image);
 };
 
 /**
@@ -53,36 +50,45 @@ struct backend_translation_ops {
  * @close: 关闭后端
  */
 struct backend_ops {
-    enum backend_error (*open)(struct backend_instance *backend,
-                 const struct mo_ecat_master_config *config);
+	enum backend_error (*open)(struct backend_instance *backend,
+				   const struct mo_ecat_master_config *config);
 
-    enum backend_error (*load_slave_info)(struct backend_instance *backend,
-                            size_t *slave_count);
+	enum backend_error (*load_slave_info)(struct backend_instance *backend,
+					      size_t *slave_count);
 
-    enum backend_error (*configure_dc)(struct backend_instance *backend);
+	enum backend_error (*configure_dc)(struct backend_instance *backend);
 
-    enum backend_error (*build_pdo_mapping)(struct backend_instance *backend,
-                              struct pdo_image_entry *entries,
-                              size_t entry_count);
+	enum backend_error (*build_pdo_mapping)(struct backend_instance *backend,
+						struct pdo_image_entry *entries,
+						size_t entry_count);
 
-    enum backend_error (*activate)(struct backend_instance *backend);
+	enum backend_error (*activate)(struct backend_instance *backend);
 
-    enum backend_error (*cyclic_receive)(struct backend_instance *backend,
-                           struct mo_ecat_cyclic_result *result);
+	enum backend_error (*cyclic_receive)(struct backend_instance *backend,
+					     struct mo_ecat_cyclic_result *result);
 
-    enum backend_error (*cyclic_send)(struct backend_instance *backend,
-                        struct mo_ecat_cyclic_result *result);
+	enum backend_error (*cyclic_send)(struct backend_instance *backend,
+					  struct mo_ecat_cyclic_result *result);
 
-    enum backend_error (*read_all_slave_states)(struct backend_instance *backend,
-                                  struct slave *slaves,
-                                  size_t slave_count);
+	enum backend_error (*read_all_slave_states)(struct backend_instance *backend,
+						    struct slave *slaves, size_t slave_count);
 
-    enum backend_error (*read_single_slave_state)(struct backend_instance *backend,
-                                    size_t slave_index,
-                                    struct mo_ecat_node_state *state);
+	enum backend_error (*read_single_slave_state)(struct backend_instance *backend,
+						      size_t slave_index,
+						      struct mo_ecat_node_state *state);
 
-    enum backend_error (*deactivate)(struct backend_instance *backend);
-    void (*close)(struct backend_instance *backend);
+	enum backend_error (*deactivate)(struct backend_instance *backend);
+	void (*close)(struct backend_instance *backend);
+
+	/* 从站 DC Sync0 周期同步输出控制（仅配置阶段调用）。 */
+	enum backend_error (*sync0_configure)(struct backend_instance *backend, size_t slave_index,
+					      int enable, uint32_t cycle_time_ns,
+					      int32_t shift_time_ns);
+
+	/* 读回从站 Sync0 当前激活状态（供诊断）。 */
+	enum backend_error (*sync0_read_status)(struct backend_instance *backend,
+						size_t slave_index,
+						struct mo_ecat_sync0_status *status);
 };
 
 #ifdef __cplusplus

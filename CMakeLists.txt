@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(mo_ecat_core VERSION 0.1.0 LANGUAGES C)
 
+find_package(Threads REQUIRED)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -47,7 +49,7 @@ target_include_directories(mo_ecat_core
 )
 
 target_link_libraries(mo_ecat_core
-    PUBLIC soem
+    PUBLIC soem Threads::Threads
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

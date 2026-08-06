@@ -11,12 +11,12 @@
 #include "master_resources.h"
 
 /**
- * master_resources_release - 释放主站持有的资源
+ * master_runtime_release - 关闭后端并释放 PDO 运行资源
  * @master: 主站对象指针
  *
- * 关闭后端并释放主站持有的拓扑与 PDO 映射资源。
+ * 故障时保留最后一次拓扑快照，供应用层读取节点 AL 状态与状态码。
  */
-void master_resources_release(struct mo_ecat_master *master)
+void master_runtime_release(struct mo_ecat_master *master)
 {
 	if (!master) {
 		return;
@@ -25,9 +25,24 @@ void master_resources_release(struct mo_ecat_master *master)
 	backend_close(&master->backend);
 
 	free(master->pdo_layout.entries);
-	free(master->topology.slaves);
 	memset(&master->backend, 0, sizeof(master->backend));
 	memset(&master->pdo_layout, 0, sizeof(master->pdo_layout));
+}
+
+/**
+ * master_resources_release - 释放主站持有的全部资源
+ * @master: 主站对象指针
+ */
+void master_resources_release(struct mo_ecat_master *master)
+{
+	if (!master) {
+		return;
+	}
+
+	master_runtime_release(master);
+	pthread_mutex_lock(&master->topology_mutex);
+	free(master->topology.slaves);
 	master->topology.slaves = NULL;
 	master->topology.slave_count = 0;
+	pthread_mutex_unlock(&master->topology_mutex);
 }

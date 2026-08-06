@@ -22,6 +22,7 @@
 enum master_error_detail master_topology_build(struct mo_ecat_master *master,
 							size_t slave_count)
 {
+	struct slave *slaves = NULL;
 	enum backend_error error;
 
 	if (!master) {
@@ -29,23 +30,29 @@ enum master_error_detail master_topology_build(struct mo_ecat_master *master,
 	}
 
 	if (slave_count > 0) {
-		if (slave_count > SIZE_MAX / sizeof(*master->topology.slaves)) {
+		if (slave_count > SIZE_MAX / sizeof(*slaves)) {
 			return MASTER_ERROR_NO_MEMORY;
 		}
-		master->topology.slaves = calloc(slave_count, sizeof(*master->topology.slaves));
-		if (!master->topology.slaves) {
+		slaves = calloc(slave_count, sizeof(*slaves));
+		if (!slaves) {
 			return MASTER_ERROR_NO_MEMORY;
 		}
 	}
 
-	master->topology.slave_count = slave_count;
 	if (slave_count > 0) {
-		error = backend_translate_slave_info(&master->backend, master->topology.slaves,
-						     slave_count);
+		error = backend_translate_slave_info(&master->backend, slaves, slave_count);
 		if (error != BACKEND_ERROR_NONE) {
+			free(slaves);
 			return master_error_from_backend(error);
 		}
 	}
+
+	/* 先完整构建临时表，再一次性发布，避免读线程观察到半初始化拓扑。 */
+	pthread_mutex_lock(&master->topology_mutex);
+	free(master->topology.slaves);
+	master->topology.slaves = slaves;
+	master->topology.slave_count = slave_count;
+	pthread_mutex_unlock(&master->topology_mutex);
 
 	return MASTER_ERROR_NONE;
 }
@@ -62,11 +69,17 @@ enum master_error_detail master_topology_refresh_states(struct mo_ecat_master *m
 {
 	enum backend_error error;
 
-	if (!master || (master->topology.slave_count > 0 && !master->topology.slaves)) {
+	if (!master) {
 		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
+	pthread_mutex_lock(&master->topology_mutex);
+	if (master->topology.slave_count > 0 && !master->topology.slaves) {
+		pthread_mutex_unlock(&master->topology_mutex);
+		return MASTER_ERROR_INVALID_ARGUMENT;
+	}
 	error = backend_read_all_slave_states(&master->backend, master->topology.slaves,
 						     master->topology.slave_count);
+	pthread_mutex_unlock(&master->topology_mutex);
 	return master_error_from_backend(error);
 }

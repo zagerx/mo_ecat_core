@@ -18,15 +18,31 @@
 enum backend_error soem_backend_activate(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
+	enum { SOEM_OPERATIONAL_RETRIES = 40 };
 
 	if (!context) {
 		return BACKEND_ERROR_NOT_READY;
 	}
+	/* OP 切换需要有效过程数据。先预发送一帧，再在等待期间持续交换，
+	 * 与 SOEM 官方示例的激活时序保持一致。 */
 	ecx_send_processdata(&context->context);
+	(void)ecx_receive_processdata(&context->context, EC_TIMEOUTRET);
 	context->context.slavelist[0].state = EC_STATE_OPERATIONAL;
 	ecx_writestate(&context->context, 0);
-	return ecx_statecheck(&context->context, 0, EC_STATE_OPERATIONAL, 50000) ==
-		       EC_STATE_OPERATIONAL ? BACKEND_ERROR_NONE : BACKEND_ERROR_ACTIVATE_FAILED;
+	for (int attempt = 0; attempt < SOEM_OPERATIONAL_RETRIES; ++attempt) {
+		ecx_send_processdata(&context->context);
+		(void)ecx_receive_processdata(&context->context, EC_TIMEOUTRET);
+		if (ecx_statecheck(&context->context, 0, EC_STATE_OPERATIONAL, 50000) ==
+		    EC_STATE_OPERATIONAL) {
+			/* RUNNING 的第一个动作是 receive，预留一帧待接收过程数据。 */
+			if (ecx_send_processdata(&context->context) <= 0) {
+				return BACKEND_ERROR_ACTIVATE_FAILED;
+			}
+			return BACKEND_ERROR_NONE;
+		}
+	}
+	(void)ecx_readstate(&context->context);
+	return BACKEND_ERROR_ACTIVATE_FAILED;
 }
 
 /**
@@ -95,11 +111,19 @@ enum backend_error soem_backend_read_all_slave_states(struct backend_instance *b
 						      struct slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
+	int wkc;
 
-	if (!context || (slave_count > 0 && !slaves)) {
+	if (!context || !context->opened || (slave_count > 0 && !slaves)) {
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
-	ecx_readstate(&context->context);
+	wkc = ecx_readstate(&context->context);
+	if (wkc <= 0) {
+		for (size_t i = 0; i < slave_count; ++i) {
+			slaves[i].state.is_online = 0;
+			slaves[i].state.is_operational = 0;
+		}
+		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
+	}
 	if (slave_count != (size_t)context->context.slavecount) {
 		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 	}

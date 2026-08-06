@@ -12,6 +12,7 @@
 #include "mo_ecat/mo_ecat_master_config.h"
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_pdo.h"
+#include "mo_ecat/mo_ecat_sync0.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,12 +30,12 @@ struct mo_ecat_master;
  * @MO_ECAT_MASTER_CMD_RESET:      复位到空闲
  */
 enum mo_ecat_master_cmd {
-    MO_ECAT_MASTER_CMD_NONE,
-    MO_ECAT_MASTER_CMD_SCAN,
-    MO_ECAT_MASTER_CMD_CONFIGURE,
-    MO_ECAT_MASTER_CMD_ACTIVATE,
-    MO_ECAT_MASTER_CMD_DEACTIVATE,
-    MO_ECAT_MASTER_CMD_RESET
+	MO_ECAT_MASTER_CMD_NONE,
+	MO_ECAT_MASTER_CMD_SCAN,
+	MO_ECAT_MASTER_CMD_CONFIGURE,
+	MO_ECAT_MASTER_CMD_ACTIVATE,
+	MO_ECAT_MASTER_CMD_DEACTIVATE,
+	MO_ECAT_MASTER_CMD_RESET
 };
 
 /**
@@ -48,13 +49,13 @@ enum mo_ecat_master_cmd {
  * @MO_ECAT_MASTER_ERROR_BUS_FAULT:                    总线故障
  */
 enum mo_ecat_master_error {
-    MO_ECAT_MASTER_ERROR_NONE,
-    MO_ECAT_MASTER_ERROR_DISCOVER_FAILED,
-    MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED,
-    MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED,
-    MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED,
-    MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED,
-    MO_ECAT_MASTER_ERROR_BUS_FAULT,
+	MO_ECAT_MASTER_ERROR_NONE,
+	MO_ECAT_MASTER_ERROR_DISCOVER_FAILED,
+	MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED,
+	MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED,
+	MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED,
+	MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED,
+	MO_ECAT_MASTER_ERROR_BUS_FAULT,
 };
 
 /**
@@ -68,8 +69,7 @@ enum mo_ecat_master_error {
  *
  * Return: 成功返回主站对象指针，失败返回 NULL
  */
-struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
-                                             void *user_data);
+struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback, void *user_data);
 
 /**
  * mo_ecat_master_binding - 绑定主站配置
@@ -80,17 +80,15 @@ struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
  * Return: 0 成功，非 0 失败
  */
 int mo_ecat_master_binding(struct mo_ecat_master *master,
-                           const struct mo_ecat_master_config *config);
+			   const struct mo_ecat_master_config *config);
 
 void mo_ecat_master_destroy(struct mo_ecat_master *master);
 
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 
-int mo_ecat_master_write_cmd(struct mo_ecat_master *master,
-                             enum mo_ecat_master_cmd cmd);
+int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 
-enum mo_ecat_master_error mo_ecat_master_get_error_code(
-    const struct mo_ecat_master *master);
+enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_master *master);
 
 #ifdef __cplusplus
 }

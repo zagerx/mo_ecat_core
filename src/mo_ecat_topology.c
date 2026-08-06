@@ -23,7 +23,9 @@ size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master)
 		return 0;
 	}
 
+	pthread_mutex_lock((pthread_mutex_t *)&master->topology_mutex);
 	count = master->topology.slave_count;
+	pthread_mutex_unlock((pthread_mutex_t *)&master->topology_mutex);
 	return count;
 }
 
@@ -44,7 +46,9 @@ int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 		return -1;
 	}
 
-	if (index >= master->topology.slave_count) {
+	pthread_mutex_lock((pthread_mutex_t *)&master->topology_mutex);
+	if (index >= master->topology.slave_count || !master->topology.slaves) {
+		pthread_mutex_unlock((pthread_mutex_t *)&master->topology_mutex);
 		return -1;
 	}
 
@@ -58,6 +62,7 @@ int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 	memcpy(info->name, slave->base_info.name, sizeof(info->name));
 	info->dc_supported = slave->base_info.dc_supported;
 	info->state = slave->state;
+	pthread_mutex_unlock((pthread_mutex_t *)&master->topology_mutex);
 
 	return 0;
 }

@@ -46,7 +46,10 @@ static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *mas
 			     enum master_error_detail detail)
 {
 	master_set_fault(master, error, detail);
-	master_resources_release(master);
+	if (mo_ecat_master_get_node_count(master) > 0U) {
+		(void)master_topology_refresh_states(master);
+	}
+	master_runtime_release(master);
 	sm_transition(sm, master_state_fault);
 }
 
@@ -131,6 +134,7 @@ void master_state_idle(struct statemachine *sm)
 
 	case MASTER_PHASE_OPEN: {
 		master_resources_release(master);
+		atomic_store(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
 		error = master_error_from_backend(backend_init(&master->backend));
 		if (error == MASTER_ERROR_NONE) {
 			error = master_error_from_backend(backend_open(&master->backend, master->config));
@@ -165,8 +169,10 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_READ_PDO: {
+		pthread_mutex_lock(&master->topology_mutex);
 		error = master_error_from_backend(backend_read_pdo_entries(
 			&master->backend, master->topology.slaves, master->topology.slave_count));
+		pthread_mutex_unlock(&master->topology_mutex);
 		if (error != MASTER_ERROR_NONE) {
 			master_idle_fail(sm, master,
 					 MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED, error);
@@ -259,7 +265,8 @@ void master_state_ready(struct statemachine *sm)
 			error = master_pdo_layout_activate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
-				master_resources_release(master);
+				(void)master_topology_refresh_states(master);
+				master_runtime_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
 				sm_transition(sm, master_state_running);
@@ -308,7 +315,8 @@ void master_state_running(struct statemachine *sm)
 			error = master_pdo_layout_deactivate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
-				master_resources_release(master);
+				(void)master_topology_refresh_states(master);
+				master_runtime_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
 				sm_transition(sm, master_state_ready);
@@ -319,7 +327,8 @@ void master_state_running(struct statemachine *sm)
 		error = master_cyclic_receive(master, &result);
 		if (error != MASTER_ERROR_NONE) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
-			master_resources_release(master);
+			(void)master_topology_refresh_states(master);
+			master_runtime_release(master);
 			sm_transition(sm, master_state_fault);
 			break;
 		}
@@ -331,7 +340,8 @@ void master_state_running(struct statemachine *sm)
 		error = master_cyclic_send(master, &result);
 		if (error != MASTER_ERROR_NONE) {
 			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
-			master_resources_release(master);
+			(void)master_topology_refresh_states(master);
+			master_runtime_release(master);
 			sm_transition(sm, master_state_fault);
 		}
 		break;

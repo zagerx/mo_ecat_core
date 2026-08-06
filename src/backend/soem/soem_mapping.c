@@ -6,9 +6,47 @@
  */
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "soem_backend.h"
 #include "topology_priv.h"
+
+#define SOEM_SDO_READ_ATTEMPTS 3
+
+static int soem_read_sdo(ecx_contextt *context, uint16_t slave_number, uint16_t object_index,
+			 uint8_t object_subindex, int *size, void *data)
+{
+	const int requested_size = *size;
+
+	for (int attempt = 0; attempt < SOEM_SDO_READ_ATTEMPTS; ++attempt) {
+		*size = requested_size;
+		if (ecx_SDOread(context, slave_number, object_index, object_subindex, FALSE, size,
+				data, EC_TIMEOUTRXM) > 0) {
+			return 1;
+		}
+	}
+
+	fprintf(stderr, "[soem] SDO read failed after %d attempts: slave=%u object=0x%04x:%02x\n",
+		SOEM_SDO_READ_ATTEMPTS, slave_number, object_index, object_subindex);
+	return 0;
+}
+
+static void soem_log_mapping_failure(ecx_contextt *context, const char *stage, int mapped_size)
+{
+	(void)ecx_readstate(context);
+	fprintf(stderr, "[soem] PDO mapping failed: stage=%s mapped_size=%d\n", stage, mapped_size);
+	for (int slave_number = 1; slave_number <= context->slavecount; ++slave_number) {
+		const ec_slavet *slave = &context->slavelist[slave_number];
+
+		fprintf(stderr,
+			"[soem] slave=%d state=0x%02x al=0x%04x Obits=%u Ibits=%u "
+			"SM2=0x%04x/%u/type%u SM3=0x%04x/%u/type%u\n",
+			slave_number, slave->state, slave->ALstatuscode, slave->Obits, slave->Ibits,
+			etohs(slave->SM[2].StartAddr), etohs(slave->SM[2].SMlength),
+			slave->SMtype[2], etohs(slave->SM[3].StartAddr),
+			etohs(slave->SM[3].SMlength), slave->SMtype[3]);
+	}
+}
 
 /**
  * soem_check_dc_support - 检查所有从站是否支持 DC
@@ -23,6 +61,19 @@ static enum backend_error soem_check_dc_support(ecx_contextt *context)
 	}
 	for (int i = 1; i <= context->slavecount; ++i) {
 		if (!context->slavelist[i].hasdc) {
+			const ec_slavet *slave;
+
+			(void)ecx_readstate(context);
+			slave = &context->slavelist[i];
+			fprintf(stderr,
+				"[soem] DC check failed: slave=%d state=0x%02x al=0x%04x "
+				"SM0=0x%04x/%u/0x%08x SM1=0x%04x/%u/0x%08x "
+				"mbx-write=0x%04x/%u mbx-read=0x%04x/%u proto=0x%04x\n",
+				i, slave->state, slave->ALstatuscode, etohs(slave->SM[0].StartAddr),
+				etohs(slave->SM[0].SMlength), etohl(slave->SM[0].SMflags),
+				etohs(slave->SM[1].StartAddr), etohs(slave->SM[1].SMlength),
+				etohl(slave->SM[1].SMflags), slave->mbx_wo, slave->mbx_l,
+				slave->mbx_ro, slave->mbx_rl, slave->mbx_proto);
 			return BACKEND_ERROR_DC_UNSUPPORTED;
 		}
 	}
@@ -42,17 +93,15 @@ static enum backend_error soem_check_dc_support(ecx_contextt *context)
  *
  * Return: 0 成功，非 0 失败
  */
-static enum backend_error soem_read_pdo_assignment(
-	ecx_contextt *context, uint16_t slave_number, uint16_t assignment_index,
-	enum mo_ecat_pdo_direction direction, struct slave *slave)
+static enum backend_error soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
+						   uint16_t assignment_index,
+						   enum mo_ecat_pdo_direction direction,
+						   struct slave *slave)
 {
 	uint8_t pdo_count = 0;
 	int size = sizeof(pdo_count);
-	int wkc;
 
-	wkc = ecx_SDOread(context, slave_number, assignment_index, 0, FALSE, &size, &pdo_count,
-			  EC_TIMEOUTRXM);
-	if (wkc <= 0) {
+	if (!soem_read_sdo(context, slave_number, assignment_index, 0, &size, &pdo_count)) {
 		return BACKEND_ERROR_SDO_READ_FAILED;
 	}
 
@@ -61,9 +110,8 @@ static enum backend_error soem_read_pdo_assignment(
 		uint8_t entry_count = 0;
 
 		size = sizeof(pdo_index);
-		wkc = ecx_SDOread(context, slave_number, assignment_index, pdo_subindex, FALSE,
-				  &size, &pdo_index, EC_TIMEOUTRXM);
-		if (wkc <= 0) {
+		if (!soem_read_sdo(context, slave_number, assignment_index, pdo_subindex, &size,
+				   &pdo_index)) {
 			return BACKEND_ERROR_SDO_READ_FAILED;
 		}
 		pdo_index = etohs(pdo_index);
@@ -72,9 +120,7 @@ static enum backend_error soem_read_pdo_assignment(
 		}
 
 		size = sizeof(entry_count);
-		wkc = ecx_SDOread(context, slave_number, pdo_index, 0, FALSE, &size,
-				  &entry_count, EC_TIMEOUTRXM);
-		if (wkc <= 0) {
+		if (!soem_read_sdo(context, slave_number, pdo_index, 0, &size, &entry_count)) {
 			return BACKEND_ERROR_SDO_READ_FAILED;
 		}
 
@@ -86,9 +132,8 @@ static enum backend_error soem_read_pdo_assignment(
 				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
 			}
 			size = sizeof(mapping);
-			wkc = ecx_SDOread(context, slave_number, pdo_index, entry_subindex, FALSE,
-					  &size, &mapping, EC_TIMEOUTRXM);
-			if (wkc <= 0) {
+			if (!soem_read_sdo(context, slave_number, pdo_index, entry_subindex, &size,
+					   &mapping)) {
 				return BACKEND_ERROR_SDO_READ_FAILED;
 			}
 
@@ -113,7 +158,7 @@ static enum backend_error soem_read_pdo_assignment(
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backend,
-						  struct slave *slaves, size_t slave_count)
+						 struct slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	enum backend_error error;
@@ -130,8 +175,12 @@ enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backen
 		if (!slave->base_info.has_coe) {
 			continue;
 		}
-		if ((ecx_statecheck(&context->context, (uint16_t)(i + 1), EC_STATE_PRE_OP,
-				    EC_TIMEOUTSTATE) & 0x0f) != EC_STATE_PRE_OP) {
+		const uint16_t state = ecx_statecheck(&context->context, (uint16_t)(i + 1),
+						      EC_STATE_PRE_OP, EC_TIMEOUTSTATE);
+		if ((state & 0x0f) != EC_STATE_PRE_OP) {
+			fprintf(stderr,
+				"[soem] PDO description unavailable: slave=%zu state=0x%02x\n",
+				i + 1, state);
 			return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 		}
 		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c12,
@@ -176,6 +225,96 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
 }
 
 /**
+ * soem_backend_sync0_configure - 激活/关闭从站 DC Sync0 输出
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标（核心层逻辑下标，0 起）
+ * @enable: 非 0 激活，0 关闭
+ * @cycle_time_ns: Sync0 周期（ns）
+ * @shift_time_ns: Sync0 相位偏移（ns）
+ *
+ * 只在总线配置阶段调用；运行期重复调用会导致 Sync0 重建。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error soem_backend_sync0_configure(struct backend_instance *backend,
+						size_t slave_index, int enable,
+						uint32_t cycle_time_ns, int32_t shift_time_ns)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
+
+	if (!context || !context->opened || !context->dc_configured) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (slave_number > context->context.slavecount) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (enable != 0 && cycle_time_ns == 0U) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	ecx_dcsync0(&context->context, slave_number, enable != 0, cycle_time_ns, shift_time_ns);
+	return BACKEND_ERROR_NONE;
+}
+
+/**
+ * soem_backend_sync0_read_status - 读回从站 Sync0 状态
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标（核心层逻辑下标，0 起）
+ * @status: 状态输出缓冲区
+ *
+ * 通过 ESC 寄存器读回 Sync0 激活位、周期、起始时间和 DC System Time。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error soem_backend_sync0_read_status(struct backend_instance *backend,
+						  size_t slave_index,
+						  struct mo_ecat_sync0_status *status)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
+	uint8_t sync_act = 0;
+	uint32_t cycle0 = 0;
+	uint32_t start0 = 0;
+	uint64_t sys_time = 0;
+	int wkc;
+
+	if (!context || !context->opened || !status) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (slave_number > context->context.slavecount) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	wkc = ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
+		       ECT_REG_DCSYNCACT, sizeof(sync_act), &sync_act, EC_TIMEOUTRET);
+	if (wkc <= 0) {
+		return BACKEND_ERROR_SDO_READ_FAILED;
+	}
+	wkc = ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
+		       ECT_REG_DCCYCLE0, sizeof(cycle0), &cycle0, EC_TIMEOUTRET);
+	if (wkc <= 0) {
+		return BACKEND_ERROR_SDO_READ_FAILED;
+	}
+	wkc = ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
+		       ECT_REG_DCSTART0, sizeof(start0), &start0, EC_TIMEOUTRET);
+	if (wkc <= 0) {
+		return BACKEND_ERROR_SDO_READ_FAILED;
+	}
+	wkc = ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
+		       ECT_REG_DCSYSTIME, sizeof(sys_time), &sys_time, EC_TIMEOUTRET);
+	if (wkc <= 0) {
+		return BACKEND_ERROR_SDO_READ_FAILED;
+	}
+
+	status->active = (sync_act & 0x01U) != 0 ? 1 : 0;
+	status->cycle_time_ns = cycle0;
+	status->start_time_ns = start0;
+	status->dc_time_ns = sys_time;
+	return BACKEND_ERROR_NONE;
+}
+
+/**
  * soem_resolve_pdo_entry_offsets - 解析所有 PDO entry 在 IOmap 中的偏移
  * @context: SOEM 后端上下文指针
  * @entries: PDO entry 映射数组
@@ -186,9 +325,9 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
  *
  * Return: 0 成功，非 0 失败
  */
-static enum backend_error soem_resolve_pdo_entry_offsets(
-	struct soem_backend_context *context, struct pdo_image_entry *entries,
-	size_t entry_count)
+static enum backend_error soem_resolve_pdo_entry_offsets(struct soem_backend_context *context,
+							 struct pdo_image_entry *entries,
+							 size_t entry_count)
 {
 	uint32_t *used_output_bits = NULL;
 	uint32_t *used_input_bits = NULL;
@@ -265,7 +404,8 @@ cleanup:
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
-						   struct pdo_image_entry *entries, size_t entry_count)
+						  struct pdo_image_entry *entries,
+						  size_t entry_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	enum backend_error error;
@@ -281,8 +421,10 @@ enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backe
 	context->pdo_image_size = 0;
 	mapped_size = ecx_config_map_group(&context->context, context->iomap, 0);
 	if (mapped_size <= 0 || (size_t)mapped_size > SOEM_BACKEND_IOMAP_SIZE) {
-		return mapped_size > (int)SOEM_BACKEND_IOMAP_SIZE ?
-			BACKEND_ERROR_PDO_IMAGE_TOO_LARGE : BACKEND_ERROR_PDO_MAPPING_FAILED;
+		soem_log_mapping_failure(&context->context, "config-map", mapped_size);
+		return mapped_size > (int)SOEM_BACKEND_IOMAP_SIZE
+			       ? BACKEND_ERROR_PDO_IMAGE_TOO_LARGE
+			       : BACKEND_ERROR_PDO_MAPPING_FAILED;
 	}
 
 	context->pdo_image_size = (size_t)mapped_size;
@@ -290,6 +432,7 @@ enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backe
 				context->context.grouplist[0].inputsWKC;
 	error = soem_resolve_pdo_entry_offsets(context, entries, entry_count);
 	if (error != BACKEND_ERROR_NONE) {
+		soem_log_mapping_failure(&context->context, "entry-offset", mapped_size);
 		return error;
 	}
 	context->pdo_mapping_ready = 1;

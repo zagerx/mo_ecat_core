@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <stdatomic.h>
+#include <pthread.h>
 
 #include "mo_ecat/mo_ecat_master.h"
 #include "mo_ecat/mo_ecat_master_state.h"
@@ -70,6 +71,7 @@ struct pdo_image_layout {
  * @config: 主站配置指针，由应用层持有；核心层只读引用，不复制不拥有
  * @pdo_layout: 主站 PDO 数据映像布局
  * @topology: 从站拓扑
+ * @topology_mutex: 保护拓扑发布、刷新与应用层快照读取
  * @user_data: 用户私有数据
  * @cyclic_callback: 周期控制回调，仅在 RUNNING 调用
  */
@@ -84,6 +86,7 @@ struct mo_ecat_master {
 	const struct mo_ecat_master_config *config;
 	struct pdo_image_layout pdo_layout;
 	struct master_topology topology;
+	pthread_mutex_t topology_mutex;
 
 	void *user_data;
 	mo_ecat_cyclic_callback cyclic_callback;

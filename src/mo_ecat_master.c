@@ -46,8 +46,7 @@ void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd
  *
  * Return: 0 成功，非 0 失败
  */
-static int master_init(struct mo_ecat_master *master,
-		       mo_ecat_cyclic_callback callback,
+static int master_init(struct mo_ecat_master *master, mo_ecat_cyclic_callback callback,
 		       void *user_data)
 {
 	if (!master) {
@@ -60,6 +59,9 @@ static int master_init(struct mo_ecat_master *master,
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
 	atomic_init(&master->state, MO_ECAT_MASTER_STATE_INIT);
 	atomic_init(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
+	if (pthread_mutex_init(&master->topology_mutex, NULL) != 0) {
+		return -1;
+	}
 	master->last_error.master_error = MO_ECAT_MASTER_ERROR_NONE;
 	master->last_error.detail = MASTER_ERROR_NONE;
 	master->last_error.source = MASTER_ERROR_SOURCE_CORE;
@@ -79,6 +81,7 @@ static void master_deinit(struct mo_ecat_master *master)
 	}
 
 	master_resources_release(master);
+	pthread_mutex_destroy(&master->topology_mutex);
 	memset(master, 0, sizeof(*master));
 }
 
@@ -91,8 +94,7 @@ static void master_deinit(struct mo_ecat_master *master)
  *
  * Return: 成功返回主站对象指针，失败返回 NULL
  */
-struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback,
-					     void *user_data)
+struct mo_ecat_master *mo_ecat_master_create(mo_ecat_cyclic_callback callback, void *user_data)
 {
 	struct mo_ecat_master *master;
 
@@ -206,4 +208,49 @@ enum mo_ecat_master_state mo_ecat_master_get_state(const struct mo_ecat_master *
 
 	state = atomic_load(&master->state);
 	return state;
+}
+
+/**
+ * mo_ecat_master_sync0_configure - 激活/关闭从站 DC Sync0 输出
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @enable: 非 0 激活，0 关闭
+ * @cycle_time_ns: Sync0 周期（ns）
+ * @shift_time_ns: Sync0 相位偏移（ns）
+ *
+ * 只在总线配置阶段调用；运行期重复调用会导致 Sync0 重建。
+ *
+ * Return: 0 成功；负 errno
+ */
+int mo_ecat_master_sync0_configure(struct mo_ecat_master *master, size_t slave_index, int enable,
+				   uint32_t cycle_time_ns, int32_t shift_time_ns)
+{
+	enum backend_error error;
+
+	if (!master) {
+		return -1;
+	}
+	error = backend_sync0_configure(&master->backend, slave_index, enable, cycle_time_ns,
+					shift_time_ns);
+	return master_error_from_backend(error);
+}
+
+/**
+ * mo_ecat_master_sync0_status - 读回从站 Sync0 当前状态
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @status: 状态输出缓冲区
+ *
+ * Return: 0 成功；负 errno
+ */
+int mo_ecat_master_sync0_status(struct mo_ecat_master *master, size_t slave_index,
+				struct mo_ecat_sync0_status *status)
+{
+	enum backend_error error;
+
+	if (!master) {
+		return -1;
+	}
+	error = backend_sync0_read_status(&master->backend, slave_index, status);
+	return master_error_from_backend(error);
 }

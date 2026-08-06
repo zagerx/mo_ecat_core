@@ -53,7 +53,7 @@ enum backend_error backend_load_slave_info(struct backend_instance *backend, siz
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_translate_slave_info(struct backend_instance *backend,
-					struct slave *slaves, size_t slave_count)
+						struct slave *slaves, size_t slave_count)
 {
 	if (!backend || !backend->translation_ops ||
 	    !backend->translation_ops->translate_slave_info) {
@@ -75,11 +75,10 @@ enum backend_error backend_translate_slave_info(struct backend_instance *backend
  *
  * Return: 0 成功，非 0 失败
  */
-enum backend_error backend_read_pdo_entries(struct backend_instance *backend,
-					struct slave *slaves, size_t slave_count)
+enum backend_error backend_read_pdo_entries(struct backend_instance *backend, struct slave *slaves,
+					    size_t slave_count)
 {
-	if (!backend || !backend->translation_ops ||
-	    !backend->translation_ops->read_pdo_entries) {
+	if (!backend || !backend->translation_ops || !backend->translation_ops->read_pdo_entries) {
 		return BACKEND_ERROR_NOT_READY;
 	}
 
@@ -106,6 +105,51 @@ enum backend_error backend_configure_dc(struct backend_instance *backend)
 }
 
 /**
+ * backend_sync0_configure - 激活/关闭从站 DC Sync0 输出
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标
+ * @enable: 非 0 激活，0 关闭
+ * @cycle_time_ns: Sync0 周期（ns）
+ * @shift_time_ns: Sync0 相位偏移（ns）
+ *
+ * 只在总线配置阶段调用，运行期重复调用会导致 Sync0 重建。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error backend_sync0_configure(struct backend_instance *backend, size_t slave_index,
+					   int enable, uint32_t cycle_time_ns,
+					   int32_t shift_time_ns)
+{
+	if (!backend || !backend->ops || !backend->ops->sync0_configure) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+
+	return backend->ops->sync0_configure(backend, slave_index, enable, cycle_time_ns,
+					     shift_time_ns);
+}
+
+/**
+ * backend_sync0_read_status - 读回从站 Sync0 状态
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标
+ * @status: 状态输出缓冲区
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error backend_sync0_read_status(struct backend_instance *backend, size_t slave_index,
+					     struct mo_ecat_sync0_status *status)
+{
+	if (!backend || !backend->ops || !backend->ops->sync0_read_status) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (!status) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	return backend->ops->sync0_read_status(backend, slave_index, status);
+}
+
+/**
  * backend_build_pdo_mapping - 调用后端建立 PDO 映射
  * @backend: 后端实例指针
  * @entries: PDO entry 映射数组，由调用者分配
@@ -118,8 +162,7 @@ enum backend_error backend_configure_dc(struct backend_instance *backend)
  * Return: 0 成功，非 0 失败
  */
 enum backend_error backend_build_pdo_mapping(struct backend_instance *backend,
-					     struct pdo_image_entry *entries,
-					     size_t entry_count)
+					     struct pdo_image_entry *entries, size_t entry_count)
 {
 	if (!backend || !backend->ops || !backend->ops->build_pdo_mapping) {
 		return BACKEND_ERROR_NOT_READY;
@@ -139,11 +182,9 @@ enum backend_error backend_build_pdo_mapping(struct backend_instance *backend,
  *
  * Return: 0 成功，非 0 失败
  */
-enum backend_error backend_get_pdo_image(struct backend_instance *backend,
-					struct pdo_image *image)
+enum backend_error backend_get_pdo_image(struct backend_instance *backend, struct pdo_image *image)
 {
-	if (!backend || !backend->translation_ops ||
-	    !backend->translation_ops->get_pdo_image) {
+	if (!backend || !backend->translation_ops || !backend->translation_ops->get_pdo_image) {
 		return BACKEND_ERROR_NOT_READY;
 	}
 

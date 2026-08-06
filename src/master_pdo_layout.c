@@ -97,8 +97,10 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 		free(entries);
 		return master_error_from_backend(error);
 	}
+	pthread_mutex_lock(&master->topology_mutex);
 	error = backend_translate_slave_info(&master->backend, master->topology.slaves,
-					    master->topology.slave_count);
+					     master->topology.slave_count);
+	pthread_mutex_unlock(&master->topology_mutex);
 	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
 		return master_error_from_backend(error);
