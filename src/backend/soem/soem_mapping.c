@@ -221,6 +221,10 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
 	}
 
 	context->dc_configured = 1;
+
+	/* Sync0 激活推迟到 RUNNING 之后，避免干扰 OP 切换。
+	   pending 参数保留，由后续 sync0_configure 调用（dc_configured=1 时直接生效）。 */
+
 	return BACKEND_ERROR_NONE;
 }
 
@@ -243,7 +247,7 @@ enum backend_error soem_backend_sync0_configure(struct backend_instance *backend
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
 
-	if (!context || !context->opened || !context->dc_configured) {
+	if (!context || !context->opened) {
 		return BACKEND_ERROR_NOT_READY;
 	}
 	if (slave_number > context->context.slavecount) {
@@ -253,7 +257,31 @@ enum backend_error soem_backend_sync0_configure(struct backend_instance *backend
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
+	if (!context->dc_configured) {
+		/* DC 尚未配置（ecx_configdc 未执行），暂存参数。
+		   将在 soem_backend_configure_dc 中 ecx_configdc 后生效，
+		   确保 dc_configured=1 且 SAFEOP 过渡尚未发生。 */
+		context->pending_sync0_enable = enable ? 1 : 0;
+		context->pending_sync0_cycle_ns = cycle_time_ns;
+		context->pending_sync0_shift_ns = shift_time_ns;
+		return BACKEND_ERROR_NONE;
+	}
+
+	/* DC 已配置，直接写入 ESC 寄存器。
+	   ecx_dcsync0 写入 cycle/start time，其 1 字节写 0x0981 在 RA8T2 上
+	   被忽略，补写 2 字节 0x0980=0x0003 激活 Sync0。 */
 	ecx_dcsync0(&context->context, slave_number, enable != 0, cycle_time_ns, shift_time_ns);
+
+	/* RA8T2 手册 §36.17.3-4: DC_CYC_CONT(0x0980).SYNCOUT 控制激活权。
+	   必须 SYNCOUT=0 (ECAT 控制) 才能让主站写 DC_ACT(0x0981)。
+	   写入 0x0300 表示 byte0(0x0980)=0x00(SYNCOUT=0), byte1(0x0981)=0x03(SYNCACT|SYNC0)。
+	   ecx_dcsync0 自带的 1 字节写 0x0981 在 SYNCOUT=1 时无效。 */
+	{
+		uint16_t dc_act = enable ? 0x0300U : 0x0000U;
+		ecx_FPWR(&context->context.port, context->context.slavelist[slave_number].configadr,
+			 ECT_REG_DCCUC, sizeof(dc_act), &dc_act, EC_TIMEOUTRET);
+	}
+
 	return BACKEND_ERROR_NONE;
 }
 
@@ -273,7 +301,7 @@ enum backend_error soem_backend_sync0_read_status(struct backend_instance *backe
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
-	uint8_t sync_act = 0;
+	uint32_t sync_act = 0; /* 4 字节读 0x0980：byte0=激活, byte1=0x0981, ... */
 	uint32_t cycle0 = 0;
 	uint32_t start0 = 0;
 	uint64_t sys_time = 0;
@@ -286,11 +314,15 @@ enum backend_error soem_backend_sync0_read_status(struct backend_instance *backe
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
+	/* 4 字节读 0x0980。RA8T2 ESC 激活寄存器在 0x0980 bit0+bit1。
+	   注意：ecx_dcsync0 的 1 字节写 0x0981 被忽略，实际激活由
+	   2 字节写 0x0980=0x0003 完成。 */
 	wkc = ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
-		       ECT_REG_DCSYNCACT, sizeof(sync_act), &sync_act, EC_TIMEOUTRET);
+		       ECT_REG_DCCUC, sizeof(sync_act), &sync_act, EC_TIMEOUTRET);
 	if (wkc <= 0) {
 		return BACKEND_ERROR_SDO_READ_FAILED;
 	}
+	status->active = (sync_act & 0x0001U) != 0 ? 1 : 0; /* bit0=SyncOutUnit (0x0980) on RA8T2 */
 	wkc = ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
 		       ECT_REG_DCCYCLE0, sizeof(cycle0), &cycle0, EC_TIMEOUTRET);
 	if (wkc <= 0) {
@@ -307,7 +339,6 @@ enum backend_error soem_backend_sync0_read_status(struct backend_instance *backe
 		return BACKEND_ERROR_SDO_READ_FAILED;
 	}
 
-	status->active = (sync_act & 0x01U) != 0 ? 1 : 0;
 	status->cycle_time_ns = cycle0;
 	status->start_time_ns = start0;
 	status->dc_time_ns = sys_time;

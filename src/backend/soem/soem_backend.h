@@ -33,6 +33,10 @@ struct soem_backend_context {
 	int opened;
 	int dc_configured;
 	int pdo_mapping_ready;
+	/* 待处理的 Sync0 配置（在 ecx_configdc 之后、ecx_config_map_group 之前生效） */
+	int pending_sync0_enable;
+	uint32_t pending_sync0_cycle_ns;
+	int32_t pending_sync0_shift_ns;
 };
 
 struct soem_backend_context *soem_backend_context_get(struct backend_instance *backend);
