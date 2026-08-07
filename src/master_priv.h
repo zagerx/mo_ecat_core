@@ -87,6 +87,7 @@ struct mo_ecat_master {
 	struct pdo_image_layout pdo_layout;
 	struct master_topology topology;
 	pthread_mutex_t topology_mutex;
+	uint64_t last_state_refresh_ns;
 
 	void *user_data;
 	mo_ecat_cyclic_callback cyclic_callback;

@@ -9,6 +9,40 @@
 #include "master_states.h"
 #include "master_priv.h"
 
+#include <stdint.h>
+#include <time.h>
+
+/* RUNNING 状态下从站状态刷新的最小间隔：200ms。
+ * 刷新是 FPRD 读 AL 状态寄存器，开销 us 级；限速避免拖累周期。 */
+#define MASTER_STATE_REFRESH_INTERVAL_NS (200ULL * 1000ULL * 1000ULL)
+
+static uint64_t master_monotonic_ns(void)
+{
+	struct timespec now;
+
+	(void)clock_gettime(CLOCK_MONOTONIC, &now);
+	return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
+}
+
+/**
+ * master_refresh_slave_states_periodic - RUNNING 中限速刷新从站 AL 状态
+ * @master: 主站对象指针
+ *
+ * 拓扑缓存在扫描后不再更新，进入 RUNNING 后从站真实状态（OP）与缓存
+ * （PRE-OP）不一致；此处按最小间隔周期刷新。last_state_refresh_ns 初始为
+ * 0，进入 RUNNING 的第一拍即会刷新一次。刷新失败不影响周期运行。
+ */
+static void master_refresh_slave_states_periodic(struct mo_ecat_master *master)
+{
+	uint64_t now = master_monotonic_ns();
+
+	if (now - master->last_state_refresh_ns < MASTER_STATE_REFRESH_INTERVAL_NS) {
+		return;
+	}
+	master->last_state_refresh_ns = now;
+	(void)master_topology_refresh_states(master);
+}
+
 /**
  * master_set_fault - 设置主站故障码
  * @master: 主站对象指针
@@ -343,7 +377,10 @@ void master_state_running(struct statemachine *sm)
 			(void)master_topology_refresh_states(master);
 			master_runtime_release(master);
 			sm_transition(sm, master_state_fault);
+			break;
 		}
+
+		master_refresh_slave_states_periodic(master);
 		break;
 	case SM_PHASE_EXIT:
 	default:
