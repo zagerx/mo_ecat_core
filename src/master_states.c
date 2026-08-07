@@ -17,6 +17,11 @@
  * 50ms 兼顾检测实时性与总线负载。 */
 #define MASTER_STATE_REFRESH_INTERVAL_NS (50ULL * 1000ULL * 1000ULL)
 
+/* 周期通信硬故障（收不到帧/发不出去）的容忍窗口：100ms。
+ * 拔插网线、链路易协商等物理瞬断通常只丢几拍，不应直接判
+ * BUS_FAULT；连续异常超过该窗口才进 FAULT。 */
+#define MASTER_CYCLIC_FAULT_TOLERANCE_NS (100ULL * 1000ULL * 1000ULL)
+
 static uint64_t master_monotonic_ns(void)
 {
 	struct timespec now;
@@ -84,7 +89,7 @@ static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *mas
 	if (mo_ecat_master_get_node_count(master) > 0U) {
 		(void)master_topology_refresh_states(master);
 	}
-	master_runtime_release(master);
+	master_runtime_pdo_release(master);
 	sm_transition(sm, master_state_fault);
 }
 
@@ -300,7 +305,7 @@ void master_state_ready(struct statemachine *sm)
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
 				(void)master_topology_refresh_states(master);
-				master_runtime_release(master);
+				master_runtime_pdo_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
 				sm_transition(sm, master_state_running);
@@ -355,7 +360,7 @@ void master_state_running(struct statemachine *sm)
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 				(void)master_topology_refresh_states(master);
-				master_runtime_release(master);
+				master_runtime_pdo_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
 				sm_transition(sm, master_state_ready);
@@ -363,26 +368,42 @@ void master_state_running(struct statemachine *sm)
 			break;
 		}
 
-		error = master_cyclic_receive(master, &result);
-		if (error != MASTER_ERROR_NONE) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
-			(void)master_topology_refresh_states(master);
-			master_runtime_release(master);
-			sm_transition(sm, master_state_fault);
-			break;
-		}
+		{
+			int cycle_fault = 0;
 
-		if (master->cyclic_callback) {
-			master->cyclic_callback(master, &result, master->user_data);
-		}
+			error = master_cyclic_receive(master, &result);
+			if (error != MASTER_ERROR_NONE) {
+				cycle_fault = 1;
+			}
+			/* WKC 不符（个别从站掉线但帧仍在流动）不算硬故障，
+			 * 由状态刷新呈现、supervisor 掉线策略处置。 */
 
-		error = master_cyclic_send(master, &result);
-		if (error != MASTER_ERROR_NONE) {
-			master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
-			(void)master_topology_refresh_states(master);
-			master_runtime_release(master);
-			sm_transition(sm, master_state_fault);
-			break;
+			if (master->cyclic_callback) {
+				master->cyclic_callback(master, &result, master->user_data);
+			}
+
+			error = master_cyclic_send(master, &result);
+			if (error != MASTER_ERROR_NONE) {
+				cycle_fault = 1;
+			}
+
+			if (cycle_fault != 0) {
+				const uint64_t now = master_monotonic_ns();
+
+				if (master->cyclic_fault_since_ns == 0U) {
+					master->cyclic_fault_since_ns = now;
+				} else if (now - master->cyclic_fault_since_ns >=
+					   MASTER_CYCLIC_FAULT_TOLERANCE_NS) {
+					master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT,
+							 error);
+					(void)master_topology_refresh_states(master);
+					master_runtime_pdo_release(master);
+					sm_transition(sm, master_state_fault);
+					break;
+				}
+			} else {
+				master->cyclic_fault_since_ns = 0U;
+			}
 		}
 
 		master_refresh_slave_states_periodic(master);
@@ -419,13 +440,15 @@ void master_state_fault(struct statemachine *sm)
 		break;
 	case SM_PHASE_START:
 		cmd = master_take_cmd(master);
-		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
-			break;
-		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
 			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
+			break;
 		}
+
+		/* FAULT 期间后端保持打开，继续限速刷新从站状态，
+		 * 上层能看到故障现场的真实变化（掉线/恢复/错误码）。 */
+		master_refresh_slave_states_periodic(master);
 		break;
 	case SM_PHASE_EXIT:
 	default:

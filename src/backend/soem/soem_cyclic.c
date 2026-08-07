@@ -111,22 +111,18 @@ enum backend_error soem_backend_read_all_slave_states(struct backend_instance *b
 						      struct slave *slaves, size_t slave_count)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
-	int wkc;
+	size_t online_count = 0;
 
 	if (!context || !context->opened || (slave_count > 0 && !slaves)) {
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
-	wkc = ecx_readstate(&context->context);
-	if (wkc <= 0) {
-		for (size_t i = 0; i < slave_count; ++i) {
-			slaves[i].state.is_online = 0;
-			slaves[i].state.is_operational = 0;
-		}
-		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
-	}
 	if (slave_count != (size_t)context->context.slavecount) {
 		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 	}
+
+	/* ecx_readstate 返回值是"最低状态值"而非 WKC，不能用作在线依据。
+	 * SOEM 对无应答从站写入 state=0（EC_STATE_NONE），据此逐站标记。 */
+	(void)ecx_readstate(&context->context);
 
 	for (size_t i = 0; i < slave_count; ++i) {
 		const ec_slavet *slave = &context->context.slavelist[i + 1];
@@ -134,12 +130,16 @@ enum backend_error soem_backend_read_all_slave_states(struct backend_instance *b
 		slaves[i].state.al_state = soem_backend_node_al_state(slave->state);
 		slaves[i].state.has_error = slave->ALstatuscode != 0;
 		slaves[i].state.al_status_code = slave->ALstatuscode;
-		slaves[i].state.is_online = 1;
+		slaves[i].state.is_online = (slave->state & 0x0f) != EC_STATE_NONE;
 		slaves[i].state.is_operational =
+			slaves[i].state.is_online != 0 &&
 			slaves[i].state.al_state == MO_ECAT_NODE_AL_STATE_OP;
+		if (slaves[i].state.is_online) {
+			++online_count;
+		}
 	}
 
-	return BACKEND_ERROR_NONE;
+	return online_count > 0 ? BACKEND_ERROR_NONE : BACKEND_ERROR_READ_NODE_STATE_FAILED;
 }
 
 /**

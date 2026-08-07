@@ -88,6 +88,7 @@ struct mo_ecat_master {
 	struct master_topology topology;
 	pthread_mutex_t topology_mutex;
 	uint64_t last_state_refresh_ns;
+	uint64_t cyclic_fault_since_ns;
 
 	void *user_data;
 	mo_ecat_cyclic_callback cyclic_callback;

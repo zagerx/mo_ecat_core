@@ -11,6 +11,23 @@
 #include "master_resources.h"
 
 /**
+ * master_runtime_pdo_release - 仅释放 PDO 运行资源，保留后端
+ * @master: 主站对象指针
+ *
+ * 用于 FAULT 路径：PDO 映射失效，但后端保持打开，故障期间仍可
+ * 刷新从站状态，让上层看到真实现场。拓扑快照同样保留。
+ */
+void master_runtime_pdo_release(struct mo_ecat_master *master)
+{
+	if (!master) {
+		return;
+	}
+
+	free(master->pdo_layout.entries);
+	memset(&master->pdo_layout, 0, sizeof(master->pdo_layout));
+}
+
+/**
  * master_runtime_release - 关闭后端并释放 PDO 运行资源
  * @master: 主站对象指针
  *
