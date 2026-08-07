@@ -12,9 +12,10 @@
 #include <stdint.h>
 #include <time.h>
 
-/* RUNNING 状态下从站状态刷新的最小间隔：200ms。
- * 刷新是 FPRD 读 AL 状态寄存器，开销 us 级；限速避免拖累周期。 */
-#define MASTER_STATE_REFRESH_INTERVAL_NS (200ULL * 1000ULL * 1000ULL)
+/* RUNNING/READY 状态下从站状态刷新的最小间隔：50ms。
+ * 刷新是一帧 AL 状态广播读（ecx_readstate），开销 us 级；
+ * 50ms 兼顾检测实时性与总线负载。 */
+#define MASTER_STATE_REFRESH_INTERVAL_NS (50ULL * 1000ULL * 1000ULL)
 
 static uint64_t master_monotonic_ns(void)
 {
@@ -289,13 +290,12 @@ void master_state_ready(struct statemachine *sm)
 		break;
 	case SM_PHASE_START:
 		cmd = master_take_cmd(master);
-		if (cmd == MO_ECAT_MASTER_CMD_NONE) {
-			break;
-		}
 		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
 			master_resources_release(master);
 			sm_transition(sm, master_state_idle);
-		} else if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
+			break;
+		}
+		if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
 			error = master_pdo_layout_activate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
@@ -305,7 +305,12 @@ void master_state_ready(struct statemachine *sm)
 			} else {
 				sm_transition(sm, master_state_running);
 			}
+			break;
 		}
+
+		/* READY 下总线空闲，刷新从站状态不会干扰周期通信；
+		 * 保证 DEACTIVATE 后界面能看到真实的 SAFE-OP/PRE-OP。 */
+		master_refresh_slave_states_periodic(master);
 		break;
 	case SM_PHASE_EXIT:
 	default:
