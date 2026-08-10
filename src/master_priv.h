@@ -21,9 +21,8 @@
 #include "master_states.h"
 #include "master_resources.h"
 #include "slave_table.h"
-#include "master_pdo_layout.h"
+#include "pdo_layout.h"
 #include "master_error.h"
-#include "pdo_image_priv.h"
 #include "pdo_image_entry_priv.h"
 #include "slave_priv.h"
 
@@ -44,7 +43,7 @@ struct slave_table {
 };
 
 /**
- * struct pdo_image_layout - PDO 数据映像布局
+ * struct pdo_layout - PDO 数据映像布局
  * @image: PDO 数据区域
  * @entries: PDO 映像条目数组；每个元素保存条目记录、数据映像字节/位偏移
  *           和所属布局代际
@@ -54,7 +53,7 @@ struct slave_table {
  *
  * 保存主站 PDO 数据区域、所有 PDO entry 的地址映射以及映射运行状态。
  */
-struct pdo_image_layout {
+struct pdo_layout {
 	struct pdo_image image;
 	struct pdo_image_entry *entries;
 	size_t entry_count;
@@ -84,7 +83,7 @@ struct mo_ecat_master {
 	struct master_error_record last_error;
 	struct backend_instance backend;
 	const struct mo_ecat_master_config *config;
-	struct pdo_image_layout pdo_layout;
+	struct pdo_layout pdo_layout;
 	struct slave_table slave_table;
 	pthread_mutex_t slave_table_mutex;
 	uint64_t last_state_refresh_ns;

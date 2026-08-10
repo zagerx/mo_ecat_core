@@ -16,7 +16,7 @@ set(MO_ECAT_CORE_SOURCES
     src/master_resources.c
     src/master_error.c
     src/slave_table.c
-    src/master_pdo_layout.c
+    src/pdo_layout.c
     src/mo_ecat_pdo.c
     src/mo_ecat_topology.c
     src/master_states.c

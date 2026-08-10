@@ -16,7 +16,7 @@
  * @bit_offset: 在 PDO 数据区域中的位偏移
  *
  * 逻辑对象身份可提供给应用层；IOmap/domain 中的物理地址只限核心层和
- * 后端使用。布局代际统一保存在 pdo_image_layout 中。
+ * 后端使用。布局代际统一保存在 pdo_layout 中。
  */
 struct pdo_image_entry {
 	struct pdo_entry_record record;

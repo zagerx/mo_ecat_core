@@ -1,13 +1,13 @@
 /*
- * master_pdo_layout.c - 主站 PDO 数据映像布局建立与周期交换启停
+ * pdo_layout.c - PDO 数据映像布局建立与周期交换启停
  *
- * 根据拓扑扫描到的 PDO entry 建立核心层逻辑映射，调用后端建立物理
+ * 根据从站表扫描到的 PDO entry 建立核心层逻辑映射，调用后端建立物理
  * IOmap，并管理 PDO 映射的激活与去激活。
  */
 
 #include <stdlib.h>
 
-#include "master_pdo_layout.h"
+#include "pdo_layout.h"
 #include "master_priv.h"
 
 /**
@@ -27,7 +27,7 @@ static void master_pdo_entry_export(struct pdo_entry_record *destination,
 }
 
 /**
- * pdo_image_entries_build - 根据拓扑信息构建 PDO 映像条目
+ * pdo_image_entries_build - 根据从站表信息构建 PDO 映像条目
  * @master: 主站对象指针
  * @entries: PDO entry 映射输出数组，已由调用者分配
  *
@@ -53,7 +53,7 @@ static void pdo_image_entries_build(const struct mo_ecat_master *master,
 }
 
 /**
- * master_pdo_layout_build - 建立主站 PDO 数据映像布局
+ * pdo_layout_build - 建立 PDO 数据映像布局
  * @master: 主站对象指针
  *
  * 统计所有从站的 PDO entry 总数，分配逻辑映射数组，调用后端建立物理映射，
@@ -61,7 +61,7 @@ static void pdo_image_entries_build(const struct mo_ecat_master *master,
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
+enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
 {
 	struct pdo_image image = {0};
 	struct pdo_image_entry *entries = NULL;
@@ -115,12 +115,12 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 }
 
 /**
- * master_pdo_layout_activate - 激活 PDO 周期交换
+ * pdo_layout_activate - 激活 PDO 周期交换
  * @master: 主站对象指针
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_pdo_layout_activate(struct mo_ecat_master *master)
+enum master_error_detail pdo_layout_activate(struct mo_ecat_master *master)
 {
 	enum backend_error error;
 
@@ -137,12 +137,12 @@ enum master_error_detail master_pdo_layout_activate(struct mo_ecat_master *maste
 }
 
 /**
- * master_pdo_layout_deactivate - 去激活 PDO 周期交换
+ * pdo_layout_deactivate - 去激活 PDO 周期交换
  * @master: 主站对象指针
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_pdo_layout_deactivate(struct mo_ecat_master *master)
+enum master_error_detail pdo_layout_deactivate(struct mo_ecat_master *master)
 {
 	enum backend_error error;
 
