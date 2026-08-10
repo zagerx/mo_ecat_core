@@ -13,141 +13,24 @@
 
 #define SOEM_SDO_READ_ATTEMPTS 3
 
-static int soem_read_sdo(ecx_contextt *context, uint16_t slave_number, uint16_t object_index,
-			 uint8_t object_subindex, int *size, void *data)
-{
-	const int requested_size = *size;
 
-	for (int attempt = 0; attempt < SOEM_SDO_READ_ATTEMPTS; ++attempt) {
-		*size = requested_size;
-		if (ecx_SDOread(context, slave_number, object_index, object_subindex, FALSE, size,
-				data, EC_TIMEOUTRXM) > 0) {
-			return 1;
-		}
-	}
+/* 静态辅助函数前向声明 */
 
-	fprintf(stderr, "[soem] SDO read failed after %d attempts: slave=%u object=0x%04x:%02x\n",
-		SOEM_SDO_READ_ATTEMPTS, slave_number, object_index, object_subindex);
-	return 0;
-}
+static int _read_sdo(ecx_contextt *context, uint16_t slave_number, uint16_t object_index,
+			 uint8_t object_subindex, int *size, void *data);
 
-static void soem_log_mapping_failure(ecx_contextt *context, const char *stage, int mapped_size)
-{
-	(void)ecx_readstate(context);
-	fprintf(stderr, "[soem] PDO mapping failed: stage=%s mapped_size=%d\n", stage, mapped_size);
-	for (int slave_number = 1; slave_number <= context->slavecount; ++slave_number) {
-		const ec_slavet *slave = &context->slavelist[slave_number];
+static void _log_mapping_failure(ecx_contextt *context, const char *stage, int mapped_size);
 
-		fprintf(stderr,
-			"[soem] slave=%d state=0x%02x al=0x%04x Obits=%u Ibits=%u "
-			"SM2=0x%04x/%u/type%u SM3=0x%04x/%u/type%u\n",
-			slave_number, slave->state, slave->ALstatuscode, slave->Obits, slave->Ibits,
-			etohs(slave->SM[2].StartAddr), etohs(slave->SM[2].SMlength),
-			slave->SMtype[2], etohs(slave->SM[3].StartAddr),
-			etohs(slave->SM[3].SMlength), slave->SMtype[3]);
-	}
-}
+static enum backend_error _check_dc_support(ecx_contextt *context);
 
-/**
- * soem_check_dc_support - 检查所有从站是否支持 DC
- * @context: SOEM 上下文指针
- *
- * Return: 全部支持返回 0，任一不支持返回 -1
- */
-static enum backend_error soem_check_dc_support(ecx_contextt *context)
-{
-	if (!context) {
-		return BACKEND_ERROR_INVALID_ARGUMENT;
-	}
-	for (int i = 1; i <= context->slavecount; ++i) {
-		if (!context->slavelist[i].hasdc) {
-			const ec_slavet *slave;
-
-			(void)ecx_readstate(context);
-			slave = &context->slavelist[i];
-			fprintf(stderr,
-				"[soem] DC check failed: slave=%d state=0x%02x al=0x%04x "
-				"SM0=0x%04x/%u/0x%08x SM1=0x%04x/%u/0x%08x "
-				"mbx-write=0x%04x/%u mbx-read=0x%04x/%u proto=0x%04x\n",
-				i, slave->state, slave->ALstatuscode, etohs(slave->SM[0].StartAddr),
-				etohs(slave->SM[0].SMlength), etohl(slave->SM[0].SMflags),
-				etohs(slave->SM[1].StartAddr), etohs(slave->SM[1].SMlength),
-				etohl(slave->SM[1].SMflags), slave->mbx_wo, slave->mbx_l,
-				slave->mbx_ro, slave->mbx_rl, slave->mbx_proto);
-			return BACKEND_ERROR_DC_UNSUPPORTED;
-		}
-	}
-	return BACKEND_ERROR_NONE;
-}
-
-/**
- * soem_read_pdo_assignment - 读取单个 PDO 分配对象下的所有 entry
- * @context: SOEM 上下文指针
- * @slave_number: 从站编号（SOEM 内部编号，从 1 开始）
- * @assignment_index: PDO 分配对象索引（如 0x1C12/0x1C13）
- * @direction: PDO 方向
- * @slave: 核心层从站缓存
- *
- * 读取 PDO 分配对象，再读取每个 PDO 的映射对象，将解析结果填充到
- * slave->pdo_entries[]。
- *
- * Return: 0 成功，非 0 失败
- */
-static enum backend_error soem_read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
+static enum backend_error _read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
 						   uint16_t assignment_index,
 						   enum mo_ecat_pdo_direction direction,
-						   struct slave *slave)
-{
-	uint8_t pdo_count = 0;
-	int size = sizeof(pdo_count);
+						   struct slave *slave);
 
-	if (!soem_read_sdo(context, slave_number, assignment_index, 0, &size, &pdo_count)) {
-		return BACKEND_ERROR_SDO_READ_FAILED;
-	}
-
-	for (uint8_t pdo_subindex = 1; pdo_subindex <= pdo_count; ++pdo_subindex) {
-		uint16_t pdo_index = 0;
-		uint8_t entry_count = 0;
-
-		size = sizeof(pdo_index);
-		if (!soem_read_sdo(context, slave_number, assignment_index, pdo_subindex, &size,
-				   &pdo_index)) {
-			return BACKEND_ERROR_SDO_READ_FAILED;
-		}
-		pdo_index = etohs(pdo_index);
-		if (pdo_index == 0) {
-			continue;
-		}
-
-		size = sizeof(entry_count);
-		if (!soem_read_sdo(context, slave_number, pdo_index, 0, &size, &entry_count)) {
-			return BACKEND_ERROR_SDO_READ_FAILED;
-		}
-
-		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count; ++entry_subindex) {
-			uint32_t mapping = 0;
-			struct pdo_entry *entry;
-
-			if (slave->pdo_entry_count >= SLAVE_MAX_PDO_ENTRIES) {
-				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
-			}
-			size = sizeof(mapping);
-			if (!soem_read_sdo(context, slave_number, pdo_index, entry_subindex, &size,
-					   &mapping)) {
-				return BACKEND_ERROR_SDO_READ_FAILED;
-			}
-
-			mapping = etohl(mapping);
-			entry = &slave->pdo_entries[slave->pdo_entry_count++];
-			entry->object_index = (uint16_t)(mapping >> 16);
-			entry->object_subindex = (uint8_t)(mapping >> 8);
-			entry->bit_length = (uint8_t)mapping;
-			entry->direction = direction;
-		}
-	}
-
-	return BACKEND_ERROR_NONE;
-}
+static enum backend_error _resolve_pdo_entry_offsets(struct soem_backend_context *context,
+							 struct pdo_image_entry *entries,
+							 size_t entry_count);
 
 /**
  * soem_backend_read_pdo_entries - 读取 SOEM 从站默认 PDO 映射条目
@@ -183,12 +66,12 @@ enum backend_error soem_backend_read_pdo_entries(struct backend_instance *backen
 				i + 1, state);
 			return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 		}
-		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c12,
+		error = _read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c12,
 						 MO_ECAT_PDO_OUTPUT, slave);
 		if (error != BACKEND_ERROR_NONE) {
 			return error;
 		}
-		error = soem_read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c13,
+		error = _read_pdo_assignment(&context->context, (uint16_t)(i + 1), 0x1c13,
 						 MO_ECAT_PDO_INPUT, slave);
 		if (error != BACKEND_ERROR_NONE) {
 			return error;
@@ -212,7 +95,7 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
 	if (!context || !context->opened) {
 		return BACKEND_ERROR_NOT_READY;
 	}
-	error = soem_check_dc_support(&context->context);
+	error = _check_dc_support(&context->context);
 	if (error != BACKEND_ERROR_NONE) {
 		return error;
 	}
@@ -328,7 +211,213 @@ enum backend_error soem_backend_sync0_read_status(struct backend_instance *backe
 }
 
 /**
- * soem_resolve_pdo_entry_offsets - 解析所有 PDO entry 在 IOmap 中的偏移
+ * soem_backend_build_pdo_mapping - 建立 SOEM 后端 PDO 映射
+ * @backend: 后端实例指针
+ * @entries: PDO entry 映射数组
+ * @entry_count: PDO entry 数量
+ *
+ * 调用 SOEM ecx_config_map_group() 建立 IOmap，并回填每个 entry 的偏移。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
+						  struct pdo_image_entry *entries,
+						  size_t entry_count)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	enum backend_error error;
+	int mapped_size;
+
+	if (!context || !context->opened || !context->dc_configured) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (entry_count > 0 && !entries) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	context->pdo_mapping_ready = 0;
+	context->pdo_image_size = 0;
+	mapped_size = ecx_config_map_group(&context->context, context->iomap, 0);
+	if (mapped_size <= 0 || (size_t)mapped_size > SOEM_BACKEND_IOMAP_SIZE) {
+		_log_mapping_failure(&context->context, "config-map", mapped_size);
+		return mapped_size > (int)SOEM_BACKEND_IOMAP_SIZE
+			       ? BACKEND_ERROR_PDO_IMAGE_TOO_LARGE
+			       : BACKEND_ERROR_PDO_MAPPING_FAILED;
+	}
+
+	context->pdo_image_size = (size_t)mapped_size;
+	context->expected_wkc = (uint32_t)context->context.grouplist[0].outputsWKC * 2U +
+				context->context.grouplist[0].inputsWKC;
+	error = _resolve_pdo_entry_offsets(context, entries, entry_count);
+	if (error != BACKEND_ERROR_NONE) {
+		_log_mapping_failure(&context->context, "entry-offset", mapped_size);
+		return error;
+	}
+	context->pdo_mapping_ready = 1;
+
+	return BACKEND_ERROR_NONE;
+}
+
+/**
+ * soem_backend_get_pdo_image - 获取 SOEM 后端 PDO 数据区域
+ * @backend: 后端实例指针
+ * @image: 用于返回 PDO 数据映像的指针
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error soem_backend_get_pdo_image(struct backend_instance *backend,
+					      struct pdo_image *image)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+
+	if (!image) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (!context || !context->pdo_mapping_ready) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	image->memory = context->iomap;
+	image->size = context->pdo_image_size;
+	return BACKEND_ERROR_NONE;
+}
+
+static int _read_sdo(ecx_contextt *context, uint16_t slave_number, uint16_t object_index,
+			 uint8_t object_subindex, int *size, void *data)
+{
+	const int requested_size = *size;
+
+	for (int attempt = 0; attempt < SOEM_SDO_READ_ATTEMPTS; ++attempt) {
+		*size = requested_size;
+		if (ecx_SDOread(context, slave_number, object_index, object_subindex, FALSE, size,
+				data, EC_TIMEOUTRXM) > 0) {
+			return 1;
+		}
+	}
+
+	fprintf(stderr, "[soem] SDO read failed after %d attempts: slave=%u object=0x%04x:%02x\n",
+		SOEM_SDO_READ_ATTEMPTS, slave_number, object_index, object_subindex);
+	return 0;
+}
+
+static void _log_mapping_failure(ecx_contextt *context, const char *stage, int mapped_size)
+{
+	(void)ecx_readstate(context);
+	fprintf(stderr, "[soem] PDO mapping failed: stage=%s mapped_size=%d\n", stage, mapped_size);
+	for (int slave_number = 1; slave_number <= context->slavecount; ++slave_number) {
+		const ec_slavet *slave = &context->slavelist[slave_number];
+
+		fprintf(stderr,
+			"[soem] slave=%d state=0x%02x al=0x%04x Obits=%u Ibits=%u "
+			"SM2=0x%04x/%u/type%u SM3=0x%04x/%u/type%u\n",
+			slave_number, slave->state, slave->ALstatuscode, slave->Obits, slave->Ibits,
+			etohs(slave->SM[2].StartAddr), etohs(slave->SM[2].SMlength),
+			slave->SMtype[2], etohs(slave->SM[3].StartAddr),
+			etohs(slave->SM[3].SMlength), slave->SMtype[3]);
+	}
+}
+
+/**
+ * _check_dc_support - 检查所有从站是否支持 DC
+ * @context: SOEM 上下文指针
+ *
+ * Return: 全部支持返回 0，任一不支持返回 -1
+ */
+static enum backend_error _check_dc_support(ecx_contextt *context)
+{
+	if (!context) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	for (int i = 1; i <= context->slavecount; ++i) {
+		if (!context->slavelist[i].hasdc) {
+			const ec_slavet *slave;
+
+			(void)ecx_readstate(context);
+			slave = &context->slavelist[i];
+			fprintf(stderr,
+				"[soem] DC check failed: slave=%d state=0x%02x al=0x%04x "
+				"SM0=0x%04x/%u/0x%08x SM1=0x%04x/%u/0x%08x "
+				"mbx-write=0x%04x/%u mbx-read=0x%04x/%u proto=0x%04x\n",
+				i, slave->state, slave->ALstatuscode, etohs(slave->SM[0].StartAddr),
+				etohs(slave->SM[0].SMlength), etohl(slave->SM[0].SMflags),
+				etohs(slave->SM[1].StartAddr), etohs(slave->SM[1].SMlength),
+				etohl(slave->SM[1].SMflags), slave->mbx_wo, slave->mbx_l,
+				slave->mbx_ro, slave->mbx_rl, slave->mbx_proto);
+			return BACKEND_ERROR_DC_UNSUPPORTED;
+		}
+	}
+	return BACKEND_ERROR_NONE;
+}
+
+/**
+ * _read_pdo_assignment - 读取单个 PDO 分配对象下的所有 entry
+ * @context: SOEM 上下文指针
+ * @slave_number: 从站编号（SOEM 内部编号，从 1 开始）
+ * @assignment_index: PDO 分配对象索引（如 0x1C12/0x1C13）
+ * @direction: PDO 方向
+ * @slave: 核心层从站缓存
+ *
+ * 读取 PDO 分配对象，再读取每个 PDO 的映射对象，将解析结果填充到
+ * slave->pdo_entries[]。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+static enum backend_error _read_pdo_assignment(ecx_contextt *context, uint16_t slave_number,
+						   uint16_t assignment_index,
+						   enum mo_ecat_pdo_direction direction,
+						   struct slave *slave)
+{
+	uint8_t pdo_count = 0;
+	int size = sizeof(pdo_count);
+
+	if (!_read_sdo(context, slave_number, assignment_index, 0, &size, &pdo_count)) {
+		return BACKEND_ERROR_SDO_READ_FAILED;
+	}
+
+	for (uint8_t pdo_subindex = 1; pdo_subindex <= pdo_count; ++pdo_subindex) {
+		uint16_t pdo_index = 0;
+		uint8_t entry_count = 0;
+
+		size = sizeof(pdo_index);
+		if (!_read_sdo(context, slave_number, assignment_index, pdo_subindex, &size,
+				   &pdo_index)) {
+			return BACKEND_ERROR_SDO_READ_FAILED;
+		}
+		pdo_index = etohs(pdo_index);
+		if (pdo_index == 0) {
+			continue;
+		}
+
+		size = sizeof(entry_count);
+		if (!_read_sdo(context, slave_number, pdo_index, 0, &size, &entry_count)) {
+			return BACKEND_ERROR_SDO_READ_FAILED;
+		}
+
+		for (uint8_t entry_subindex = 1; entry_subindex <= entry_count; ++entry_subindex) {
+			uint32_t mapping = 0;
+			struct pdo_entry *entry;
+
+			if (slave->pdo_entry_count >= SLAVE_MAX_PDO_ENTRIES) {
+				return BACKEND_ERROR_PDO_ENTRY_LIMIT_EXCEEDED;
+			}
+			size = sizeof(mapping);
+			if (!_read_sdo(context, slave_number, pdo_index, entry_subindex, &size,
+					   &mapping)) {
+				return BACKEND_ERROR_SDO_READ_FAILED;
+			}
+
+			mapping = etohl(mapping);
+			entry = &slave->pdo_entries[slave->pdo_entry_count++];
+			entry->object_index = (uint16_t)(mapping >> 16);
+			entry->object_subindex = (uint8_t)(mapping >> 8);
+			entry->bit_length = (uint8_t)mapping;
+			entry->direction = direction;
+		}
+	}
+
+	return BACKEND_ERROR_NONE;
+}
+
+/**
+ * _resolve_pdo_entry_offsets - 解析所有 PDO entry 在 IOmap 中的偏移
  * @context: SOEM 后端上下文指针
  * @entries: PDO entry 映射数组
  * @entry_count: PDO entry 数量
@@ -338,7 +427,7 @@ enum backend_error soem_backend_sync0_read_status(struct backend_instance *backe
  *
  * Return: 0 成功，非 0 失败
  */
-static enum backend_error soem_resolve_pdo_entry_offsets(struct soem_backend_context *context,
+static enum backend_error _resolve_pdo_entry_offsets(struct soem_backend_context *context,
 							 struct pdo_image_entry *entries,
 							 size_t entry_count)
 {
@@ -404,74 +493,4 @@ cleanup:
 	free(used_output_bits);
 	free(used_input_bits);
 	return result;
-}
-
-/**
- * soem_backend_build_pdo_mapping - 建立 SOEM 后端 PDO 映射
- * @backend: 后端实例指针
- * @entries: PDO entry 映射数组
- * @entry_count: PDO entry 数量
- *
- * 调用 SOEM ecx_config_map_group() 建立 IOmap，并回填每个 entry 的偏移。
- *
- * Return: 0 成功，非 0 失败
- */
-enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
-						  struct pdo_image_entry *entries,
-						  size_t entry_count)
-{
-	struct soem_backend_context *context = soem_backend_context_get(backend);
-	enum backend_error error;
-	int mapped_size;
-
-	if (!context || !context->opened || !context->dc_configured) {
-		return BACKEND_ERROR_NOT_READY;
-	}
-	if (entry_count > 0 && !entries) {
-		return BACKEND_ERROR_INVALID_ARGUMENT;
-	}
-	context->pdo_mapping_ready = 0;
-	context->pdo_image_size = 0;
-	mapped_size = ecx_config_map_group(&context->context, context->iomap, 0);
-	if (mapped_size <= 0 || (size_t)mapped_size > SOEM_BACKEND_IOMAP_SIZE) {
-		soem_log_mapping_failure(&context->context, "config-map", mapped_size);
-		return mapped_size > (int)SOEM_BACKEND_IOMAP_SIZE
-			       ? BACKEND_ERROR_PDO_IMAGE_TOO_LARGE
-			       : BACKEND_ERROR_PDO_MAPPING_FAILED;
-	}
-
-	context->pdo_image_size = (size_t)mapped_size;
-	context->expected_wkc = (uint32_t)context->context.grouplist[0].outputsWKC * 2U +
-				context->context.grouplist[0].inputsWKC;
-	error = soem_resolve_pdo_entry_offsets(context, entries, entry_count);
-	if (error != BACKEND_ERROR_NONE) {
-		soem_log_mapping_failure(&context->context, "entry-offset", mapped_size);
-		return error;
-	}
-	context->pdo_mapping_ready = 1;
-
-	return BACKEND_ERROR_NONE;
-}
-
-/**
- * soem_backend_get_pdo_image - 获取 SOEM 后端 PDO 数据区域
- * @backend: 后端实例指针
- * @image: 用于返回 PDO 数据映像的指针
- *
- * Return: 0 成功，非 0 失败
- */
-enum backend_error soem_backend_get_pdo_image(struct backend_instance *backend,
-					      struct pdo_image *image)
-{
-	struct soem_backend_context *context = soem_backend_context_get(backend);
-
-	if (!image) {
-		return BACKEND_ERROR_INVALID_ARGUMENT;
-	}
-	if (!context || !context->pdo_mapping_ready) {
-		return BACKEND_ERROR_NOT_READY;
-	}
-	image->memory = context->iomap;
-	image->size = context->pdo_image_size;
-	return BACKEND_ERROR_NONE;
 }
