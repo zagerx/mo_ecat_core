@@ -23,7 +23,7 @@
 #include "slave_table.h"
 #include "pdo_layout.h"
 #include "master_error.h"
-#include "pdo_image_entry_priv.h"
+#include "pdo_types.h"
 #include "slave_priv.h"
 
 #ifdef __cplusplus
@@ -40,24 +40,6 @@ extern "C" {
 struct slave_table {
 	struct slave *slaves;
 	size_t slave_count;
-};
-
-/**
- * struct pdo_layout - PDO 数据映像布局
- * @image: PDO 数据区域
- * @entries: PDO 映像条目数组；每个元素保存条目记录、数据映像字节/位偏移
- *           和所属布局代际
- * @entry_count: PDO entry 映射数量
- * @generation: 当前映射版本
- * @is_active: 是否允许周期读写
- *
- * 保存主站 PDO 数据区域、所有 PDO entry 的地址映射以及映射运行状态。
- */
-struct pdo_layout {
-	struct pdo_image image;
-	struct pdo_image_entry *entries;
-	size_t entry_count;
-	int is_active;
 };
 
 /**

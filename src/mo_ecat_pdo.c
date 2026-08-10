@@ -9,30 +9,13 @@
 #include "mo_ecat/mo_ecat_pdo.h"
 #include "master_priv.h"
 
-/**
- * pdo_image_entry_in_bounds - 检查 PDO 映像条目是否在数据映像范围内
- * @image: PDO 数据映像
- * @entry: PDO 映像条目
- *
- * Return: 在范围内返回非 0，否则返回 0
- */
-static int pdo_image_entry_in_bounds(const struct pdo_image *image,
-				     const struct pdo_image_entry *entry)
-{
-	size_t image_bits;
-	size_t start_bit;
-	size_t end_bit;
+/* 静态辅助函数前向声明 */
 
-	if (!image || !entry || !image->memory || entry->record.spec.bit_length == 0 ||
-	    entry->byte_offset >= image->size) {
-		return 0;
-	}
+static int _pdo_image_entry_in_bounds(const struct pdo_image *image,
+				      const struct pdo_image_entry *entry);
 
-	image_bits = image->size * 8U;
-	start_bit = (size_t)entry->byte_offset * 8U + entry->bit_offset;
-	end_bit = start_bit + entry->record.spec.bit_length;
-	return end_bit >= start_bit && end_bit <= image_bits;
-}
+static void *_pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t entry_id,
+				   enum mo_ecat_pdo_direction direction);
 
 /**
  * master_cyclic_receive - 主站周期接收
@@ -125,34 +108,6 @@ int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t ind
 }
 
 /**
- * pdo_image_entry_data - 根据 entry_id 和方向解析 PDO 数据地址
- * @master: 主站对象指针
- * @entry_id: Master 当前 PDO 布局中的全局条目编号
- * @direction: 期望的数据方向
- *
- * Return: 成功返回数据指针，失败返回 NULL
- */
-static void *pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t entry_id,
-				  enum mo_ecat_pdo_direction direction)
-{
-	const struct pdo_image_entry *entry;
-
-	if (!master || !master->pdo_layout.is_active || !master->pdo_layout.image.memory ||
-	    (size_t)entry_id >= master->pdo_layout.entry_count) {
-		return NULL;
-	}
-
-	entry = &master->pdo_layout.entries[entry_id];
-	if (entry->record.entry_id != entry_id || entry->record.spec.direction != direction ||
-	    entry->bit_offset != 0U ||
-	    !pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
-		return NULL;
-	}
-
-	return &master->pdo_layout.image.memory[entry->byte_offset];
-}
-
-/**
  * mo_ecat_pdo_read - 根据 entry_id 获取输入 PDO 数据指针
  * @master: 主站对象指针
  * @entry_id: Master 当前 PDO 布局中的全局条目编号
@@ -161,7 +116,7 @@ static void *pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t 
  */
 const void *mo_ecat_pdo_read(const struct mo_ecat_master *master, uint32_t entry_id)
 {
-	return pdo_image_entry_data(master, entry_id, MO_ECAT_PDO_INPUT);
+	return _pdo_image_entry_data(master, entry_id, MO_ECAT_PDO_INPUT);
 }
 
 /**
@@ -173,5 +128,58 @@ const void *mo_ecat_pdo_read(const struct mo_ecat_master *master, uint32_t entry
  */
 void *mo_ecat_pdo_write(struct mo_ecat_master *master, uint32_t entry_id)
 {
-	return pdo_image_entry_data(master, entry_id, MO_ECAT_PDO_OUTPUT);
+	return _pdo_image_entry_data(master, entry_id, MO_ECAT_PDO_OUTPUT);
+}
+
+/**
+ * _pdo_image_entry_in_bounds - 检查 PDO 映像条目是否在数据映像范围内
+ * @image: PDO 数据映像
+ * @entry: PDO 映像条目
+ *
+ * Return: 在范围内返回非 0，否则返回 0
+ */
+static int _pdo_image_entry_in_bounds(const struct pdo_image *image,
+				      const struct pdo_image_entry *entry)
+{
+	size_t image_bits;
+	size_t start_bit;
+	size_t end_bit;
+
+	if (!image || !entry || !image->memory || entry->record.spec.bit_length == 0 ||
+	    entry->byte_offset >= image->size) {
+		return 0;
+	}
+
+	image_bits = image->size * 8U;
+	start_bit = (size_t)entry->byte_offset * 8U + entry->bit_offset;
+	end_bit = start_bit + entry->record.spec.bit_length;
+	return end_bit >= start_bit && end_bit <= image_bits;
+}
+
+/**
+ * _pdo_image_entry_data - 根据 entry_id 和方向解析 PDO 数据地址
+ * @master: 主站对象指针
+ * @entry_id: Master 当前 PDO 布局中的全局条目编号
+ * @direction: 期望的数据方向
+ *
+ * Return: 成功返回数据指针，失败返回 NULL
+ */
+static void *_pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t entry_id,
+				   enum mo_ecat_pdo_direction direction)
+{
+	const struct pdo_image_entry *entry;
+
+	if (!master || !master->pdo_layout.is_active || !master->pdo_layout.image.memory ||
+	    (size_t)entry_id >= master->pdo_layout.entry_count) {
+		return NULL;
+	}
+
+	entry = &master->pdo_layout.entries[entry_id];
+	if (entry->record.entry_id != entry_id || entry->record.spec.direction != direction ||
+	    entry->bit_offset != 0U ||
+	    !_pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
+		return NULL;
+	}
+
+	return &master->pdo_layout.image.memory[entry->byte_offset];
 }

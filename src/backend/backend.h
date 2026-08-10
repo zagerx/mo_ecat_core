@@ -18,7 +18,7 @@
 #include "mo_ecat/mo_ecat_sync0.h"
 #include "mo_ecat/mo_ecat_topology.h"
 #include "backend_error.h"
-#include "pdo_image_entry_priv.h"
+#include "pdo_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,20 +46,6 @@ struct backend_instance {
 	const struct backend_ops *ops;
 	const struct backend_translation_ops *translation_ops;
 	void *ctx;
-};
-
-/**
- * struct pdo_image - PDO 过程数据映像（Process Data Image）
- * @memory: 适配层持有的 PDO 数据内存起始地址
- * @size: PDO 数据内存总字节数
- *
- * 该映像由后端适配层分配并持有，核心层仅通过本结构引用。
- * memory 指向一片连续内存，按 PDO 映射顺序包含所有从站的
- * 输入/输出过程数据；size 为该片内存的总字节数。
- */
-struct pdo_image {
-	uint8_t *memory;
-	size_t size;
 };
 
 /* ==================== Backend 统一入口 ==================== */
