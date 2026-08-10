@@ -10,47 +10,10 @@
 #include "pdo_layout.h"
 #include "master_priv.h"
 
-/**
- * master_pdo_entry_export - 将从站私有扫描条目转换为公开 PDO entry
- * @destination: 公开 PDO entry 输出
- * @source: 从站扫描得到的最小 PDO entry 规格
- * @entry_id: Master 全局 entry 标识
- * @slave_index: entry 所属拓扑从站下标
- */
-static void master_pdo_entry_export(struct pdo_entry_record *destination,
-				    const struct pdo_entry *source, uint32_t entry_id,
-				    size_t slave_index)
-{
-	destination->entry_id = entry_id;
-	destination->slave_index = slave_index;
-	destination->spec = *source;
-}
+/* 静态辅助函数前向声明 */
 
-/**
- * pdo_image_entries_build - 根据从站表信息构建 PDO 映像条目
- * @master: 主站对象指针
- * @entries: PDO entry 映射输出数组，已由调用者分配
- *
- * 遍历所有从站的 PDO entry 扫描缓存，填充逻辑描述（entry_id、slave_index、
- * 对象索引、位长度、方向等）。
- */
-static void pdo_image_entries_build(const struct mo_ecat_master *master,
-				    struct pdo_image_entry *entries)
-{
-	size_t index = 0;
-
-	for (size_t i = 0; i < master->slave_table.slave_count; ++i) {
-		const struct slave *slave = &master->slave_table.slaves[i];
-
-		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
-			const struct pdo_entry *entry = &slave->pdo_entries[j];
-			struct pdo_image_entry *image_entry = &entries[index];
-
-			master_pdo_entry_export(&image_entry->record, entry, (uint32_t)index, i);
-			++index;
-		}
-	}
-}
+static void _pdo_image_entries_build(const struct mo_ecat_master *master,
+				     struct pdo_image_entry *entries);
 
 /**
  * pdo_layout_build - 建立 PDO 数据映像布局
@@ -84,7 +47,7 @@ enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
 		if (!entries) {
 			return MASTER_ERROR_NO_MEMORY;
 		}
-		pdo_image_entries_build(master, entries);
+		_pdo_image_entries_build(master, entries);
 	}
 
 	error = backend_build_pdo_mapping(&master->backend, entries, entry_count);
@@ -156,4 +119,32 @@ enum master_error_detail pdo_layout_deactivate(struct mo_ecat_master *master)
 
 	master->pdo_layout.is_active = 0;
 	return MASTER_ERROR_NONE;
+}
+
+/**
+ * _pdo_image_entries_build - 根据从站表信息构建 PDO 映像条目
+ * @master: 主站对象指针
+ * @entries: PDO entry 映射输出数组，已由调用者分配
+ *
+ * 遍历所有从站的 PDO entry 扫描缓存，填充逻辑描述（entry_id、slave_index、
+ * 对象索引、位长度、方向等）。
+ */
+static void _pdo_image_entries_build(const struct mo_ecat_master *master,
+				     struct pdo_image_entry *entries)
+{
+	size_t index = 0;
+
+	for (size_t i = 0; i < master->slave_table.slave_count; ++i) {
+		const struct slave *slave = &master->slave_table.slaves[i];
+
+		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
+			const struct pdo_entry *entry = &slave->pdo_entries[j];
+			struct pdo_image_entry *image_entry = &entries[index];
+
+			image_entry->record.entry_id = (uint32_t)index;
+			image_entry->record.slave_index = i;
+			image_entry->record.spec = *entry;
+			++index;
+		}
+	}
 }
