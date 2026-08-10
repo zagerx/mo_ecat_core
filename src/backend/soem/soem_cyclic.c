@@ -5,7 +5,7 @@
  */
 
 #include "soem_backend.h"
-#include "topology_priv.h"
+#include "slave_priv.h"
 
 /**
  * soem_backend_activate - 激活 SOEM 后端周期通信

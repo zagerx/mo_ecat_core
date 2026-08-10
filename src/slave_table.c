@@ -1,5 +1,5 @@
 /*
- * master_topology.c - 主站内部拓扑构建与状态刷新
+ * slave_table.c - 主站内部从站表构建与状态刷新
  *
  * 负责从后端读取从站数量、分配从站表内存，并在核心层与后端之间同步
  * 从站信息。
@@ -8,10 +8,10 @@
 #include <stdlib.h>
 
 #include "master_priv.h"
-#include "master_topology.h"
+#include "slave_table.h"
 
 /**
- * master_topology_build - 构建主站从站拓扑
+ * slave_table_build - 构建主站从站表
  * @master: 主站对象指针
  * @slave_count: 扫描阶段得到的从站数量
  *
@@ -19,8 +19,8 @@
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_topology_build(struct mo_ecat_master *master,
-							size_t slave_count)
+enum master_error_detail slave_table_build(struct mo_ecat_master *master,
+					   size_t slave_count)
 {
 	struct slave *slaves = NULL;
 	enum backend_error error;
@@ -47,25 +47,25 @@ enum master_error_detail master_topology_build(struct mo_ecat_master *master,
 		}
 	}
 
-	/* 先完整构建临时表，再一次性发布，避免读线程观察到半初始化拓扑。 */
-	pthread_mutex_lock(&master->topology_mutex);
-	free(master->topology.slaves);
-	master->topology.slaves = slaves;
-	master->topology.slave_count = slave_count;
-	pthread_mutex_unlock(&master->topology_mutex);
+	/* 先完整构建临时表，再一次性发布，避免读线程观察到半初始化从站表。 */
+	pthread_mutex_lock(&master->slave_table_mutex);
+	free(master->slave_table.slaves);
+	master->slave_table.slaves = slaves;
+	master->slave_table.slave_count = slave_count;
+	pthread_mutex_unlock(&master->slave_table_mutex);
 
 	return MASTER_ERROR_NONE;
 }
 
 /**
- * master_topology_refresh_states - 刷新所有从站运行状态
+ * slave_table_refresh_states - 刷新所有从站运行状态
  * @master: 主站对象指针
  *
  * 调用后端读取所有从站的 AL 状态、错误标志等运行时信息。
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_topology_refresh_states(struct mo_ecat_master *master)
+enum master_error_detail slave_table_refresh_states(struct mo_ecat_master *master)
 {
 	enum backend_error error;
 
@@ -73,13 +73,13 @@ enum master_error_detail master_topology_refresh_states(struct mo_ecat_master *m
 		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
-	pthread_mutex_lock(&master->topology_mutex);
-	if (master->topology.slave_count > 0 && !master->topology.slaves) {
-		pthread_mutex_unlock(&master->topology_mutex);
+	pthread_mutex_lock(&master->slave_table_mutex);
+	if (master->slave_table.slave_count > 0 && !master->slave_table.slaves) {
+		pthread_mutex_unlock(&master->slave_table_mutex);
 		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
-	error = backend_read_all_slave_states(&master->backend, master->topology.slaves,
-						     master->topology.slave_count);
-	pthread_mutex_unlock(&master->topology_mutex);
+	error = backend_read_all_slave_states(&master->backend, master->slave_table.slaves,
+					      master->slave_table.slave_count);
+	pthread_mutex_unlock(&master->slave_table_mutex);
 	return master_error_from_backend(error);
 }

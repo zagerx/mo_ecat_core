@@ -57,9 +57,9 @@ void master_resources_release(struct mo_ecat_master *master)
 	}
 
 	master_runtime_release(master);
-	pthread_mutex_lock(&master->topology_mutex);
-	free(master->topology.slaves);
-	master->topology.slaves = NULL;
-	master->topology.slave_count = 0;
-	pthread_mutex_unlock(&master->topology_mutex);
+	pthread_mutex_lock(&master->slave_table_mutex);
+	free(master->slave_table.slaves);
+	master->slave_table.slaves = NULL;
+	master->slave_table.slave_count = 0;
+	pthread_mutex_unlock(&master->slave_table_mutex);
 }

@@ -46,7 +46,7 @@ static void master_refresh_slave_states_periodic(struct mo_ecat_master *master)
 		return;
 	}
 	master->last_state_refresh_ns = now;
-	(void)master_topology_refresh_states(master);
+	(void)slave_table_refresh_states(master);
 }
 
 /**
@@ -87,7 +87,7 @@ static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *mas
 {
 	master_set_fault(master, error, detail);
 	if (mo_ecat_master_get_node_count(master) > 0U) {
-		(void)master_topology_refresh_states(master);
+		(void)slave_table_refresh_states(master);
 	}
 	master_runtime_pdo_release(master);
 	sm_transition(sm, master_state_fault);
@@ -190,7 +190,7 @@ void master_state_idle(struct statemachine *sm)
 		error = master_error_from_backend(backend_load_slave_info(&master->backend,
 									    &slave_count));
 		if (error == MASTER_ERROR_NONE) {
-			error = master_topology_build(master, slave_count);
+			error = slave_table_build(master, slave_count);
 		}
 		if (error != MASTER_ERROR_NONE) {
 			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED, error);
@@ -200,7 +200,7 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_READ_STATE: {
-		error = master_topology_refresh_states(master);
+		error = slave_table_refresh_states(master);
 		if (error != MASTER_ERROR_NONE) {
 			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 			break;
@@ -209,10 +209,10 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_READ_PDO: {
-		pthread_mutex_lock(&master->topology_mutex);
+		pthread_mutex_lock(&master->slave_table_mutex);
 		error = master_error_from_backend(backend_read_pdo_entries(
-			&master->backend, master->topology.slaves, master->topology.slave_count));
-		pthread_mutex_unlock(&master->topology_mutex);
+			&master->backend, master->slave_table.slaves, master->slave_table.slave_count));
+		pthread_mutex_unlock(&master->slave_table_mutex);
 		if (error != MASTER_ERROR_NONE) {
 			master_idle_fail(sm, master,
 					 MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED, error);
@@ -304,7 +304,7 @@ void master_state_ready(struct statemachine *sm)
 			error = master_pdo_layout_activate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
-				(void)master_topology_refresh_states(master);
+				(void)slave_table_refresh_states(master);
 				master_runtime_pdo_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
@@ -359,7 +359,7 @@ void master_state_running(struct statemachine *sm)
 			error = master_pdo_layout_deactivate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
-				(void)master_topology_refresh_states(master);
+				(void)slave_table_refresh_states(master);
 				master_runtime_pdo_release(master);
 				sm_transition(sm, master_state_fault);
 			} else {
@@ -396,7 +396,7 @@ void master_state_running(struct statemachine *sm)
 					   MASTER_CYCLIC_FAULT_TOLERANCE_NS) {
 					master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT,
 							 error);
-					(void)master_topology_refresh_states(master);
+					(void)slave_table_refresh_states(master);
 					master_runtime_pdo_release(master);
 					sm_transition(sm, master_state_fault);
 					break;

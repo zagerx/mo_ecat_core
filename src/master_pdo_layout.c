@@ -39,8 +39,8 @@ static void pdo_image_entries_build(const struct mo_ecat_master *master,
 {
 	size_t index = 0;
 
-	for (size_t i = 0; i < master->topology.slave_count; ++i) {
-		const struct slave *slave = &master->topology.slaves[i];
+	for (size_t i = 0; i < master->slave_table.slave_count; ++i) {
+		const struct slave *slave = &master->slave_table.slaves[i];
 
 		for (size_t j = 0; j < slave->pdo_entry_count; ++j) {
 			const struct pdo_entry *entry = &slave->pdo_entries[j];
@@ -72,8 +72,8 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 		return MASTER_ERROR_INVALID_ARGUMENT;
 	}
 
-	for (size_t i = 0; i < master->topology.slave_count; ++i) {
-		entry_count += master->topology.slaves[i].pdo_entry_count;
+	for (size_t i = 0; i < master->slave_table.slave_count; ++i) {
+		entry_count += master->slave_table.slaves[i].pdo_entry_count;
 	}
 	if (entry_count > UINT32_MAX) {
 		return MASTER_ERROR_PDO_MAPPING_FAILED;
@@ -97,10 +97,10 @@ enum master_error_detail master_pdo_layout_build(struct mo_ecat_master *master)
 		free(entries);
 		return master_error_from_backend(error);
 	}
-	pthread_mutex_lock(&master->topology_mutex);
-	error = backend_translate_slave_info(&master->backend, master->topology.slaves,
-					     master->topology.slave_count);
-	pthread_mutex_unlock(&master->topology_mutex);
+	pthread_mutex_lock(&master->slave_table_mutex);
+	error = backend_translate_slave_info(&master->backend, master->slave_table.slaves,
+					     master->slave_table.slave_count);
+	pthread_mutex_unlock(&master->slave_table_mutex);
 	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
 		return master_error_from_backend(error);

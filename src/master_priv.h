@@ -1,7 +1,7 @@
 /*
  * master_priv.h - 主站核心层内部定义
  *
- * 定义主站核心层内部使用的拓扑、PDO 映射及主站对象结构，
+ * 定义主站核心层内部使用的从站表、PDO 映射及主站对象结构，
  * 并提供状态机与核心模块使用的内部辅助函数声明。
  */
 
@@ -20,25 +20,25 @@
 #include "common/statemachine/statemachine.h"
 #include "master_states.h"
 #include "master_resources.h"
-#include "master_topology.h"
+#include "slave_table.h"
 #include "master_pdo_layout.h"
 #include "master_error.h"
 #include "pdo_image_priv.h"
 #include "pdo_image_entry_priv.h"
-#include "topology_priv.h"
+#include "slave_priv.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * struct master_topology - 从站表
+ * struct slave_table - 从站表
  * @slaves: 从站信息数组
  * @slave_count: 从站数量
  *
  * 保存已发现从站信息，运行时状态由后端直接更新到 slaves[].state。
  */
-struct master_topology {
+struct slave_table {
 	struct slave *slaves;
 	size_t slave_count;
 };
@@ -70,8 +70,8 @@ struct pdo_image_layout {
  * @backend: 后端实例
  * @config: 主站配置指针，由应用层持有；核心层只读引用，不复制不拥有
  * @pdo_layout: 主站 PDO 数据映像布局
- * @topology: 从站拓扑
- * @topology_mutex: 保护拓扑发布、刷新与应用层快照读取
+ * @slave_table: 从站表
+ * @slave_table_mutex: 保护从站表发布、刷新与应用层快照读取
  * @user_data: 用户私有数据
  * @cyclic_callback: 周期控制回调，仅在 RUNNING 调用
  */
@@ -85,8 +85,8 @@ struct mo_ecat_master {
 	struct backend_instance backend;
 	const struct mo_ecat_master_config *config;
 	struct pdo_image_layout pdo_layout;
-	struct master_topology topology;
-	pthread_mutex_t topology_mutex;
+	struct slave_table slave_table;
+	pthread_mutex_t slave_table_mutex;
 	uint64_t last_state_refresh_ns;
 	uint64_t cyclic_fault_since_ns;
 

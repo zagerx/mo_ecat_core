@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "soem_backend.h"
-#include "topology_priv.h"
+#include "slave_priv.h"
 
 /**
  * soem_backend_context_get - 获取 SOEM 后端上下文

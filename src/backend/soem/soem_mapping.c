@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #include "soem_backend.h"
-#include "topology_priv.h"
+#include "slave_priv.h"
 
 #define SOEM_SDO_READ_ATTEMPTS 3
 

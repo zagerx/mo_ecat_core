@@ -59,7 +59,7 @@ static int master_init(struct mo_ecat_master *master, mo_ecat_cyclic_callback ca
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
 	atomic_init(&master->state, MO_ECAT_MASTER_STATE_INIT);
 	atomic_init(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
-	if (pthread_mutex_init(&master->topology_mutex, NULL) != 0) {
+	if (pthread_mutex_init(&master->slave_table_mutex, NULL) != 0) {
 		return -1;
 	}
 	master->last_error.master_error = MO_ECAT_MASTER_ERROR_NONE;
@@ -81,7 +81,7 @@ static void master_deinit(struct mo_ecat_master *master)
 	}
 
 	master_resources_release(master);
-	pthread_mutex_destroy(&master->topology_mutex);
+	pthread_mutex_destroy(&master->slave_table_mutex);
 	memset(master, 0, sizeof(*master));
 }
 

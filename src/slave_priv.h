@@ -1,12 +1,12 @@
 /*
- * topology_priv.h - 主站从站拓扑内部结构
+ * slave_priv.h - 从站内部数据结构
  *
  * 定义核心层保存的从站扫描缓存结构，包括基本信息、邮箱、同步管理器、
  * FMMU 以及 PDO entry 等内部数据。
  */
 
-#ifndef TOPOLOGY_PRIV_H
-#define TOPOLOGY_PRIV_H
+#ifndef SLAVE_PRIV_H
+#define SLAVE_PRIV_H
 
 #include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_topology.h"
@@ -122,4 +122,4 @@ struct slave {
 	size_t pdo_entry_count;
 };
 
-#endif /* TOPOLOGY_PRIV_H */
+#endif /* SLAVE_PRIV_H */
