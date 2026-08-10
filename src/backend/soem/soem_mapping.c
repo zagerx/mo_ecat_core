@@ -461,31 +461,31 @@ static enum backend_error _resolve_pdo_entry_offsets(struct soem_backend_context
 		size_t start_bit;
 		size_t end_bit;
 
-		if (entry->record.slave_index >= (size_t)slave_count) {
+		if (entry->slave_entry.slave_index >= (size_t)slave_count) {
 			goto cleanup;
 		}
-		slave = &context->context.slavelist[entry->record.slave_index + 1];
-		if (entry->record.spec.direction == MO_ECAT_PDO_OUTPUT) {
-			used_bits = &used_output_bits[entry->record.slave_index];
+		slave = &context->context.slavelist[entry->slave_entry.slave_index + 1];
+		if (entry->slave_entry.spec.direction == MO_ECAT_PDO_OUTPUT) {
+			used_bits = &used_output_bits[entry->slave_entry.slave_index];
 			available_bits = slave->Obits;
 			base = slave->outputs;
 		} else {
-			used_bits = &used_input_bits[entry->record.slave_index];
+			used_bits = &used_input_bits[entry->slave_entry.slave_index];
 			available_bits = slave->Ibits;
 			base = slave->inputs;
 		}
-		if (!base || (*used_bits + entry->record.spec.bit_length) > available_bits) {
+		if (!base || (*used_bits + entry->slave_entry.spec.bit_length) > available_bits) {
 			goto cleanup;
 		}
 
 		entry->byte_offset = (uint32_t)(base - context->iomap) + (*used_bits / 8);
 		entry->bit_offset = (uint8_t)(*used_bits % 8);
 		start_bit = (size_t)entry->byte_offset * 8U + entry->bit_offset;
-		end_bit = start_bit + entry->record.spec.bit_length;
+		end_bit = start_bit + entry->slave_entry.spec.bit_length;
 		if (end_bit < start_bit || end_bit > context->pdo_image_size * 8U) {
 			goto cleanup;
 		}
-		*used_bits += entry->record.spec.bit_length;
+		*used_bits += entry->slave_entry.spec.bit_length;
 	}
 
 	result = BACKEND_ERROR_NONE;

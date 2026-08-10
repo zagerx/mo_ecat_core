@@ -68,7 +68,7 @@ typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
 					void *user_data);
 
 /**
- * struct pdo_entry_record - Master 发现的单个 PDO entry 记录
+ * struct slave_pdo_entry - 某个从站上的单个 PDO 条目
  * @entry_id: Master 将所有从站的 PDO entry 扁平化后分配的全局标识；
  *            仅用于当前 PDO 映射代际，不是 0x1600 等对象字典索引，
  *            应用不得自行构造
@@ -88,7 +88,7 @@ typedef void (*mo_ecat_cyclic_callback)(struct mo_ecat_master *master,
  * 不保存在该公共结构中；字段在周期数据区域内的物理偏移也由 Core
  * 保存，应用层不直接访问。
  */
-struct pdo_entry_record {
+struct slave_pdo_entry {
 	uint32_t entry_id;
 	size_t slave_index;
 	struct pdo_entry spec;
@@ -97,7 +97,7 @@ struct pdo_entry_record {
 size_t mo_ecat_master_get_pdo_entry_count(const struct mo_ecat_master *master);
 
 int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t index,
-				 struct pdo_entry_record *record);
+				 struct slave_pdo_entry *record);
 
 /**
  * mo_ecat_pdo_read - 根据 entry_id 获取输入 PDO 数据指针

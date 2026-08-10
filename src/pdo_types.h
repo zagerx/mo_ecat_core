@@ -28,7 +28,7 @@ struct pdo_image {
 
 /**
  * struct pdo_image_entry - PDO 映像中的单个条目
- * @record: Master 发现的 PDO entry 记录
+ * @slave_entry: 某个从站上的 PDO 条目（身份）
  * @byte_offset: 在 PDO 数据区域中的字节偏移
  * @bit_offset: 在 PDO 数据区域中的位偏移
  *
@@ -36,7 +36,7 @@ struct pdo_image {
  * 后端使用。布局代际统一保存在 pdo_layout 中。
  */
 struct pdo_image_entry {
-	struct pdo_entry_record record;
+	struct slave_pdo_entry slave_entry;
 	uint32_t byte_offset;
 	uint8_t bit_offset;
 };

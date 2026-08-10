@@ -93,7 +93,7 @@ size_t mo_ecat_master_get_pdo_entry_count(const struct mo_ecat_master *master)
  * Return: 0 成功，非 0 失败
  */
 int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t index,
-				 struct pdo_entry_record *record)
+				 struct slave_pdo_entry *record)
 {
 	if (!master || !record) {
 		return -1;
@@ -103,7 +103,7 @@ int mo_ecat_master_get_pdo_entry(const struct mo_ecat_master *master, size_t ind
 		return -1;
 	}
 
-	*record = master->pdo_layout.entries[index].record;
+	*record = master->pdo_layout.entries[index].slave_entry;
 	return 0;
 }
 
@@ -145,14 +145,14 @@ static int _pdo_image_entry_in_bounds(const struct pdo_image *image,
 	size_t start_bit;
 	size_t end_bit;
 
-	if (!image || !entry || !image->memory || entry->record.spec.bit_length == 0 ||
+	if (!image || !entry || !image->memory || entry->slave_entry.spec.bit_length == 0 ||
 	    entry->byte_offset >= image->size) {
 		return 0;
 	}
 
 	image_bits = image->size * 8U;
 	start_bit = (size_t)entry->byte_offset * 8U + entry->bit_offset;
-	end_bit = start_bit + entry->record.spec.bit_length;
+	end_bit = start_bit + entry->slave_entry.spec.bit_length;
 	return end_bit >= start_bit && end_bit <= image_bits;
 }
 
@@ -175,7 +175,7 @@ static void *_pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t
 	}
 
 	entry = &master->pdo_layout.entries[entry_id];
-	if (entry->record.entry_id != entry_id || entry->record.spec.direction != direction ||
+	if (entry->slave_entry.entry_id != entry_id || entry->slave_entry.spec.direction != direction ||
 	    entry->bit_offset != 0U ||
 	    !_pdo_image_entry_in_bounds(&master->pdo_layout.image, entry)) {
 		return NULL;

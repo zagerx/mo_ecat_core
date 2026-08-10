@@ -115,7 +115,7 @@ void print_pdo_entry(struct mo_ecat_master *master, size_t idx)
 		return;
 	}
 
-	struct pdo_entry_record record;
+	struct slave_pdo_entry record;
 	if (mo_ecat_master_get_pdo_entry(master, idx, &record) < 0) {
 		printf("PDO entry index out of range (count=%zu)\n", count);
 		return;

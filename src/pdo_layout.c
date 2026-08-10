@@ -141,9 +141,9 @@ static void _pdo_image_entries_build(const struct mo_ecat_master *master,
 			const struct pdo_entry *entry = &slave->pdo_entries[j];
 			struct pdo_image_entry *image_entry = &entries[index];
 
-			image_entry->record.entry_id = (uint32_t)index;
-			image_entry->record.slave_index = i;
-			image_entry->record.spec = *entry;
+			image_entry->slave_entry.entry_id = (uint32_t)index;
+			image_entry->slave_entry.slave_index = i;
+			image_entry->slave_entry.spec = *entry;
 			++index;
 		}
 	}
