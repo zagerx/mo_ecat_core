@@ -105,9 +105,6 @@ enum backend_error soem_backend_configure_dc(struct backend_instance *backend)
 
 	context->dc_configured = 1;
 
-	/* Sync0 激活推迟到 RUNNING 之后，避免干扰 OP 切换。
-	   pending 参数保留，由后续 sync0_configure 调用（dc_configured=1 时直接生效）。 */
-
 	return BACKEND_ERROR_NONE;
 }
 
@@ -139,13 +136,8 @@ enum backend_error soem_backend_sync0_configure(struct backend_instance *backend
 	if (enable != 0 && cycle_time_ns == 0U) {
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
-
 	if (!context->dc_configured) {
-		/* DC 尚未配置，暂存参数，待 configure_dc 完成后再生效。 */
-		context->pending_sync0_enable = enable ? 1 : 0;
-		context->pending_sync0_cycle_ns = cycle_time_ns;
-		context->pending_sync0_shift_ns = shift_time_ns;
-		return BACKEND_ERROR_NONE;
+		return BACKEND_ERROR_NOT_READY;
 	}
 
 	ecx_dcsync0(&context->context, slave_number, enable != 0, cycle_time_ns, shift_time_ns);

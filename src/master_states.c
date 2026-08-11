@@ -22,6 +22,11 @@
  * BUS_FAULT；连续异常超过该窗口才进 FAULT。 */
 #define MASTER_CYCLIC_FAULT_TOLERANCE_NS (100ULL * 1000ULL * 1000ULL)
 
+/* 静态辅助函数前向声明 */
+
+static enum master_error_detail _sync0_configure_all(struct mo_ecat_master *master,
+						     int enable);
+
 static uint64_t master_monotonic_ns(void)
 {
 	struct timespec now;
@@ -345,6 +350,15 @@ void master_state_running(struct statemachine *sm)
 	case SM_PHASE_ENTER:
 		if (master) {
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_RUNNING);
+			/* RUNNING 后统一激活 Sync0，避免干扰 OP 切换。 */
+			error = _sync0_configure_all(master, 1);
+			if (error != MASTER_ERROR_NONE) {
+				master_set_fault(master, MO_ECAT_MASTER_ERROR_SYNC0_ACTIVATE_FAILED,
+						 error);
+				(void)slave_table_refresh_states(master);
+				sm_transition(sm, master_state_fault);
+				break;
+			}
 		}
 		sm->phase = SM_PHASE_START;
 		break;
@@ -356,6 +370,7 @@ void master_state_running(struct statemachine *sm)
 			break;
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_DEACTIVATE) {
+			(void)_sync0_configure_all(master, 0);
 			error = pdo_layout_deactivate(master);
 			if (error != MASTER_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
@@ -454,4 +469,41 @@ void master_state_fault(struct statemachine *sm)
 	default:
 		break;
 	}
+}
+
+/**
+ * _sync0_configure_all - 对所有支持 DC 的从站统一配置 Sync0
+ * @master: 主站对象指针
+ * @enable: 非 0 激活，0 关闭
+ *
+ * Sync0 参数来自主站配置；sync0_cycle_ns 为 0 时不做任何操作。
+ * 进入 RUNNING 时激活，DEACTIVATE 时关闭。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+static enum master_error_detail _sync0_configure_all(struct mo_ecat_master *master, int enable)
+{
+	const struct mo_ecat_master_config *config;
+	enum master_error_detail result = MASTER_ERROR_NONE;
+
+	if (!master || !master->config || master->config->sync0_cycle_ns == 0U) {
+		return MASTER_ERROR_NONE;
+	}
+	config = master->config;
+
+	pthread_mutex_lock(&master->slave_table_mutex);
+	for (size_t i = 0; i < master->slave_table.slave_count; ++i) {
+		enum backend_error error;
+
+		if (!master->slave_table.slaves[i].base_info.dc_supported) {
+			continue;
+		}
+		error = backend_sync0_configure(&master->backend, i, enable,
+						config->sync0_cycle_ns, config->sync0_shift_ns);
+		if (error != BACKEND_ERROR_NONE && result == MASTER_ERROR_NONE) {
+			result = master_error_from_backend(error);
+		}
+	}
+	pthread_mutex_unlock(&master->slave_table_mutex);
+	return result;
 }

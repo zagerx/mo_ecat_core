@@ -17,11 +17,16 @@ extern "C" {
 /**
  * struct mo_ecat_master_config - 主站配置
  * @interface_name: EtherCAT 网口名
+ * @sync0_cycle_ns: Sync0 周期（ns），0 表示不激活 Sync0
+ * @sync0_shift_ns: Sync0 相位偏移（ns）
  *
- * 当前只包含网口名，后续所有产品级可变主站参数都应加在这里。
+ * 主站进入 RUNNING 后对所有支持 DC 的从站统一激活 Sync0；
+ * DEACTIVATE 时统一关闭。
  */
 struct mo_ecat_master_config {
     char interface_name[MO_ECAT_MAX_IFNAME_LEN + 1];
+    uint32_t sync0_cycle_ns;
+    int32_t sync0_shift_ns;
 };
 
 #ifdef __cplusplus
