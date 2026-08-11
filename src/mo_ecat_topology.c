@@ -66,3 +66,56 @@ int mo_ecat_master_get_node_info(const struct mo_ecat_master *master,
 
 	return 0;
 }
+
+/**
+ * mo_ecat_master_get_slave_detail - 获取指定从站的配置详情
+ * @master: 主站对象指针
+ * @index: 从站索引
+ * @detail: 详情输出缓冲区
+ *
+ * Return: 0 成功，非 0 失败
+ */
+int mo_ecat_master_get_slave_detail(const struct mo_ecat_master *master, size_t index,
+				    struct mo_ecat_slave_detail *detail)
+{
+	const struct slave *slave;
+
+	if (!master || !detail) {
+		return -1;
+	}
+
+	pthread_mutex_lock((pthread_mutex_t *)&master->slave_table_mutex);
+	if (index >= master->slave_table.slave_count || !master->slave_table.slaves) {
+		pthread_mutex_unlock((pthread_mutex_t *)&master->slave_table_mutex);
+		return -1;
+	}
+
+	slave = &master->slave_table.slaves[index];
+	memset(detail, 0, sizeof(*detail));
+
+	for (size_t i = 0; i < SLAVE_MAX_SYNC_MANAGERS; ++i) {
+		const struct slave_sync_manager *sm = &slave->base_info.sm[i];
+
+		if (sm->length == 0) {
+			continue;
+		}
+		if (detail->sm_count >= MO_ECAT_MAX_SLAVE_SM) {
+			break;
+		}
+		detail->sm[detail->sm_count].start_address = sm->start_address;
+		detail->sm[detail->sm_count].length = sm->length;
+		detail->sm[detail->sm_count].type = sm->type;
+		++detail->sm_count;
+	}
+
+	for (size_t i = 0; i < slave->pdo_entry_count; ++i) {
+		if (detail->pdo_entry_count >= MO_ECAT_MAX_SLAVE_PDO_ENTRIES) {
+			break;
+		}
+		detail->pdo_entries[detail->pdo_entry_count] = slave->pdo_entries[i];
+		++detail->pdo_entry_count;
+	}
+
+	pthread_mutex_unlock((pthread_mutex_t *)&master->slave_table_mutex);
+	return 0;
+}

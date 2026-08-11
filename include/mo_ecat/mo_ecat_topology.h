@@ -6,6 +6,7 @@
 #define MO_ECAT_TOPOLOGY_H
 
 #include "mo_ecat/mo_ecat_common.h"
+#include "mo_ecat/mo_ecat_pdo.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +76,49 @@ size_t mo_ecat_master_get_node_count(const struct mo_ecat_master *master);
 
 int mo_ecat_master_get_node_info(const struct mo_ecat_master *master, size_t index,
 				 struct mo_ecat_node_info *info);
+
+#define MO_ECAT_MAX_SLAVE_SM 8
+#define MO_ECAT_MAX_SLAVE_PDO_ENTRIES 32
+
+/**
+ * struct mo_ecat_slave_sm - 从站同步管理器摘要
+ * @start_address: SM 起始地址
+ * @length: SM 长度
+ * @type: SM 类型（1=邮箱收 2=邮箱发 3=过程数据输出 4=过程数据输入）
+ */
+struct mo_ecat_slave_sm {
+	uint16_t start_address;
+	uint16_t length;
+	uint8_t type;
+};
+
+/**
+ * struct mo_ecat_slave_detail - 从站配置详情（SM 与 PDO 映射明细）
+ * @sm: 有效 SM 摘要数组
+ * @sm_count: 有效 SM 数量
+ * @pdo_entries: 该从站扫描到的 PDO 条目规格数组
+ * @pdo_entry_count: PDO 条目数量
+ *
+ * 由 mo_ecat_master_get_slave_detail() 按值复制返回，
+ * 供调试界面展示单个从站的配置细节。
+ */
+struct mo_ecat_slave_detail {
+	struct mo_ecat_slave_sm sm[MO_ECAT_MAX_SLAVE_SM];
+	size_t sm_count;
+	struct pdo_entry pdo_entries[MO_ECAT_MAX_SLAVE_PDO_ENTRIES];
+	size_t pdo_entry_count;
+};
+
+/**
+ * mo_ecat_master_get_slave_detail - 获取指定从站的配置详情
+ * @master: 主站对象指针
+ * @index: 从站索引
+ * @detail: 详情输出缓冲区
+ *
+ * Return: 0 成功，非 0 失败
+ */
+int mo_ecat_master_get_slave_detail(const struct mo_ecat_master *master, size_t index,
+				    struct mo_ecat_slave_detail *detail);
 
 #ifdef __cplusplus
 }
