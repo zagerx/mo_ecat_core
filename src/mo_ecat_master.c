@@ -4,6 +4,7 @@
  * 提供主站对象的创建/销毁、命令写入、状态查询以及状态机调度等公开接口。
  */
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -363,4 +364,78 @@ int mo_ecat_master_request_set_slave_al_state(struct mo_ecat_master *master, siz
 	atomic_store(&master->command_arg, arg);
 	master_write_cmd(master, MO_ECAT_MASTER_CMD_SET_SLAVE_AL_STATE);
 	return 0;
+}
+
+/**
+ * mo_ecat_master_request_sdo_read - 通过 CoE SDO 读取从站对象字典
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @object_index: 对象字典索引
+ * @object_subindex: 子索引
+ * @data: 数据缓冲区
+ * @data_size: 输入期望字节数，输出实际读取字节数
+ *
+ * 仅 DEBUG_SLAVE 状态受理。调用线程阻塞至 SDO 传输完成。
+ *
+ * Return: 0 成功；非 0 失败
+ */
+int mo_ecat_master_request_sdo_read(struct mo_ecat_master *master, size_t slave_index,
+				    uint16_t object_index, uint8_t object_subindex, void *data,
+				    size_t *data_size)
+{
+	if (!master || !data || !data_size || *data_size == 0U || *data_size > (size_t)INT_MAX) {
+		return -1;
+	}
+	if (mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_DEBUG_SLAVE) {
+		return -1;
+	}
+
+	pthread_mutex_lock(&master->slave_table_mutex);
+	const int valid = (slave_index < master->slave_table.slave_count);
+	pthread_mutex_unlock(&master->slave_table_mutex);
+	if (!valid) {
+		return -1;
+	}
+
+	int sdo_size = (int)(*data_size);
+	const enum backend_error error = backend_sdo_read(
+		&master->backend, slave_index, object_index, object_subindex, &sdo_size, data);
+	*data_size = (size_t)sdo_size;
+	return (error == BACKEND_ERROR_NONE) ? 0 : -1;
+}
+
+/**
+ * mo_ecat_master_request_sdo_write - 通过 CoE SDO 写入从站对象字典
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @object_index: 对象字典索引
+ * @object_subindex: 子索引
+ * @data: 数据缓冲区
+ * @data_size: 写入字节数
+ *
+ * 仅 DEBUG_SLAVE 状态受理。调用线程阻塞至 SDO 传输完成。
+ *
+ * Return: 0 成功；非 0 失败
+ */
+int mo_ecat_master_request_sdo_write(struct mo_ecat_master *master, size_t slave_index,
+				     uint16_t object_index, uint8_t object_subindex,
+				     const void *data, size_t data_size)
+{
+	if (!master || !data || data_size == 0U || data_size > (size_t)INT_MAX) {
+		return -1;
+	}
+	if (mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_DEBUG_SLAVE) {
+		return -1;
+	}
+
+	pthread_mutex_lock(&master->slave_table_mutex);
+	const int valid = (slave_index < master->slave_table.slave_count);
+	pthread_mutex_unlock(&master->slave_table_mutex);
+	if (!valid) {
+		return -1;
+	}
+
+	const enum backend_error error = backend_sdo_write(
+		&master->backend, slave_index, object_index, object_subindex, (int)data_size, data);
+	return (error == BACKEND_ERROR_NONE) ? 0 : -1;
 }

@@ -312,3 +312,79 @@ enum backend_error soem_backend_set_slave_al_state(struct backend_instance *back
 	ecx_writestate(&context->context, slave_number);
 	return BACKEND_ERROR_NONE;
 }
+
+/**
+ * soem_backend_sdo_read - SOEM SDO 读
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标（0 起）
+ * @object_index: CoE 对象字典索引
+ * @object_subindex: 子索引
+ * @psize: 输入期望字节数，输出实际读取字节数
+ * @data: 数据缓冲区
+ *
+ * 封装 ecx_SDOread，调用线程阻塞至传输完成。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error soem_backend_sdo_read(struct backend_instance *backend, size_t slave_index,
+					 uint16_t object_index, uint8_t object_subindex, int *psize,
+					 void *data)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
+
+	if (!context || !context->opened) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (slave_number > (uint16_t)context->context.slavecount || slave_number == 0U) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (!psize || !data || *psize <= 0) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	const int wkc = ecx_SDOread(&context->context, slave_number, object_index, object_subindex,
+				    FALSE, psize, data, EC_TIMEOUTRXM);
+	if (wkc <= 0) {
+		return BACKEND_ERROR_SDO_READ_FAILED;
+	}
+	return BACKEND_ERROR_NONE;
+}
+
+/**
+ * soem_backend_sdo_write - SOEM SDO 写
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标（0 起）
+ * @object_index: CoE 对象字典索引
+ * @object_subindex: 子索引
+ * @size: 写入数据字节数
+ * @data: 数据缓冲区
+ *
+ * 封装 ecx_SDOwrite，调用线程阻塞至传输完成。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error soem_backend_sdo_write(struct backend_instance *backend, size_t slave_index,
+					  uint16_t object_index, uint8_t object_subindex, int size,
+					  const void *data)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
+
+	if (!context || !context->opened) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (slave_number > (uint16_t)context->context.slavecount || slave_number == 0U) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (!data || size <= 0) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	const int wkc = ecx_SDOwrite(&context->context, slave_number, object_index, object_subindex,
+				     FALSE, size, data, EC_TIMEOUTRXM);
+	if (wkc <= 0) {
+		return BACKEND_ERROR_SDO_WRITE_FAILED;
+	}
+	return BACKEND_ERROR_NONE;
+}

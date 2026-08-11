@@ -346,6 +346,56 @@ enum backend_error backend_set_slave_al_state(struct backend_instance *backend, 
 }
 
 /**
+ * backend_sdo_read - CoE SDO 读（调试用途）
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标
+ * @object_index: 对象字典索引
+ * @object_subindex: 子索引
+ * @psize: 输入期望读取字节数，输出实际读取字节数
+ * @data: 数据缓冲区
+ *
+ * 调用线程阻塞至 SDO 传输完成。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error backend_sdo_read(struct backend_instance *backend, size_t slave_index,
+				    uint16_t object_index, uint8_t object_subindex, int *psize,
+				    void *data)
+{
+	if (!backend || !backend->ops || !backend->ops->sdo_read) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+
+	return backend->ops->sdo_read(backend, slave_index, object_index, object_subindex, psize,
+				      data);
+}
+
+/**
+ * backend_sdo_write - CoE SDO 写（调试用途）
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标
+ * @object_index: 对象字典索引
+ * @object_subindex: 子索引
+ * @size: 写入数据字节数
+ * @data: 数据缓冲区
+ *
+ * 调用线程阻塞至 SDO 传输完成。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error backend_sdo_write(struct backend_instance *backend, size_t slave_index,
+				     uint16_t object_index, uint8_t object_subindex, int size,
+				     const void *data)
+{
+	if (!backend || !backend->ops || !backend->ops->sdo_write) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+
+	return backend->ops->sdo_write(backend, slave_index, object_index, object_subindex, size,
+				       data);
+}
+
+/**
  * backend_close - 关闭后端
  * @backend: 后端实例指针
  */

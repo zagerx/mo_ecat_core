@@ -69,6 +69,14 @@ enum backend_error soem_backend_set_slave_al_state(struct backend_instance *back
 						   size_t slave_index,
 						   enum mo_ecat_node_al_state target_state);
 
+enum backend_error soem_backend_sdo_read(struct backend_instance *backend, size_t slave_index,
+					 uint16_t object_index, uint8_t object_subindex, int *psize,
+					 void *data);
+
+enum backend_error soem_backend_sdo_write(struct backend_instance *backend, size_t slave_index,
+					  uint16_t object_index, uint8_t object_subindex, int size,
+					  const void *data);
+
 enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
 						  struct pdo_image_entry *entries,
 						  size_t entry_count);

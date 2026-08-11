@@ -146,6 +146,40 @@ int mo_ecat_master_request_exit_debug(struct mo_ecat_master *master);
 int mo_ecat_master_request_set_slave_al_state(struct mo_ecat_master *master, size_t slave_index,
 					      enum mo_ecat_node_al_state target_state);
 
+/**
+ * mo_ecat_master_request_sdo_read - 通过 CoE SDO 读取从站对象字典
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @object_index: 对象字典索引（如 0x6040）
+ * @object_subindex: 子索引（如 0x00）
+ * @data: 数据缓冲区，调用方提供
+ * @data_size: 输入期望字节数，输出实际读取字节数
+ *
+ * 仅 DEBUG_SLAVE 状态受理。调用线程阻塞至 SDO 传输完成。
+ *
+ * Return: 0 成功；非 0 失败
+ */
+int mo_ecat_master_request_sdo_read(struct mo_ecat_master *master, size_t slave_index,
+				    uint16_t object_index, uint8_t object_subindex, void *data,
+				    size_t *data_size);
+
+/**
+ * mo_ecat_master_request_sdo_write - 通过 CoE SDO 写入从站对象字典
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @object_index: 对象字典索引（如 0x6040）
+ * @object_subindex: 子索引（如 0x00）
+ * @data: 数据缓冲区
+ * @data_size: 写入字节数
+ *
+ * 仅 DEBUG_SLAVE 状态受理。调用线程阻塞至 SDO 传输完成。
+ *
+ * Return: 0 成功；非 0 失败
+ */
+int mo_ecat_master_request_sdo_write(struct mo_ecat_master *master, size_t slave_index,
+				     uint16_t object_index, uint8_t object_subindex,
+				     const void *data, size_t data_size);
+
 enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_master *master);
 
 #ifdef __cplusplus

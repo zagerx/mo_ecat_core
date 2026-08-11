@@ -97,6 +97,14 @@ struct backend_ops {
 	enum backend_error (*set_slave_al_state)(struct backend_instance *backend,
 						 size_t slave_index,
 						 enum mo_ecat_node_al_state target_state);
+
+	/* SDO 读/写（调试用途，CoE 协议）。调用线程阻塞至完成。 */
+	enum backend_error (*sdo_read)(struct backend_instance *backend, size_t slave_index,
+				       uint16_t object_index, uint8_t object_subindex, int *psize,
+				       void *data);
+	enum backend_error (*sdo_write)(struct backend_instance *backend, size_t slave_index,
+					uint16_t object_index, uint8_t object_subindex, int size,
+					const void *data);
 };
 
 #ifdef __cplusplus
