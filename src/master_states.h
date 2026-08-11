@@ -11,6 +11,7 @@ void master_state_init(struct statemachine *sm);
 void master_state_idle(struct statemachine *sm);
 void master_state_ready(struct statemachine *sm);
 void master_state_running(struct statemachine *sm);
+void master_state_debug_slave(struct statemachine *sm);
 void master_state_fault(struct statemachine *sm);
 
 #ifdef __cplusplus

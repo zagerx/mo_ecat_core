@@ -1,7 +1,7 @@
 /*
  * master_states.c - 主站生命周期状态函数
  *
- * 实现主站状态机各状态：INIT、IDLE、READY、RUNNING、FAULT。
+ * 实现主站状态机各状态：INIT、IDLE、READY、RUNNING、DEBUG_SLAVE、FAULT。
  * 负责处理外部命令、总线扫描、DC 配置、PDO 映射建立以及周期数据交换。
  */
 
@@ -25,8 +25,7 @@
 
 /* 静态辅助函数前向声明 */
 
-static enum backend_error _sync0_configure_all(struct mo_ecat_master *master,
-						     int enable);
+static enum backend_error _sync0_configure_all(struct mo_ecat_master *master, int enable);
 
 static uint64_t master_monotonic_ns(void)
 {
@@ -68,9 +67,10 @@ static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_
 		master->last_error.master_error = error;
 		master->last_error.detail = detail;
 		master->last_error.source =
-			(detail == BACKEND_ERROR_INVALID_ARGUMENT || detail == BACKEND_ERROR_INVALID_STATE ||
-			 detail == BACKEND_ERROR_NO_MEMORY) ?
-				MASTER_ERROR_SOURCE_CORE : MASTER_ERROR_SOURCE_BACKEND;
+			(detail == BACKEND_ERROR_INVALID_ARGUMENT ||
+			 detail == BACKEND_ERROR_INVALID_STATE || detail == BACKEND_ERROR_NO_MEMORY)
+				? MASTER_ERROR_SOURCE_CORE
+				: MASTER_ERROR_SOURCE_BACKEND;
 		master->last_error.native_code = 0;
 		master->last_error.slave_index = SIZE_MAX;
 		master->last_error.object_index = 0;
@@ -88,8 +88,7 @@ static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_
  * 释放已获取资源，并迁移至 FAULT。该函数只收敛这条固定故障出口。
  */
 static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *master,
-			     enum mo_ecat_master_error error,
-			     enum backend_error detail)
+			     enum mo_ecat_master_error error, enum backend_error detail)
 {
 	master_set_fault(master, error, detail);
 	if (mo_ecat_master_get_node_count(master) > 0U) {
@@ -193,8 +192,7 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_SCAN_BUILD: {
-		error = backend_load_slave_info(&master->backend,
-									    &slave_count);
+		error = backend_load_slave_info(&master->backend, &slave_count);
 		if (error == BACKEND_ERROR_NONE) {
 			error = slave_table_build(master, slave_count);
 		}
@@ -216,8 +214,8 @@ void master_state_idle(struct statemachine *sm)
 
 	case MASTER_PHASE_READ_PDO: {
 		pthread_mutex_lock(&master->slave_table_mutex);
-		error = backend_read_pdo_entries(
-			&master->backend, master->slave_table.slaves, master->slave_table.slave_count);
+		error = backend_read_pdo_entries(&master->backend, master->slave_table.slaves,
+						 master->slave_table.slave_count);
 		pthread_mutex_unlock(&master->slave_table_mutex);
 		if (error != BACKEND_ERROR_NONE) {
 			master_idle_fail(sm, master,
@@ -239,6 +237,9 @@ void master_state_idle(struct statemachine *sm)
 		case MO_ECAT_MASTER_CMD_CONFIGURE:
 			sm->phase = MASTER_PHASE_CONFIGURE_DC;
 			break;
+		case MO_ECAT_MASTER_CMD_ENTER_DEBUG:
+			sm_transition(sm, master_state_debug_slave);
+			break;
 		case MO_ECAT_MASTER_CMD_NONE:
 		default:
 			break;
@@ -248,7 +249,8 @@ void master_state_idle(struct statemachine *sm)
 	case MASTER_PHASE_CONFIGURE_DC: { /* DC 配置独立失败，不能继续建立 PDO 映射。 */
 		error = backend_configure_dc(&master->backend);
 		if (error != BACKEND_ERROR_NONE) {
-			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED, error);
+			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED,
+					 error);
 			break;
 		}
 		sm->phase = MASTER_PHASE_BUILD_PDO_MAPPING;
@@ -259,9 +261,9 @@ void master_state_idle(struct statemachine *sm)
 		{
 			error = pdo_layout_build(master);
 			if (error != BACKEND_ERROR_NONE) {
-				master_idle_fail(
-					sm, master,
-					MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED, error);
+				master_idle_fail(sm, master,
+						 MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED,
+						 error);
 				break;
 			}
 			sm_transition(sm, master_state_ready);
@@ -309,7 +311,8 @@ void master_state_ready(struct statemachine *sm)
 		if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
 			error = pdo_layout_activate(master);
 			if (error != BACKEND_ERROR_NONE) {
-				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
+				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED,
+						 error);
 				(void)slave_table_refresh_states(master);
 				master_runtime_pdo_release(master);
 				sm_transition(sm, master_state_fault);
@@ -390,8 +393,7 @@ void master_state_running(struct statemachine *sm)
 
 			if (slave >= 0) {
 				const enum backend_error recover_error =
-					backend_recover_slave(
-						&master->backend, (size_t)slave);
+					backend_recover_slave(&master->backend, (size_t)slave);
 				if (recover_error != BACKEND_ERROR_NONE) {
 					fprintf(stderr, "[master] slave %ld recover failed: %d\n",
 						slave, recover_error);
@@ -437,6 +439,64 @@ void master_state_running(struct statemachine *sm)
 			}
 		}
 
+		master_refresh_slave_states_periodic(master);
+		break;
+	case SM_PHASE_EXIT:
+	default:
+		break;
+	}
+}
+
+/**
+ * master_state_debug_slave - 主站 DEBUG_SLAVE 状态
+ * @sm: 状态机实例指针
+ *
+ * 从 IDLE 进入；后端已打开、从站表已建立、总线空闲无 PDO。
+ * 响应 EXIT_DEBUG（回 IDLE）、RESET（回 IDLE）和 SET_SLAVE_AL_STATE
+ * （设置单个从站 AL 状态）命令。
+ */
+void master_state_debug_slave(struct statemachine *sm)
+{
+	struct mo_ecat_master *master;
+	enum mo_ecat_master_cmd cmd;
+
+	if (!sm) {
+		return;
+	}
+
+	master = (struct mo_ecat_master *)sm->data;
+	switch (sm->phase) {
+	case SM_PHASE_ENTER:
+		if (master) {
+			atomic_store(&master->state, MO_ECAT_MASTER_STATE_DEBUG_SLAVE);
+		}
+		sm->phase = SM_PHASE_START;
+		break;
+	case SM_PHASE_START:
+		cmd = master_take_cmd(master);
+		if (cmd == MO_ECAT_MASTER_CMD_EXIT_DEBUG) {
+			sm_transition(sm, master_state_idle);
+			break;
+		}
+		if (cmd == MO_ECAT_MASTER_CMD_RESET) {
+			master_resources_release(master);
+			sm_transition(sm, master_state_idle);
+			break;
+		}
+		if (cmd == MO_ECAT_MASTER_CMD_SET_SLAVE_AL_STATE) {
+			const long arg = atomic_exchange(&master->command_arg, -1L);
+
+			if (arg >= 0) {
+				const size_t slave_index = (size_t)((arg >> 16) & 0xFFFFL);
+				const enum mo_ecat_node_al_state target_state =
+					(enum mo_ecat_node_al_state)(arg & 0xFFFFL);
+
+				(void)backend_set_slave_al_state(&master->backend, slave_index,
+								 target_state);
+			}
+		}
+
+		/* 空闲期间限速刷新从站状态，UI 可看到调试操作的效果。 */
 		master_refresh_slave_states_periodic(master);
 		break;
 	case SM_PHASE_EXIT:
@@ -514,8 +574,8 @@ static enum backend_error _sync0_configure_all(struct mo_ecat_master *master, in
 		if (!master->slave_table.slaves[i].base_info.dc_supported) {
 			continue;
 		}
-		error = backend_sync0_configure(&master->backend, i, enable,
-						config->sync0_cycle_ns, config->sync0_shift_ns);
+		error = backend_sync0_configure(&master->backend, i, enable, config->sync0_cycle_ns,
+						config->sync0_shift_ns);
 		if (error != BACKEND_ERROR_NONE && result == BACKEND_ERROR_NONE) {
 			result = error;
 		}

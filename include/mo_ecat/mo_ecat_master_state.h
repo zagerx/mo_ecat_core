@@ -15,17 +15,20 @@ struct mo_ecat_master;
 
 /**
  * enum mo_ecat_master_state - 主站生命周期状态
- * @MO_ECAT_MASTER_STATE_INIT:    初始状态，尚未完成任何初始化
- * @MO_ECAT_MASTER_STATE_IDLE:    空闲状态，可接受 SCAN 命令
- * @MO_ECAT_MASTER_STATE_READY:   已配置完成，可接受 ACTIVATE 命令
- * @MO_ECAT_MASTER_STATE_RUNNING: 周期运行中
- * @MO_ECAT_MASTER_STATE_FAULT:   故障状态，必须先 RESET
+ * @MO_ECAT_MASTER_STATE_INIT:         初始状态，尚未完成任何初始化
+ * @MO_ECAT_MASTER_STATE_IDLE:         空闲状态，可接受 SCAN 命令
+ * @MO_ECAT_MASTER_STATE_READY:        已配置完成，可接受 ACTIVATE 命令
+ * @MO_ECAT_MASTER_STATE_RUNNING:      周期运行中
+ * @MO_ECAT_MASTER_STATE_DEBUG_SLAVE:  从站调试态，可对单个从站进行 AL 状态切换/
+ *                                     SDO 读写/FoE 升级等调试操作
+ * @MO_ECAT_MASTER_STATE_FAULT:        故障状态，必须先 RESET
  */
 enum mo_ecat_master_state {
 	MO_ECAT_MASTER_STATE_INIT,
 	MO_ECAT_MASTER_STATE_IDLE,
 	MO_ECAT_MASTER_STATE_READY,
 	MO_ECAT_MASTER_STATE_RUNNING,
+	MO_ECAT_MASTER_STATE_DEBUG_SLAVE,
 	MO_ECAT_MASTER_STATE_FAULT
 };
 

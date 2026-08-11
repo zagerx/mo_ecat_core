@@ -154,7 +154,8 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master)
  */
 int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd)
 {
-	if (!master || cmd <= MO_ECAT_MASTER_CMD_NONE || cmd > MO_ECAT_MASTER_CMD_RESET) {
+	if (!master || cmd <= MO_ECAT_MASTER_CMD_NONE ||
+	    cmd > MO_ECAT_MASTER_CMD_SET_SLAVE_AL_STATE) {
 		return -1;
 	}
 
@@ -263,8 +264,7 @@ int mo_ecat_master_sync0_status(struct mo_ecat_master *master, size_t slave_inde
  *
  * Return: 0 已受理；非 0 拒绝
  */
-int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master,
-					  size_t slave_index)
+int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master, size_t slave_index)
 {
 	int valid = 0;
 
@@ -287,5 +287,80 @@ int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master,
 
 	atomic_store(&master->command_arg, (long)slave_index);
 	master_write_cmd(master, MO_ECAT_MASTER_CMD_RECOVER_SLAVE);
+	return 0;
+}
+
+/**
+ * mo_ecat_master_request_enter_debug - 请求进入从站调试态
+ * @master: 主站对象指针
+ *
+ * 仅 IDLE 状态受理（总线已扫描、空闲未激活）。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_enter_debug(struct mo_ecat_master *master)
+{
+	if (!master) {
+		return -1;
+	}
+	if (mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_IDLE) {
+		return -1;
+	}
+
+	master_write_cmd(master, MO_ECAT_MASTER_CMD_ENTER_DEBUG);
+	return 0;
+}
+
+/**
+ * mo_ecat_master_request_exit_debug - 请求退出从站调试态
+ * @master: 主站对象指针
+ *
+ * 退出后回到 IDLE 状态。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_exit_debug(struct mo_ecat_master *master)
+{
+	if (!master) {
+		return -1;
+	}
+	if (mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_DEBUG_SLAVE) {
+		return -1;
+	}
+
+	master_write_cmd(master, MO_ECAT_MASTER_CMD_EXIT_DEBUG);
+	return 0;
+}
+
+/**
+ * mo_ecat_master_request_set_slave_al_state - 请求设置单个从站 AL 状态
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @target_state: 目标 AL 状态
+ *
+ * 仅 DEBUG_SLAVE 状态受理。参数编码：(slave_index<<16)|target_state。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_set_slave_al_state(struct mo_ecat_master *master, size_t slave_index,
+					      enum mo_ecat_node_al_state target_state)
+{
+	if (!master) {
+		return -1;
+	}
+	if (mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_DEBUG_SLAVE) {
+		return -1;
+	}
+
+	pthread_mutex_lock(&master->slave_table_mutex);
+	const int valid = (slave_index < master->slave_table.slave_count);
+	pthread_mutex_unlock(&master->slave_table_mutex);
+	if (!valid) {
+		return -1;
+	}
+
+	const long arg = ((long)slave_index << 16) | (long)target_state;
+	atomic_store(&master->command_arg, arg);
+	master_write_cmd(master, MO_ECAT_MASTER_CMD_SET_SLAVE_AL_STATE);
 	return 0;
 }

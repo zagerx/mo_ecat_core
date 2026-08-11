@@ -13,6 +13,7 @@
 #include "mo_ecat/mo_ecat_master_state.h"
 #include "mo_ecat/mo_ecat_pdo.h"
 #include "mo_ecat/mo_ecat_sync0.h"
+#include "mo_ecat/mo_ecat_topology.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,13 +23,16 @@ struct mo_ecat_master;
 
 /**
  * enum mo_ecat_master_cmd - 主站状态机请求命令
- * @MO_ECAT_MASTER_CMD_NONE:       无命令
- * @MO_ECAT_MASTER_CMD_SCAN:       扫描总线
- * @MO_ECAT_MASTER_CMD_CONFIGURE:  配置 DC 并建立 PDO 映射
- * @MO_ECAT_MASTER_CMD_ACTIVATE:   激活周期运行
- * @MO_ECAT_MASTER_CMD_DEACTIVATE: 停止周期运行
- * @MO_ECAT_MASTER_CMD_RESET:      复位到空闲
- * @MO_ECAT_MASTER_CMD_RECOVER_SLAVE: 恢复单个从站到 OP（参数为从站下标）
+ * @MO_ECAT_MASTER_CMD_NONE:           无命令
+ * @MO_ECAT_MASTER_CMD_SCAN:           扫描总线
+ * @MO_ECAT_MASTER_CMD_CONFIGURE:      配置 DC 并建立 PDO 映射
+ * @MO_ECAT_MASTER_CMD_ACTIVATE:       激活周期运行
+ * @MO_ECAT_MASTER_CMD_DEACTIVATE:     停止周期运行
+ * @MO_ECAT_MASTER_CMD_RESET:          复位到空闲
+ * @MO_ECAT_MASTER_CMD_RECOVER_SLAVE:  恢复单个从站到 OP（参数为从站下标）
+ * @MO_ECAT_MASTER_CMD_ENTER_DEBUG:    进入从站调试态
+ * @MO_ECAT_MASTER_CMD_EXIT_DEBUG:     退出从站调试态
+ * @MO_ECAT_MASTER_CMD_SET_SLAVE_AL_STATE: 设置单个从站 AL 状态（参数编码从站下标与目标状态）
  */
 enum mo_ecat_master_cmd {
 	MO_ECAT_MASTER_CMD_NONE,
@@ -37,7 +41,10 @@ enum mo_ecat_master_cmd {
 	MO_ECAT_MASTER_CMD_ACTIVATE,
 	MO_ECAT_MASTER_CMD_DEACTIVATE,
 	MO_ECAT_MASTER_CMD_RESET,
-	MO_ECAT_MASTER_CMD_RECOVER_SLAVE
+	MO_ECAT_MASTER_CMD_RECOVER_SLAVE,
+	MO_ECAT_MASTER_CMD_ENTER_DEBUG,
+	MO_ECAT_MASTER_CMD_EXIT_DEBUG,
+	MO_ECAT_MASTER_CMD_SET_SLAVE_AL_STATE
 };
 
 /**
@@ -102,8 +109,42 @@ int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_
  *
  * Return: 0 已受理；非 0 拒绝
  */
-int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master,
-					  size_t slave_index);
+int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master, size_t slave_index);
+
+/**
+ * mo_ecat_master_request_enter_debug - 请求进入从站调试态
+ * @master: 主站对象指针
+ *
+ * 仅 IDLE 状态受理（总线已扫描、空闲未激活）。
+ * 进入后 PDO 未激活，可安全进行单站调试操作。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_enter_debug(struct mo_ecat_master *master);
+
+/**
+ * mo_ecat_master_request_exit_debug - 请求退出从站调试态
+ * @master: 主站对象指针
+ *
+ * 退出后回到 IDLE 状态，可继续正常配置流程。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_exit_debug(struct mo_ecat_master *master);
+
+/**
+ * mo_ecat_master_request_set_slave_al_state - 请求设置单个从站 AL 状态
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ * @target_state: 目标 AL 状态
+ *
+ * 仅 DEBUG_SLAVE 状态受理。直接写从站 AL Control 寄存器，
+ * 不经过正常配置流程。操作结果通过从站状态刷新呈现。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_set_slave_al_state(struct mo_ecat_master *master, size_t slave_index,
+					      enum mo_ecat_node_al_state target_state);
 
 enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_master *master);
 

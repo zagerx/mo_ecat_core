@@ -325,6 +325,27 @@ enum backend_error backend_recover_slave(struct backend_instance *backend, size_
 }
 
 /**
+ * backend_set_slave_al_state - 设置单个从站 AL 状态（调试用途）
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标
+ * @target_state: 目标 AL 状态
+ *
+ * 直接写从站 AL Control 寄存器，不经过正常配置流程。
+ * 仅 DEBUG_SLAVE 状态使用。
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error backend_set_slave_al_state(struct backend_instance *backend, size_t slave_index,
+					      enum mo_ecat_node_al_state target_state)
+{
+	if (!backend || !backend->ops || !backend->ops->set_slave_al_state) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+
+	return backend->ops->set_slave_al_state(backend, slave_index, target_state);
+}
+
+/**
  * backend_close - 关闭后端
  * @backend: 后端实例指针
  */

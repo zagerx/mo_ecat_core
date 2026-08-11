@@ -38,6 +38,7 @@ static const struct backend_ops soem_ops = {
 	.sync0_configure = soem_backend_sync0_configure,
 	.sync0_read_status = soem_backend_sync0_read_status,
 	.recover_slave = soem_backend_recover_slave,
+	.set_slave_al_state = soem_backend_set_slave_al_state,
 	.deactivate = soem_backend_deactivate,
 	.close = soem_backend_close,
 };

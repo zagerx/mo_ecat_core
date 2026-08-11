@@ -18,7 +18,9 @@
 enum backend_error soem_backend_activate(struct backend_instance *backend)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
-	enum { SOEM_OPERATIONAL_RETRIES = 40 };
+	enum {
+		SOEM_OPERATIONAL_RETRIES = 40
+	};
 
 	if (!context) {
 		return BACKEND_ERROR_NOT_READY;
@@ -53,7 +55,7 @@ enum backend_error soem_backend_activate(struct backend_instance *backend)
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_cyclic_receive(struct backend_instance *backend,
-						struct mo_ecat_cyclic_result *result)
+					       struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	int wkc;
@@ -85,7 +87,7 @@ enum backend_error soem_backend_cyclic_receive(struct backend_instance *backend,
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_cyclic_send(struct backend_instance *backend,
-					     struct mo_ecat_cyclic_result *result)
+					    struct mo_ecat_cyclic_result *result)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 
@@ -153,8 +155,8 @@ enum backend_error soem_backend_read_all_slave_states(struct backend_instance *b
  * Return: 0 成功，非 0 失败
  */
 enum backend_error soem_backend_read_single_slave_state(struct backend_instance *backend,
-								size_t slave_index,
-								struct mo_ecat_node_state *state)
+							size_t slave_index,
+							struct mo_ecat_node_state *state)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	ec_alstatust al_status;
@@ -165,8 +167,8 @@ enum backend_error soem_backend_read_single_slave_state(struct backend_instance 
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	config_address = context->context.slavelist[slave_index + 1].configadr;
-	wkc = ecx_FPRD(&context->context.port, config_address, ECT_REG_ALSTAT,
-		       sizeof(al_status), &al_status, EC_TIMEOUTRET);
+	wkc = ecx_FPRD(&context->context.port, config_address, ECT_REG_ALSTAT, sizeof(al_status),
+		       &al_status, EC_TIMEOUTRET);
 	if (wkc <= 0) {
 		return BACKEND_ERROR_READ_NODE_STATE_FAILED;
 	}
@@ -213,8 +215,7 @@ enum backend_error soem_backend_deactivate(struct backend_instance *backend)
  *
  * Return: 0 请求已下发，非 0 失败
  */
-enum backend_error soem_backend_recover_slave(struct backend_instance *backend,
-					      size_t slave_index)
+enum backend_error soem_backend_recover_slave(struct backend_instance *backend, size_t slave_index)
 {
 	struct soem_backend_context *context = soem_backend_context_get(backend);
 	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
@@ -228,9 +229,8 @@ enum backend_error soem_backend_recover_slave(struct backend_instance *backend,
 		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
-	if (ecx_FPRD(&context->context.port,
-		     context->context.slavelist[slave_number].configadr, ECT_REG_ALSTAT,
-		     sizeof(al_status), &al_status, EC_TIMEOUTRET) <= 0) {
+	if (ecx_FPRD(&context->context.port, context->context.slavelist[slave_number].configadr,
+		     ECT_REG_ALSTAT, sizeof(al_status), &al_status, EC_TIMEOUTRET) <= 0) {
 		return BACKEND_ERROR_SLAVE_RECOVER_FAILED;
 	}
 	state = etohs(al_status);
@@ -244,12 +244,71 @@ enum backend_error soem_backend_recover_slave(struct backend_instance *backend,
 	}
 
 	if ((state & EC_STATE_ERROR) != 0U) {
-		context->context.slavelist[slave_number].state =
-			EC_STATE_SAFE_OP | EC_STATE_ACK;
+		context->context.slavelist[slave_number].state = EC_STATE_SAFE_OP | EC_STATE_ACK;
 		ecx_writestate(&context->context, slave_number);
 	}
 
 	context->context.slavelist[slave_number].state = EC_STATE_OPERATIONAL;
+	ecx_writestate(&context->context, slave_number);
+	return BACKEND_ERROR_NONE;
+}
+
+/**
+ * soem_backend_al_state_to_soem - 核心层 AL 状态转换为 SOEM 状态值
+ * @al_state: 核心层 AL 状态枚举
+ *
+ * Return: SOEM 状态值；UNKNOWN 时返回 EC_STATE_NONE
+ */
+static uint16_t soem_backend_al_state_to_soem(enum mo_ecat_node_al_state al_state)
+{
+	switch (al_state) {
+	case MO_ECAT_NODE_AL_STATE_INIT:
+		return EC_STATE_INIT;
+	case MO_ECAT_NODE_AL_STATE_PRE_OP:
+		return EC_STATE_PRE_OP;
+	case MO_ECAT_NODE_AL_STATE_SAFE_OP:
+		return EC_STATE_SAFE_OP;
+	case MO_ECAT_NODE_AL_STATE_OP:
+		return EC_STATE_OPERATIONAL;
+	case MO_ECAT_NODE_AL_STATE_BOOTSTRAP:
+		return EC_STATE_BOOT;
+	default:
+		return EC_STATE_NONE;
+	}
+}
+
+/**
+ * soem_backend_set_slave_al_state - 设置单个从站 AL 状态（调试用途）
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标（核心层逻辑下标，0 起）
+ * @target_state: 目标 AL 状态
+ *
+ * 直接写从站 AL Control 寄存器，不检查当前状态、不清错误码、
+ * 不等待迁移完成。操作结果由核心层周期状态刷新呈现。
+ *
+ * 仅 DEBUG_SLAVE 状态调用；配置不完整（如无 PDO 映射）时不检查。
+ *
+ * Return: 0 请求已下发，非 0 失败
+ */
+enum backend_error soem_backend_set_slave_al_state(struct backend_instance *backend,
+						   size_t slave_index,
+						   enum mo_ecat_node_al_state target_state)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
+	const uint16_t soem_state = soem_backend_al_state_to_soem(target_state);
+
+	if (!context || !context->opened) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (slave_number > (uint16_t)context->context.slavecount || slave_number == 0U) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+	if (soem_state == EC_STATE_NONE) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	context->context.slavelist[slave_number].state = soem_state;
 	ecx_writestate(&context->context, slave_number);
 	return BACKEND_ERROR_NONE;
 }

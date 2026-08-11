@@ -91,8 +91,12 @@ struct backend_ops {
 						struct mo_ecat_sync0_status *status);
 
 	/* 将 SAFE-OP 的单个从站恢复到 OP（清错误码并请求状态迁移）。 */
-	enum backend_error (*recover_slave)(struct backend_instance *backend,
-					    size_t slave_index);
+	enum backend_error (*recover_slave)(struct backend_instance *backend, size_t slave_index);
+
+	/* 设置单个从站 AL 状态（调试用途，直接写 AL Control 寄存器）。 */
+	enum backend_error (*set_slave_al_state)(struct backend_instance *backend,
+						 size_t slave_index,
+						 enum mo_ecat_node_al_state target_state);
 };
 
 #ifdef __cplusplus
