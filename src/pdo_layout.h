@@ -11,10 +11,10 @@
 
 struct mo_ecat_master;
 
-enum master_error_detail pdo_layout_build(struct mo_ecat_master *master);
+enum backend_error pdo_layout_build(struct mo_ecat_master *master);
 
-enum master_error_detail pdo_layout_activate(struct mo_ecat_master *master);
+enum backend_error pdo_layout_activate(struct mo_ecat_master *master);
 
-enum master_error_detail pdo_layout_deactivate(struct mo_ecat_master *master);
+enum backend_error pdo_layout_deactivate(struct mo_ecat_master *master);
 
 #endif /* PDO_LAYOUT_H */

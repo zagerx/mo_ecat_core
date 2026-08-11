@@ -24,22 +24,22 @@ static void *_pdo_image_entry_data(const struct mo_ecat_master *master, uint32_t
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
+enum backend_error master_cyclic_receive(struct mo_ecat_master *master,
 					       struct mo_ecat_cyclic_result *result)
 {
 	enum backend_error error;
 
 	if (!master || !result) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	if (!master->pdo_layout.is_active) {
-		return MASTER_ERROR_INVALID_STATE;
+		return BACKEND_ERROR_INVALID_STATE;
 	}
 
 	memset(result, 0, sizeof(*result));
 	error = backend_cyclic_receive(&master->backend, result);
-	return master_error_from_backend(error);
+	return error;
 }
 
 /**
@@ -49,21 +49,21 @@ enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
+enum backend_error master_cyclic_send(struct mo_ecat_master *master,
 					    struct mo_ecat_cyclic_result *result)
 {
 	enum backend_error error;
 
 	if (!master || !result) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	if (!master->pdo_layout.is_active) {
-		return MASTER_ERROR_INVALID_STATE;
+		return BACKEND_ERROR_INVALID_STATE;
 	}
 
 	error = backend_cyclic_send(&master->backend, result);
-	return master_error_from_backend(error);
+	return error;
 }
 
 /**

@@ -14,7 +14,6 @@ add_subdirectory(third_party/SOEM)
 set(MO_ECAT_CORE_SOURCES
     src/mo_ecat_master.c
     src/master_resources.c
-    src/master_error.c
     src/slave_table.c
     src/pdo_layout.c
     src/mo_ecat_pdo.c

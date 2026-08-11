@@ -25,7 +25,7 @@
 
 /* 静态辅助函数前向声明 */
 
-static enum master_error_detail _sync0_configure_all(struct mo_ecat_master *master,
+static enum backend_error _sync0_configure_all(struct mo_ecat_master *master,
 						     int enable);
 
 static uint64_t master_monotonic_ns(void)
@@ -61,15 +61,15 @@ static void master_refresh_slave_states_periodic(struct mo_ecat_master *master)
  * @error: 故障码
  */
 static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_error error,
-			     enum master_error_detail detail)
+			     enum backend_error detail)
 {
 	if (master) {
 		atomic_store(&master->error_code, error);
 		master->last_error.master_error = error;
 		master->last_error.detail = detail;
 		master->last_error.source =
-			(detail == MASTER_ERROR_INVALID_ARGUMENT || detail == MASTER_ERROR_INVALID_STATE ||
-			 detail == MASTER_ERROR_NO_MEMORY) ?
+			(detail == BACKEND_ERROR_INVALID_ARGUMENT || detail == BACKEND_ERROR_INVALID_STATE ||
+			 detail == BACKEND_ERROR_NO_MEMORY) ?
 				MASTER_ERROR_SOURCE_CORE : MASTER_ERROR_SOURCE_BACKEND;
 		master->last_error.native_code = 0;
 		master->last_error.slave_index = SIZE_MAX;
@@ -89,7 +89,7 @@ static void master_set_fault(struct mo_ecat_master *master, enum mo_ecat_master_
  */
 static void master_idle_fail(struct statemachine *sm, struct mo_ecat_master *master,
 			     enum mo_ecat_master_error error,
-			     enum master_error_detail detail)
+			     enum backend_error detail)
 {
 	master_set_fault(master, error, detail);
 	if (mo_ecat_master_get_node_count(master) > 0U) {
@@ -148,7 +148,7 @@ void master_state_idle(struct statemachine *sm)
 	};
 	struct mo_ecat_master *master;
 	size_t slave_count;
-	enum master_error_detail error;
+	enum backend_error error;
 
 	if (!sm) {
 		return;
@@ -181,11 +181,11 @@ void master_state_idle(struct statemachine *sm)
 	case MASTER_PHASE_OPEN: {
 		master_resources_release(master);
 		atomic_store(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
-		error = master_error_from_backend(backend_init(&master->backend));
-		if (error == MASTER_ERROR_NONE) {
-			error = master_error_from_backend(backend_open(&master->backend, master->config));
+		error = backend_init(&master->backend);
+		if (error == BACKEND_ERROR_NONE) {
+			error = backend_open(&master->backend, master->config);
 		}
-		if (error != MASTER_ERROR_NONE) {
+		if (error != BACKEND_ERROR_NONE) {
 			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED, error);
 			break;
 		}
@@ -193,12 +193,12 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_SCAN_BUILD: {
-		error = master_error_from_backend(backend_load_slave_info(&master->backend,
-									    &slave_count));
-		if (error == MASTER_ERROR_NONE) {
+		error = backend_load_slave_info(&master->backend,
+									    &slave_count);
+		if (error == BACKEND_ERROR_NONE) {
 			error = slave_table_build(master, slave_count);
 		}
-		if (error != MASTER_ERROR_NONE) {
+		if (error != BACKEND_ERROR_NONE) {
 			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_DISCOVER_FAILED, error);
 			break;
 		}
@@ -207,7 +207,7 @@ void master_state_idle(struct statemachine *sm)
 
 	case MASTER_PHASE_READ_STATE: {
 		error = slave_table_refresh_states(master);
-		if (error != MASTER_ERROR_NONE) {
+		if (error != BACKEND_ERROR_NONE) {
 			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 			break;
 		}
@@ -216,10 +216,10 @@ void master_state_idle(struct statemachine *sm)
 
 	case MASTER_PHASE_READ_PDO: {
 		pthread_mutex_lock(&master->slave_table_mutex);
-		error = master_error_from_backend(backend_read_pdo_entries(
-			&master->backend, master->slave_table.slaves, master->slave_table.slave_count));
+		error = backend_read_pdo_entries(
+			&master->backend, master->slave_table.slaves, master->slave_table.slave_count);
 		pthread_mutex_unlock(&master->slave_table_mutex);
-		if (error != MASTER_ERROR_NONE) {
+		if (error != BACKEND_ERROR_NONE) {
 			master_idle_fail(sm, master,
 					 MO_ECAT_MASTER_ERROR_READ_PDO_DESCRIPTION_FAILED, error);
 			break;
@@ -246,8 +246,8 @@ void master_state_idle(struct statemachine *sm)
 	} break;
 
 	case MASTER_PHASE_CONFIGURE_DC: { /* DC 配置独立失败，不能继续建立 PDO 映射。 */
-		error = master_error_from_backend(backend_configure_dc(&master->backend));
-		if (error != MASTER_ERROR_NONE) {
+		error = backend_configure_dc(&master->backend);
+		if (error != BACKEND_ERROR_NONE) {
 			master_idle_fail(sm, master, MO_ECAT_MASTER_ERROR_CONFIGURE_DC_FAILED, error);
 			break;
 		}
@@ -258,7 +258,7 @@ void master_state_idle(struct statemachine *sm)
 		/* 后端建立 PDO 数据区域并回填所有 PDO entry 的地址偏移。 */
 		{
 			error = pdo_layout_build(master);
-			if (error != MASTER_ERROR_NONE) {
+			if (error != BACKEND_ERROR_NONE) {
 				master_idle_fail(
 					sm, master,
 					MO_ECAT_MASTER_ERROR_CONFIGURE_PDO_MAPPING_FAILED, error);
@@ -284,7 +284,7 @@ void master_state_ready(struct statemachine *sm)
 {
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
-	enum master_error_detail error;
+	enum backend_error error;
 
 	if (!sm) {
 		return;
@@ -308,7 +308,7 @@ void master_state_ready(struct statemachine *sm)
 		}
 		if (cmd == MO_ECAT_MASTER_CMD_ACTIVATE) {
 			error = pdo_layout_activate(master);
-			if (error != MASTER_ERROR_NONE) {
+			if (error != BACKEND_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_ACTIVATE_FAILED, error);
 				(void)slave_table_refresh_states(master);
 				master_runtime_pdo_release(master);
@@ -340,7 +340,7 @@ void master_state_running(struct statemachine *sm)
 	struct mo_ecat_master *master;
 	enum mo_ecat_master_cmd cmd;
 	struct mo_ecat_cyclic_result result;
-	enum master_error_detail error;
+	enum backend_error error;
 
 	if (!sm) {
 		return;
@@ -353,7 +353,7 @@ void master_state_running(struct statemachine *sm)
 			atomic_store(&master->state, MO_ECAT_MASTER_STATE_RUNNING);
 			/* RUNNING 后统一激活 Sync0，避免干扰 OP 切换。 */
 			error = _sync0_configure_all(master, 1);
-			if (error != MASTER_ERROR_NONE) {
+			if (error != BACKEND_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_SYNC0_ACTIVATE_FAILED,
 						 error);
 				(void)slave_table_refresh_states(master);
@@ -373,7 +373,7 @@ void master_state_running(struct statemachine *sm)
 		if (cmd == MO_ECAT_MASTER_CMD_DEACTIVATE) {
 			(void)_sync0_configure_all(master, 0);
 			error = pdo_layout_deactivate(master);
-			if (error != MASTER_ERROR_NONE) {
+			if (error != BACKEND_ERROR_NONE) {
 				master_set_fault(master, MO_ECAT_MASTER_ERROR_BUS_FAULT, error);
 				(void)slave_table_refresh_states(master);
 				master_runtime_pdo_release(master);
@@ -389,10 +389,10 @@ void master_state_running(struct statemachine *sm)
 			const long slave = atomic_exchange(&master->command_arg, -1L);
 
 			if (slave >= 0) {
-				const enum master_error_detail recover_error =
-					master_error_from_backend(backend_recover_slave(
-						&master->backend, (size_t)slave));
-				if (recover_error != MASTER_ERROR_NONE) {
+				const enum backend_error recover_error =
+					backend_recover_slave(
+						&master->backend, (size_t)slave);
+				if (recover_error != BACKEND_ERROR_NONE) {
 					fprintf(stderr, "[master] slave %ld recover failed: %d\n",
 						slave, recover_error);
 				}
@@ -403,7 +403,7 @@ void master_state_running(struct statemachine *sm)
 			int cycle_fault = 0;
 
 			error = master_cyclic_receive(master, &result);
-			if (error != MASTER_ERROR_NONE) {
+			if (error != BACKEND_ERROR_NONE) {
 				cycle_fault = 1;
 			}
 			/* WKC 不符（个别从站掉线但帧仍在流动）不算硬故障，
@@ -414,7 +414,7 @@ void master_state_running(struct statemachine *sm)
 			}
 
 			error = master_cyclic_send(master, &result);
-			if (error != MASTER_ERROR_NONE) {
+			if (error != BACKEND_ERROR_NONE) {
 				cycle_fault = 1;
 			}
 
@@ -497,13 +497,13 @@ void master_state_fault(struct statemachine *sm)
  *
  * Return: 0 成功，非 0 失败
  */
-static enum master_error_detail _sync0_configure_all(struct mo_ecat_master *master, int enable)
+static enum backend_error _sync0_configure_all(struct mo_ecat_master *master, int enable)
 {
 	const struct mo_ecat_master_config *config;
-	enum master_error_detail result = MASTER_ERROR_NONE;
+	enum backend_error result = BACKEND_ERROR_NONE;
 
 	if (!master || !master->config || master->config->sync0_cycle_ns == 0U) {
-		return MASTER_ERROR_NONE;
+		return BACKEND_ERROR_NONE;
 	}
 	config = master->config;
 
@@ -516,8 +516,8 @@ static enum master_error_detail _sync0_configure_all(struct mo_ecat_master *mast
 		}
 		error = backend_sync0_configure(&master->backend, i, enable,
 						config->sync0_cycle_ns, config->sync0_shift_ns);
-		if (error != BACKEND_ERROR_NONE && result == MASTER_ERROR_NONE) {
-			result = master_error_from_backend(error);
+		if (error != BACKEND_ERROR_NONE && result == BACKEND_ERROR_NONE) {
+			result = error;
 		}
 	}
 	pthread_mutex_unlock(&master->slave_table_mutex);

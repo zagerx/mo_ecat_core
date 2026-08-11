@@ -80,10 +80,10 @@ enum mo_ecat_master_cmd master_take_cmd(struct mo_ecat_master *master);
 
 void master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
 
-enum master_error_detail master_cyclic_receive(struct mo_ecat_master *master,
+enum backend_error master_cyclic_receive(struct mo_ecat_master *master,
 					       struct mo_ecat_cyclic_result *result);
 
-enum master_error_detail master_cyclic_send(struct mo_ecat_master *master,
+enum backend_error master_cyclic_send(struct mo_ecat_master *master,
 					    struct mo_ecat_cyclic_result *result);
 
 #ifdef __cplusplus

@@ -24,7 +24,7 @@ static void _pdo_image_entries_build(const struct mo_ecat_master *master,
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
+enum backend_error pdo_layout_build(struct mo_ecat_master *master)
 {
 	struct pdo_image image = {0};
 	struct pdo_image_entry *entries = NULL;
@@ -32,20 +32,20 @@ enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
 	size_t entry_count = 0;
 
 	if (!master) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	for (size_t i = 0; i < master->slave_table.slave_count; ++i) {
 		entry_count += master->slave_table.slaves[i].pdo_entry_count;
 	}
 	if (entry_count > UINT32_MAX) {
-		return MASTER_ERROR_PDO_MAPPING_FAILED;
+		return BACKEND_ERROR_PDO_MAPPING_FAILED;
 	}
 
 	if (entry_count > 0) {
 		entries = calloc(entry_count, sizeof(*entries));
 		if (!entries) {
-			return MASTER_ERROR_NO_MEMORY;
+			return BACKEND_ERROR_NO_MEMORY;
 		}
 		_pdo_image_entries_build(master, entries);
 	}
@@ -53,12 +53,12 @@ enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
 	error = backend_build_pdo_mapping(&master->backend, entries, entry_count);
 	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
-		return master_error_from_backend(error);
+		return error;
 	}
 	error = backend_get_pdo_image(&master->backend, &image);
 	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
-		return master_error_from_backend(error);
+		return error;
 	}
 	pthread_mutex_lock(&master->slave_table_mutex);
 	error = backend_translate_slave_info(&master->backend, master->slave_table.slaves,
@@ -66,7 +66,7 @@ enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
 	pthread_mutex_unlock(&master->slave_table_mutex);
 	if (error != BACKEND_ERROR_NONE) {
 		free(entries);
-		return master_error_from_backend(error);
+		return error;
 	}
 
 	free(master->pdo_layout.entries);
@@ -74,7 +74,7 @@ enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
 	master->pdo_layout.entries = entries;
 	master->pdo_layout.entry_count = entry_count;
 	master->pdo_layout.is_active = 0;
-	return MASTER_ERROR_NONE;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -83,20 +83,20 @@ enum master_error_detail pdo_layout_build(struct mo_ecat_master *master)
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail pdo_layout_activate(struct mo_ecat_master *master)
+enum backend_error pdo_layout_activate(struct mo_ecat_master *master)
 {
 	enum backend_error error;
 
 	if (!master) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	error = backend_activate(&master->backend);
 	if (error != BACKEND_ERROR_NONE) {
-		return master_error_from_backend(error);
+		return error;
 	}
 
 	master->pdo_layout.is_active = 1;
-	return MASTER_ERROR_NONE;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -105,20 +105,20 @@ enum master_error_detail pdo_layout_activate(struct mo_ecat_master *master)
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail pdo_layout_deactivate(struct mo_ecat_master *master)
+enum backend_error pdo_layout_deactivate(struct mo_ecat_master *master)
 {
 	enum backend_error error;
 
 	if (!master) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	error = backend_deactivate(&master->backend);
 	if (error != BACKEND_ERROR_NONE) {
-		return master_error_from_backend(error);
+		return error;
 	}
 
 	master->pdo_layout.is_active = 0;
-	return MASTER_ERROR_NONE;
+	return BACKEND_ERROR_NONE;
 }
 
 /**

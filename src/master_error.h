@@ -1,5 +1,8 @@
 /*
  * master_error.h - 主站核心层内部错误模型
+ *
+ * 核心层与后端共用 enum backend_error 作为技术错误码，
+ * 本头文件只保留错误来源标记与故障记录结构。
  */
 
 #ifndef MASTER_ERROR_H
@@ -11,29 +14,6 @@
 #include "backend/backend_error.h"
 #include "mo_ecat/mo_ecat_master.h"
 
-/** 核心层详细错误码。 */
-enum master_error_detail {
-	MASTER_ERROR_NONE = 0,
-	MASTER_ERROR_INVALID_ARGUMENT,
-	MASTER_ERROR_INVALID_STATE,
-	MASTER_ERROR_NO_MEMORY,
-	MASTER_ERROR_BACKEND_OPEN_FAILED,
-	MASTER_ERROR_BUS_SCAN_FAILED,
-	MASTER_ERROR_READ_PDO_ASSIGNMENT_FAILED,
-	MASTER_ERROR_PDO_ENTRY_LIMIT_EXCEEDED,
-	MASTER_ERROR_DC_UNSUPPORTED,
-	MASTER_ERROR_DC_CONFIG_FAILED,
-	MASTER_ERROR_PDO_IMAGE_LIMIT_EXCEEDED,
-	MASTER_ERROR_PDO_MAPPING_FAILED,
-	MASTER_ERROR_PDO_OFFSET_RESOLVE_FAILED,
-	MASTER_ERROR_ACTIVATE_FAILED,
-	MASTER_ERROR_CYCLIC_RECEIVE_FAILED,
-	MASTER_ERROR_CYCLIC_SEND_FAILED,
-	MASTER_ERROR_READ_NODE_STATE_FAILED,
-	MASTER_ERROR_DEACTIVATE_FAILED,
-	MASTER_ERROR_SLAVE_RECOVER_FAILED,
-};
-
 /** 错误来源。 */
 enum master_error_source {
 	MASTER_ERROR_SOURCE_CORE,
@@ -44,14 +24,12 @@ enum master_error_source {
 /** 最近一次主站故障的内部记录。 */
 struct master_error_record {
 	enum mo_ecat_master_error master_error;
-	enum master_error_detail detail;
+	enum backend_error detail;
 	enum master_error_source source;
 	int native_code;
 	size_t slave_index;
 	uint16_t object_index;
 	uint8_t object_subindex;
 };
-
-enum master_error_detail master_error_from_backend(enum backend_error error);
 
 #endif /* MASTER_ERROR_H */

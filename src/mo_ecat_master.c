@@ -64,7 +64,7 @@ static int master_init(struct mo_ecat_master *master, mo_ecat_cyclic_callback ca
 		return -1;
 	}
 	master->last_error.master_error = MO_ECAT_MASTER_ERROR_NONE;
-	master->last_error.detail = MASTER_ERROR_NONE;
+	master->last_error.detail = BACKEND_ERROR_NONE;
 	master->last_error.source = MASTER_ERROR_SOURCE_CORE;
 	master->last_error.slave_index = SIZE_MAX;
 	sm_init(&master->sm, master, master_state_init);
@@ -233,7 +233,7 @@ int mo_ecat_master_sync0_configure(struct mo_ecat_master *master, size_t slave_i
 	}
 	error = backend_sync0_configure(&master->backend, slave_index, enable, cycle_time_ns,
 					shift_time_ns);
-	return master_error_from_backend(error);
+	return error;
 }
 
 /**
@@ -253,7 +253,7 @@ int mo_ecat_master_sync0_status(struct mo_ecat_master *master, size_t slave_inde
 		return -1;
 	}
 	error = backend_sync0_read_status(&master->backend, slave_index, status);
-	return master_error_from_backend(error);
+	return error;
 }
 
 /**

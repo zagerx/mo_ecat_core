@@ -11,9 +11,9 @@
 
 struct mo_ecat_master;
 
-enum master_error_detail slave_table_build(struct mo_ecat_master *master,
+enum backend_error slave_table_build(struct mo_ecat_master *master,
 					   size_t slave_count);
 
-enum master_error_detail slave_table_refresh_states(struct mo_ecat_master *master);
+enum backend_error slave_table_refresh_states(struct mo_ecat_master *master);
 
 #endif /* SLAVE_TABLE_H */

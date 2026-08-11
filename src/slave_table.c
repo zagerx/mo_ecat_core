@@ -19,23 +19,23 @@
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail slave_table_build(struct mo_ecat_master *master,
+enum backend_error slave_table_build(struct mo_ecat_master *master,
 					   size_t slave_count)
 {
 	struct slave *slaves = NULL;
 	enum backend_error error;
 
 	if (!master) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	if (slave_count > 0) {
 		if (slave_count > SIZE_MAX / sizeof(*slaves)) {
-			return MASTER_ERROR_NO_MEMORY;
+			return BACKEND_ERROR_NO_MEMORY;
 		}
 		slaves = calloc(slave_count, sizeof(*slaves));
 		if (!slaves) {
-			return MASTER_ERROR_NO_MEMORY;
+			return BACKEND_ERROR_NO_MEMORY;
 		}
 	}
 
@@ -43,7 +43,7 @@ enum master_error_detail slave_table_build(struct mo_ecat_master *master,
 		error = backend_translate_slave_info(&master->backend, slaves, slave_count);
 		if (error != BACKEND_ERROR_NONE) {
 			free(slaves);
-			return master_error_from_backend(error);
+			return error;
 		}
 	}
 
@@ -54,7 +54,7 @@ enum master_error_detail slave_table_build(struct mo_ecat_master *master,
 	master->slave_table.slave_count = slave_count;
 	pthread_mutex_unlock(&master->slave_table_mutex);
 
-	return MASTER_ERROR_NONE;
+	return BACKEND_ERROR_NONE;
 }
 
 /**
@@ -65,21 +65,21 @@ enum master_error_detail slave_table_build(struct mo_ecat_master *master,
  *
  * Return: 0 成功，非 0 失败
  */
-enum master_error_detail slave_table_refresh_states(struct mo_ecat_master *master)
+enum backend_error slave_table_refresh_states(struct mo_ecat_master *master)
 {
 	enum backend_error error;
 
 	if (!master) {
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 
 	pthread_mutex_lock(&master->slave_table_mutex);
 	if (master->slave_table.slave_count > 0 && !master->slave_table.slaves) {
 		pthread_mutex_unlock(&master->slave_table_mutex);
-		return MASTER_ERROR_INVALID_ARGUMENT;
+		return BACKEND_ERROR_INVALID_ARGUMENT;
 	}
 	error = backend_read_all_slave_states(&master->backend, master->slave_table.slaves,
 					      master->slave_table.slave_count);
 	pthread_mutex_unlock(&master->slave_table_mutex);
-	return master_error_from_backend(error);
+	return error;
 }
