@@ -309,6 +309,22 @@ enum backend_error backend_deactivate(struct backend_instance *backend)
 }
 
 /**
+ * backend_recover_slave - 恢复单个从站到 OP
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标
+ *
+ * Return: 0 成功，非 0 失败
+ */
+enum backend_error backend_recover_slave(struct backend_instance *backend, size_t slave_index)
+{
+	if (!backend || !backend->ops || !backend->ops->recover_slave) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+
+	return backend->ops->recover_slave(backend, slave_index);
+}
+
+/**
  * backend_close - 关闭后端
  * @backend: 后端实例指针
  */

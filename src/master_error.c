@@ -41,6 +41,8 @@ enum master_error_detail master_error_from_backend(enum backend_error error)
 		return MASTER_ERROR_READ_NODE_STATE_FAILED;
 	case BACKEND_ERROR_DEACTIVATE_FAILED:
 		return MASTER_ERROR_DEACTIVATE_FAILED;
+	case BACKEND_ERROR_SLAVE_RECOVER_FAILED:
+		return MASTER_ERROR_SLAVE_RECOVER_FAILED;
 	case BACKEND_ERROR_NOT_READY:
 	default:
 		return MASTER_ERROR_INVALID_STATE;

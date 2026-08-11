@@ -28,6 +28,7 @@ struct mo_ecat_master;
  * @MO_ECAT_MASTER_CMD_ACTIVATE:   激活周期运行
  * @MO_ECAT_MASTER_CMD_DEACTIVATE: 停止周期运行
  * @MO_ECAT_MASTER_CMD_RESET:      复位到空闲
+ * @MO_ECAT_MASTER_CMD_RECOVER_SLAVE: 恢复单个从站到 OP（参数为从站下标）
  */
 enum mo_ecat_master_cmd {
 	MO_ECAT_MASTER_CMD_NONE,
@@ -35,7 +36,8 @@ enum mo_ecat_master_cmd {
 	MO_ECAT_MASTER_CMD_CONFIGURE,
 	MO_ECAT_MASTER_CMD_ACTIVATE,
 	MO_ECAT_MASTER_CMD_DEACTIVATE,
-	MO_ECAT_MASTER_CMD_RESET
+	MO_ECAT_MASTER_CMD_RESET,
+	MO_ECAT_MASTER_CMD_RECOVER_SLAVE
 };
 
 /**
@@ -89,6 +91,19 @@ void mo_ecat_master_destroy(struct mo_ecat_master *master);
 void mo_ecat_master_dispatch(struct mo_ecat_master *master);
 
 int mo_ecat_master_write_cmd(struct mo_ecat_master *master, enum mo_ecat_master_cmd cmd);
+
+/**
+ * mo_ecat_master_request_slave_recovery - 请求恢复单个从站到 OP
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ *
+ * 仅投递恢复请求，实际状态迁移由调度线程在 RUNNING 中执行；
+ * 执行结果通过从站状态刷新呈现。仅 RUNNING 状态且目标站在线时受理。
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master,
+					  size_t slave_index);
 
 enum mo_ecat_master_error mo_ecat_master_get_error_code(const struct mo_ecat_master *master);
 

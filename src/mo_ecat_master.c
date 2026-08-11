@@ -57,6 +57,7 @@ static int master_init(struct mo_ecat_master *master, mo_ecat_cyclic_callback ca
 	master->cyclic_callback = callback;
 	master->user_data = user_data;
 	atomic_init(&master->command, MO_ECAT_MASTER_CMD_NONE);
+	atomic_init(&master->command_arg, -1L);
 	atomic_init(&master->state, MO_ECAT_MASTER_STATE_INIT);
 	atomic_init(&master->error_code, MO_ECAT_MASTER_ERROR_NONE);
 	if (pthread_mutex_init(&master->slave_table_mutex, NULL) != 0) {
@@ -253,4 +254,38 @@ int mo_ecat_master_sync0_status(struct mo_ecat_master *master, size_t slave_inde
 	}
 	error = backend_sync0_read_status(&master->backend, slave_index, status);
 	return master_error_from_backend(error);
+}
+
+/**
+ * mo_ecat_master_request_slave_recovery - 请求恢复单个从站到 OP
+ * @master: 主站对象指针
+ * @slave_index: 目标从站下标（逻辑拓扑下标，0 起）
+ *
+ * Return: 0 已受理；非 0 拒绝
+ */
+int mo_ecat_master_request_slave_recovery(struct mo_ecat_master *master,
+					  size_t slave_index)
+{
+	int valid = 0;
+
+	if (!master) {
+		return -1;
+	}
+	if (mo_ecat_master_get_state(master) != MO_ECAT_MASTER_STATE_RUNNING) {
+		return -1;
+	}
+
+	pthread_mutex_lock(&master->slave_table_mutex);
+	if (slave_index < master->slave_table.slave_count &&
+	    master->slave_table.slaves[slave_index].state.is_online) {
+		valid = 1;
+	}
+	pthread_mutex_unlock(&master->slave_table_mutex);
+	if (!valid) {
+		return -1;
+	}
+
+	atomic_store(&master->command_arg, (long)slave_index);
+	master_write_cmd(master, MO_ECAT_MASTER_CMD_RECOVER_SLAVE);
+	return 0;
 }

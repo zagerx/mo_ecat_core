@@ -85,6 +85,8 @@ enum backend_error backend_read_single_slave_state(struct backend_instance *back
 
 enum backend_error backend_deactivate(struct backend_instance *backend);
 
+enum backend_error backend_recover_slave(struct backend_instance *backend, size_t slave_index);
+
 enum backend_error backend_sync0_configure(struct backend_instance *backend, size_t slave_index,
 					   int enable, uint32_t cycle_time_ns,
 					   int32_t shift_time_ns);

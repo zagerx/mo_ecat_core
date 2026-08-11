@@ -63,6 +63,9 @@ enum backend_error soem_backend_sync0_read_status(struct backend_instance *backe
 						  size_t slave_index,
 						  struct mo_ecat_sync0_status *status);
 
+enum backend_error soem_backend_recover_slave(struct backend_instance *backend,
+					      size_t slave_index);
+
 enum backend_error soem_backend_build_pdo_mapping(struct backend_instance *backend,
 						  struct pdo_image_entry *entries,
 						  size_t entry_count);

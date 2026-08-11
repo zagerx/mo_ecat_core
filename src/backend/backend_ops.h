@@ -89,6 +89,10 @@ struct backend_ops {
 	enum backend_error (*sync0_read_status)(struct backend_instance *backend,
 						size_t slave_index,
 						struct mo_ecat_sync0_status *status);
+
+	/* 将 SAFE-OP 的单个从站恢复到 OP（清错误码并请求状态迁移）。 */
+	enum backend_error (*recover_slave)(struct backend_instance *backend,
+					    size_t slave_index);
 };
 
 #ifdef __cplusplus

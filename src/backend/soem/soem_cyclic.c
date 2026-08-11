@@ -198,3 +198,58 @@ enum backend_error soem_backend_deactivate(struct backend_instance *backend)
 	ecx_writestate(&context->context, 0);
 	return BACKEND_ERROR_NONE;
 }
+
+/**
+ * soem_backend_recover_slave - 恢复单个从站到 OP
+ * @backend: 后端实例指针
+ * @slave_index: 目标从站下标（核心层逻辑下标，0 起）
+ *
+ * 处理链路恢复后停在 SAFE-OP(+错误) 的从站：清 AL 错误码后请求迁移 OP。
+ * ESC 的 SM/FMMU/DC 配置在链路断开期间保持有效，无需重新配置。
+ *
+ * 只下发请求不等待迁移完成：本函数在调度线程内执行，同步等待会
+ * 中断周期帧导致其他从站 SM 看门狗超时。迁移结果由核心层周期
+ * 状态刷新呈现。
+ *
+ * Return: 0 请求已下发，非 0 失败
+ */
+enum backend_error soem_backend_recover_slave(struct backend_instance *backend,
+					      size_t slave_index)
+{
+	struct soem_backend_context *context = soem_backend_context_get(backend);
+	const uint16_t slave_number = (uint16_t)(slave_index + 1U);
+	uint16_t al_status = 0;
+	uint16_t state;
+
+	if (!context || !context->pdo_mapping_ready) {
+		return BACKEND_ERROR_NOT_READY;
+	}
+	if (slave_number > (uint16_t)context->context.slavecount) {
+		return BACKEND_ERROR_INVALID_ARGUMENT;
+	}
+
+	if (ecx_FPRD(&context->context.port,
+		     context->context.slavelist[slave_number].configadr, ECT_REG_ALSTAT,
+		     sizeof(al_status), &al_status, EC_TIMEOUTRET) <= 0) {
+		return BACKEND_ERROR_SLAVE_RECOVER_FAILED;
+	}
+	state = etohs(al_status);
+
+	if ((state & 0x0fU) == EC_STATE_OPERATIONAL) {
+		return BACKEND_ERROR_NONE;
+	}
+	if ((state & 0x0fU) != EC_STATE_SAFE_OP) {
+		/* INIT/PRE-OP 需重新配置，当前仅支持 SAFE-OP 恢复。 */
+		return BACKEND_ERROR_SLAVE_RECOVER_FAILED;
+	}
+
+	if ((state & EC_STATE_ERROR) != 0U) {
+		context->context.slavelist[slave_number].state =
+			EC_STATE_SAFE_OP | EC_STATE_ACK;
+		ecx_writestate(&context->context, slave_number);
+	}
+
+	context->context.slavelist[slave_number].state = EC_STATE_OPERATIONAL;
+	ecx_writestate(&context->context, slave_number);
+	return BACKEND_ERROR_NONE;
+}

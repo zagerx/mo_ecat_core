@@ -60,6 +60,7 @@ struct mo_ecat_master {
 	struct statemachine sm;
 
 	_Atomic enum mo_ecat_master_cmd command;
+	_Atomic long command_arg; /* 命令参数槽；RECOVER_SLAVE 时为从站下标，-1 无效 */
 	_Atomic enum mo_ecat_master_state state;
 	_Atomic enum mo_ecat_master_error error_code;
 	struct master_error_record last_error;

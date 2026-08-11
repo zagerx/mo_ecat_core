@@ -10,6 +10,7 @@
 #include "master_priv.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <time.h>
 
 /* RUNNING/READY 状态下从站状态刷新的最小间隔：50ms。
@@ -381,6 +382,21 @@ void master_state_running(struct statemachine *sm)
 				sm_transition(sm, master_state_ready);
 			}
 			break;
+		}
+
+		/* 单站恢复：清错误并请求 OP；失败仅记录，不中断周期运行。 */
+		if (cmd == MO_ECAT_MASTER_CMD_RECOVER_SLAVE) {
+			const long slave = atomic_exchange(&master->command_arg, -1L);
+
+			if (slave >= 0) {
+				const enum master_error_detail recover_error =
+					master_error_from_backend(backend_recover_slave(
+						&master->backend, (size_t)slave));
+				if (recover_error != MASTER_ERROR_NONE) {
+					fprintf(stderr, "[master] slave %ld recover failed: %d\n",
+						slave, recover_error);
+				}
+			}
 		}
 
 		{
